@@ -1,0 +1,1 @@
+ALTER TABLE `maps` ADD `version` integer DEFAULT 0 NOT NULL;
