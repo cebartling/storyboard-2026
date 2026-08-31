@@ -23,7 +23,7 @@ from the repo root.
 
 | Experiment | Stack | Subject |
 | --- | --- | --- |
-| `experiments/experiment-1/` | SvelteKit 2 + Svelte 5 (runes), Drizzle + SQLite, Vitest, Playwright | Jeff Patton's user story mapping technique as a vertical slice |
+| `experiments/experiment-1/` | SvelteKit 2 + Svelte 5 (runes), Tailwind CSS 4, Drizzle + SQLite, Vitest, Playwright | Jeff Patton's user story mapping technique as a vertical slice |
 
 ## experiment-1 quick reference
 

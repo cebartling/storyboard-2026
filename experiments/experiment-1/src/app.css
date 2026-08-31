@@ -1,0 +1,88 @@
+@import 'tailwindcss';
+
+/* The one place the app's visual vocabulary is defined. Routes and components
+   use Tailwind utilities directly; only the handful of controls that repeat on
+   every form (button, input, panel) get a named class here, so a board full of
+   inline forms stays readable. See documentation/adr/0009-tailwind-css.md. */
+
+@theme {
+	--color-canvas: oklch(0.985 0.005 260);
+	--color-ink: oklch(0.28 0.03 260);
+	--color-ink-muted: oklch(0.53 0.02 260);
+	--color-line: oklch(0.9 0.01 260);
+	--color-surface: oklch(0.975 0.004 260);
+	--color-brand: oklch(0.52 0.16 265);
+	--color-brand-soft: oklch(0.96 0.025 265);
+	--color-accent: oklch(0.83 0.13 85);
+	--color-accent-soft: oklch(0.97 0.04 85);
+	--color-danger: oklch(0.55 0.19 25);
+
+	--font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+@layer base {
+	html {
+		background-color: var(--color-canvas);
+	}
+
+	body {
+		@apply bg-canvas text-ink font-sans antialiased;
+	}
+
+	h1 {
+		@apply text-ink text-2xl font-semibold tracking-tight;
+	}
+
+	:focus-visible {
+		@apply outline-brand outline-2 outline-offset-2;
+	}
+}
+
+@layer components {
+	.panel {
+		@apply border-line rounded-xl border bg-white shadow-sm;
+	}
+
+	.field-label {
+		@apply text-ink-muted text-xs font-medium tracking-wide uppercase;
+	}
+
+	.input {
+		@apply border-line text-ink placeholder:text-ink-muted w-full rounded-lg border bg-white px-3 py-1.5 text-sm shadow-xs transition;
+	}
+
+	/* `:focus-visible`, not `:focus`, and no `outline-none`: this layer sorts
+	   after `@layer base`, so suppressing the outline here would silently
+	   cancel the base focus ring for every input in the app. */
+	.input:focus-visible {
+		@apply border-brand;
+	}
+
+	.btn {
+		@apply inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition select-none;
+	}
+
+	.btn-primary {
+		@apply bg-brand text-white shadow-sm hover:brightness-110 active:brightness-95;
+	}
+
+	.btn-quiet {
+		@apply border-line text-ink border bg-white hover:bg-surface;
+	}
+
+	/* Square icon button. Defined after `.btn` so its padding wins. */
+	.btn-icon {
+		@apply size-6 p-0;
+	}
+
+	/* A colour modifier only — always used on top of `.btn`. */
+	.btn-danger-quiet {
+		@apply text-ink-muted hover:text-danger bg-transparent;
+	}
+
+	/* Kept as a class (not only utilities) because the e2e suite asserts on
+	   `p.error[role="alert"]`. */
+	.error {
+		@apply border-danger/25 bg-danger/8 text-danger rounded-lg border px-3 py-2 text-sm font-medium;
+	}
+}
