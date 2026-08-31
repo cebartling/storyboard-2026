@@ -10,7 +10,7 @@
 	--color-ink: oklch(0.28 0.03 260);
 	--color-ink-muted: oklch(0.53 0.02 260);
 	--color-line: oklch(0.9 0.01 260);
-	--color-brand: oklch(0.55 0.16 265);
+	--color-brand: oklch(0.52 0.16 265);
 	--color-brand-soft: oklch(0.96 0.025 265);
 	--color-accent: oklch(0.83 0.13 85);
 	--color-accent-soft: oklch(0.97 0.04 85);
@@ -47,7 +47,7 @@
 	}
 
 	.input {
-		@apply border-line text-ink placeholder:text-ink-muted/60 w-full rounded-lg border bg-white px-3 py-1.5 text-sm shadow-xs transition;
+		@apply border-line text-ink placeholder:text-ink-muted w-full rounded-lg border bg-white px-3 py-1.5 text-sm shadow-xs transition;
 	}
 
 	/* `:focus-visible`, not `:focus`, and no `outline-none`: this layer sorts
