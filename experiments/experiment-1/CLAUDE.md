@@ -51,7 +51,7 @@ self-migrate. E2e runs against a throwaway `e2e.db` and never touch `local.db`.
 - Drag-and-drop is isolated behind `src/lib/components/story-dnd-zone.svelte` so
   `svelte-dnd-action` can be swapped without touching the board.
 - Styling is **Tailwind CSS v4** (ADR 0009). The palette and the repeated control classes
-  (`.panel`, `.input`, `.btn`/`.btn-primary`/`.btn-quiet`/`.btn-danger-quiet`,
+  (`.panel`, `.input`, `.btn` + `.btn-primary`/`.btn-quiet`/`.btn-icon`/`.btn-danger-quiet`,
   `.field-label`, `.error`) live in `src/app.css`; everything else is utilities in the
   markup. Components have no `<style>` blocks — add utilities or extend `src/app.css`
   instead. The board's `grid-column`/`grid-row` inline styles stay inline: they are data
