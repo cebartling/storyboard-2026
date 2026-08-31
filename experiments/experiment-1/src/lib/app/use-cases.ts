@@ -39,8 +39,7 @@ export async function createMap(repository: StoryMapRepository, name: string): P
 		throw new Error('Map name must not be empty');
 	}
 	const map = createStoryMap(trimmed);
-	await repository.save(map);
-	return map;
+	return repository.save(map);
 }
 
 export async function loadMap(repository: StoryMapRepository, id: MapId): Promise<StoryMap | null> {

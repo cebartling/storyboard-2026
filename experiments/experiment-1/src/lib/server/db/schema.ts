@@ -6,7 +6,8 @@ export const maps = sqliteTable('maps', {
 	name: text('name').notNull(),
 	createdAt: integer('created_at', { mode: 'timestamp' })
 		.notNull()
-		.$defaultFn(() => new Date())
+		.$defaultFn(() => new Date()),
+	version: integer('version').notNull().default(0)
 });
 
 // Activity — backbone, narrative order. rank is scoped to (mapId).

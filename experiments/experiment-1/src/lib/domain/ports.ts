@@ -15,7 +15,8 @@ import type { StoryMap } from './story-map';
  */
 export interface StoryMapRepository {
 	load(id: MapId): Promise<StoryMap | null>;
-	save(map: StoryMap): Promise<void>;
+	/** Saves only when `map.version` is still current, then returns the new version. */
+	save(map: StoryMap): Promise<StoryMap>;
 	listSummaries(): Promise<{ id: MapId; name: string; createdAt: Date }[]>;
 	delete(id: MapId): Promise<void>;
 }

@@ -116,4 +116,18 @@ test('drag story to slice', async ({ page }) => {
 
 	await expect(sliceCell.locator('[data-testid^="story-"]')).toHaveText([/Story A/]);
 	await expect(unslicedCell.locator('[data-testid^="story-"]')).toHaveText([/Story B/]);
+
+	// A failed direct drag action must explain the failure instead of silently
+	// snapping back. Delete Story A behind the rendered page so its next move
+	// exercises the server's stale-client validation path.
+	const storyAId = (await sliceCell
+		.locator('[data-testid^="story-"]')
+		.getAttribute('data-testid'))!.replace('story-', '');
+	await page.evaluate(async (storyId) => {
+		const body = new FormData();
+		body.set('storyId', storyId);
+		await fetch('?/deleteStory', { method: 'POST', body });
+	}, storyAId);
+	await dragTo(page, sliceCell.locator('[data-testid^="story-"]'), unslicedCell);
+	await expect(page.locator('p.error[role="alert"]')).toContainText(`Story not found: ${storyAId}`);
 });

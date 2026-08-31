@@ -1,9 +1,16 @@
 <script lang="ts">
+	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import StoryDndZone, { type MoveDetail } from '$lib/components/story-dnd-zone.svelte';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
+	let dragError = $state<string | null>(null);
+
+	function actionError(data: unknown): string | null {
+		if (typeof data !== 'object' || data === null || !('error' in data)) return null;
+		return typeof data.error === 'string' ? data.error : null;
+	}
 
 	// Drag persistence isn't a <form> submission (it's triggered by
 	// `svelte-dnd-action`'s `finalize` event), so it POSTs the same
@@ -13,6 +20,7 @@
 	// source of truth for the resulting rank; a failed move just leaves the
 	// board as `load()` last returned it once `invalidateAll()` reruns.
 	async function handleMove(detail: MoveDetail) {
+		dragError = null;
 		const body = new FormData();
 		body.set('storyId', detail.storyId);
 		body.set('stepId', detail.stepId);
@@ -20,15 +28,26 @@
 		body.set('beforeId', detail.beforeId ?? '');
 		body.set('afterId', detail.afterId ?? '');
 
-		await fetch('?/moveStory', { method: 'POST', body });
-		await invalidateAll();
+		try {
+			const response = await fetch('?/moveStory', { method: 'POST', body });
+			const result = deserialize(await response.text());
+			if (result.type === 'failure') {
+				dragError = actionError(result.data) ?? 'Failed to move story.';
+			} else if (!response.ok || result.type === 'error') {
+				dragError = 'Failed to move story.';
+			}
+		} catch {
+			dragError = 'Unable to save the story move. Check your connection and try again.';
+		} finally {
+			await invalidateAll();
+		}
 	}
 </script>
 
 <h1>{data.board.name}</h1>
 
-{#if form?.error}
-	<p class="error">{form.error}</p>
+{#if dragError ?? form?.error}
+	<p class="error" role="alert">{dragError ?? form?.error}</p>
 {/if}
 
 <form method="POST" action="?/addActivity" class="add-activity-form">

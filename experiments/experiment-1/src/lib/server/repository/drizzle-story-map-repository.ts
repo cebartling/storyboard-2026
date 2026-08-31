@@ -11,7 +11,7 @@
  * `StoryMap`, `save()` takes one.
  */
 
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type { ActivityId, MapId, SliceId, StepId, StoryId } from '$lib/domain/ids';
 import type { StoryMapRepository } from '$lib/domain/ports';
@@ -99,21 +99,47 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 			id: mapRow.id as MapId,
 			name: mapRow.name,
 			createdAt: mapRow.createdAt,
+			version: mapRow.version,
 			activities,
 			slices,
 			stories
 		};
 	}
 
-	async save(map: StoryMap): Promise<void> {
+	async save(map: StoryMap): Promise<StoryMap> {
+		const nextVersion = map.version + 1;
 		this.db.transaction((tx) => {
-			tx.insert(schema.maps)
-				.values({ id: map.id, name: map.name, createdAt: map.createdAt })
-				.onConflictDoUpdate({
-					target: schema.maps.id,
-					set: { name: map.name, createdAt: map.createdAt }
-				})
+			const update = tx
+				.update(schema.maps)
+				.set({ name: map.name, createdAt: map.createdAt, version: nextVersion })
+				.where(and(eq(schema.maps.id, map.id), eq(schema.maps.version, map.version)))
 				.run();
+
+			if (update.changes === 0) {
+				const existing = tx
+					.select({ version: schema.maps.version })
+					.from(schema.maps)
+					.where(eq(schema.maps.id, map.id))
+					.get();
+
+				if (existing) {
+					throw new Error(
+						`Story map ${map.id} changed since it was loaded (expected version ${map.version}, current version ${existing.version})`
+					);
+				}
+				if (map.version !== 0) {
+					throw new Error(`Story map ${map.id} no longer exists`);
+				}
+
+				tx.insert(schema.maps)
+					.values({
+						id: map.id,
+						name: map.name,
+						createdAt: map.createdAt,
+						version: nextVersion
+					})
+					.run();
+			}
 
 			// Delete every existing row for this map, leaf tables first (FK-safe),
 			// then reinsert everything from the in-memory aggregate.
@@ -184,6 +210,8 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 					.run();
 			}
 		});
+
+		return { ...map, version: nextVersion };
 	}
 
 	async listSummaries(): Promise<{ id: MapId; name: string; createdAt: Date }[]> {

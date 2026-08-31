@@ -106,7 +106,7 @@ describe('DrizzleStoryMapRepository', () => {
 	it('round-trips a full aggregate: activities, steps, slices, and stories', async () => {
 		const map = buildSampleMap();
 
-		await repository.save(map);
+		const saved = await repository.save(map);
 		const loaded = await repository.load(map.id);
 
 		expect(loaded).not.toBeNull();
@@ -117,8 +117,8 @@ describe('DrizzleStoryMapRepository', () => {
 		// exactly one scope each, so their insertion order already equals
 		// rank order and needs no normalizing.
 		expect({ ...loaded, stories: canonicalStoryOrder(loaded!.stories) }).toEqual({
-			...map,
-			stories: canonicalStoryOrder(map.stories)
+			...saved,
+			stories: canonicalStoryOrder(saved.stories)
 		});
 	});
 
@@ -176,14 +176,28 @@ describe('DrizzleStoryMapRepository', () => {
 		expect(summary!.name).toBe(map.name);
 	});
 
-	it('save() is idempotent: saving the same map twice does not duplicate rows', async () => {
+	it('saving the current version twice does not duplicate rows', async () => {
 		const map = buildSampleMap();
-		await repository.save(map);
-		await repository.save(map);
+		const firstSave = await repository.save(map);
+		await repository.save(firstSave);
 
 		const loaded = await repository.load(map.id);
 		expect(loaded!.stories).toHaveLength(map.stories.length);
 		expect(loaded!.activities).toHaveLength(map.activities.length);
+	});
+
+	it('rejects a stale save without overwriting the newer change', async () => {
+		const map = buildSampleMap();
+		await repository.save(map);
+		const firstRequest = await repository.load(map.id);
+		const staleRequest = await repository.load(map.id);
+
+		await repository.save({ ...firstRequest!, name: 'Saved by first request' });
+
+		await expect(
+			repository.save({ ...staleRequest!, name: 'Overwritten by stale request' })
+		).rejects.toThrow(/changed since it was loaded/);
+		expect((await repository.load(map.id))!.name).toBe('Saved by first request');
 	});
 
 	it('delete() removes the map and cascades to its children', async () => {

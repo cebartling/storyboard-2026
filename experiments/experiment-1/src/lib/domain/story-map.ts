@@ -49,6 +49,7 @@ export interface StoryMap {
 	id: MapId;
 	name: string;
 	createdAt: Date;
+	version: number;
 	activities: Activity[];
 	slices: Slice[];
 	stories: Story[];
@@ -64,7 +65,15 @@ export type NeighbourId = string | null | undefined;
 // ---------------------------------------------------------------------------
 
 export function createStoryMap(name: string, createdAt: Date = new Date()): StoryMap {
-	return { id: newId<MapId>(), name, createdAt, activities: [], slices: [], stories: [] };
+	return {
+		id: newId<MapId>(),
+		name,
+		createdAt,
+		version: 0,
+		activities: [],
+		slices: [],
+		stories: []
+	};
 }
 
 // ---------------------------------------------------------------------------
