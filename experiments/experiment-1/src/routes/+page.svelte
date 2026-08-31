@@ -5,30 +5,50 @@
 	let { data, form }: PageProps = $props();
 </script>
 
-<h1>Story maps</h1>
+<div class="mx-auto flex w-full max-w-2xl flex-col gap-6">
+	<div>
+		<h1>Story maps</h1>
+		<p class="text-ink-muted mt-1 text-sm">
+			Each map is a board of activities, steps, and release slices.
+		</p>
+	</div>
 
-{#if form?.error}
-	<p class="error">{form.error}</p>
-{/if}
+	{#if form?.error}
+		<p class="error">{form.error}</p>
+	{/if}
 
-{#if data.maps.length === 0}
-	<p>No story maps yet.</p>
-{:else}
-	<ul>
-		{#each data.maps as map (map.id)}
-			<li><a href={resolve('/maps/[mapId]', { mapId: map.id })}>{map.name}</a></li>
-		{/each}
-	</ul>
-{/if}
+	{#if data.maps.length === 0}
+		<div class="panel text-ink-muted border-dashed px-6 py-10 text-center text-sm">
+			No story maps yet. Create your first one below.
+		</div>
+	{:else}
+		<ul class="panel divide-line divide-y overflow-hidden">
+			{#each data.maps as map (map.id)}
+				<li>
+					<a
+						href={resolve('/maps/[mapId]', { mapId: map.id })}
+						class="hover:bg-brand-soft group flex items-center justify-between gap-4 px-5 py-3.5 transition"
+					>
+						<span class="text-ink group-hover:text-brand text-sm font-medium">{map.name}</span>
+						<span class="text-ink-muted group-hover:text-brand text-sm" aria-hidden="true">→</span>
+					</a>
+				</li>
+			{/each}
+		</ul>
+	{/if}
 
-<form method="POST" action="?/createMap">
-	<label for="name">New map name</label>
-	<input id="name" name="name" type="text" required />
-	<button type="submit">Create map</button>
-</form>
-
-<style>
-	.error {
-		color: darkred;
-	}
-</style>
+	<form method="POST" action="?/createMap" class="panel flex flex-col gap-2 p-5">
+		<label for="name" class="field-label">New map name</label>
+		<div class="flex gap-2">
+			<input
+				id="name"
+				name="name"
+				type="text"
+				required
+				placeholder="e.g. Checkout redesign"
+				class="input"
+			/>
+			<button type="submit" class="btn btn-primary">Create map</button>
+		</div>
+	</form>
+</div>

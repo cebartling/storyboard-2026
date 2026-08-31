@@ -74,7 +74,10 @@
 </script>
 
 <div
-	class="story-dnd-zone"
+	class="flex min-h-16 flex-col gap-1.5 rounded-lg border border-dashed p-1.5 transition-colors {localItems.length ===
+	0
+		? 'border-line/70'
+		: 'border-transparent'}"
 	data-testid="cell-{stepId}-{sliceId ?? 'unsliced'}"
 	use:dndzone={{ items: localItems, flipDurationMs }}
 	onconsider={handleConsider}
@@ -84,13 +87,3 @@
 		<StoryCard id={item.id} title={item.title} />
 	{/each}
 </div>
-
-<style>
-	.story-dnd-zone {
-		min-height: 3rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.35rem;
-		padding: 0.35rem;
-	}
-</style>

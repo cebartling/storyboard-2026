@@ -1,0 +1,78 @@
+@import 'tailwindcss';
+
+/* The one place the app's visual vocabulary is defined. Routes and components
+   use Tailwind utilities directly; only the handful of controls that repeat on
+   every form (button, input, panel) get a named class here, so a board full of
+   inline forms stays readable. See documentation/adr/0009-tailwind-css.md. */
+
+@theme {
+	--color-canvas: oklch(0.985 0.005 260);
+	--color-ink: oklch(0.28 0.03 260);
+	--color-ink-muted: oklch(0.53 0.02 260);
+	--color-line: oklch(0.9 0.01 260);
+	--color-brand: oklch(0.55 0.16 265);
+	--color-brand-soft: oklch(0.96 0.025 265);
+	--color-accent: oklch(0.83 0.13 85);
+	--color-accent-soft: oklch(0.97 0.04 85);
+	--color-danger: oklch(0.55 0.19 25);
+
+	--font-sans: 'Inter var', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+@layer base {
+	html {
+		background-color: var(--color-canvas);
+	}
+
+	body {
+		@apply bg-canvas text-ink font-sans antialiased;
+	}
+
+	h1 {
+		@apply text-ink text-2xl font-semibold tracking-tight;
+	}
+
+	:focus-visible {
+		@apply outline-brand outline-2 outline-offset-2;
+	}
+}
+
+@layer components {
+	.panel {
+		@apply border-line rounded-xl border bg-white shadow-sm;
+	}
+
+	.field-label {
+		@apply text-ink-muted text-xs font-medium tracking-wide uppercase;
+	}
+
+	.input {
+		@apply border-line text-ink placeholder:text-ink-muted/60 w-full rounded-lg border bg-white px-3 py-1.5 text-sm shadow-xs transition;
+	}
+
+	.input:focus {
+		@apply border-brand outline-none;
+	}
+
+	.btn {
+		@apply inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition select-none;
+	}
+
+	.btn-primary {
+		@apply bg-brand text-white shadow-sm hover:brightness-110 active:brightness-95;
+	}
+
+	.btn-quiet {
+		@apply border-line text-ink border bg-white hover:bg-slate-50;
+	}
+
+	.btn-danger-quiet {
+		@apply text-ink-muted hover:text-danger cursor-pointer bg-transparent transition;
+	}
+
+	/* Kept as a class (not only utilities) because the e2e suite asserts on
+	   `p.error[role="alert"]`. */
+	.error {
+		@apply border-danger/25 bg-danger/8 text-danger rounded-lg border px-3 py-2 text-sm font-medium;
+	}
+}

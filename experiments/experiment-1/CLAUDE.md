@@ -50,6 +50,12 @@ self-migrate. E2e runs against a throwaway `e2e.db` and never touch `local.db`.
   computes a rank — it sends neighbour ids and the server derives the rank. See ADR 0005.
 - Drag-and-drop is isolated behind `src/lib/components/story-dnd-zone.svelte` so
   `svelte-dnd-action` can be swapped without touching the board.
+- Styling is **Tailwind CSS v4** (ADR 0009). The palette and the repeated control classes
+  (`.panel`, `.input`, `.btn`/`.btn-primary`/`.btn-quiet`/`.btn-danger-quiet`,
+  `.field-label`, `.error`) live in `src/app.css`; everything else is utilities in the
+  markup. Components have no `<style>` blocks — add utilities or extend `src/app.css`
+  instead. The board's `grid-column`/`grid-row` inline styles stay inline: they are data
+  from `board-view-model.ts`, not design.
 - Svelte 5 runes mode is forced: `onclick` not `on:click`, callback props not
   `createEventDispatcher`, snippets not slots. Runes work only in `.svelte`/`.svelte.ts`.
 

@@ -44,184 +44,193 @@
 	}
 </script>
 
-<h1>{data.board.name}</h1>
+<div class="flex flex-col gap-6">
+	<div class="flex flex-wrap items-end justify-between gap-4">
+		<div>
+			<h1>{data.board.name}</h1>
+			<p class="text-ink-muted mt-1 text-sm">
+				{data.board.columns.length} step{data.board.columns.length === 1 ? '' : 's'} ·
+				{data.board.rows.length - 1} slice{data.board.rows.length - 1 === 1 ? '' : 's'}
+			</p>
+		</div>
 
-{#if dragError ?? form?.error}
-	<p class="error" role="alert">{dragError ?? form?.error}</p>
-{/if}
-
-<form method="POST" action="?/addActivity" class="add-activity-form">
-	<label for="new-activity-name">New activity</label>
-	<input id="new-activity-name" name="name" type="text" required />
-	<button type="submit">Add activity</button>
-</form>
-
-<form method="POST" action="?/createSlice" class="add-slice-form">
-	<label for="new-slice-name">New slice</label>
-	<input id="new-slice-name" name="name" type="text" required />
-	<button type="submit">Add slice</button>
-</form>
-
-<div
-	class="board"
-	data-testid="board"
-	style="grid-template-columns: max-content repeat({data.board
-		.totalColumns}, minmax(220px, 1fr)); grid-template-rows: auto auto repeat({data.board.rows
-		.length}, minmax(120px, auto));"
->
-	{#each data.board.activityHeaders as activityHeader (activityHeader.activityId)}
-		<div
-			class="activity-header"
-			data-testid="activity-{activityHeader.activityId}"
-			style="grid-column: {activityHeader.gridColumnStart} / {activityHeader.gridColumnEnd}; grid-row: 1;"
-		>
-			<form method="POST" action="?/renameActivity" class="rename-form">
-				<input type="hidden" name="activityId" value={activityHeader.activityId} />
-				<input type="text" name="name" value={activityHeader.name} aria-label="Rename activity" />
-				<button type="submit">Save</button>
+		<div class="flex flex-wrap items-end gap-3">
+			<form method="POST" action="?/addActivity" class="flex flex-col gap-1.5">
+				<label for="new-activity-name" class="field-label">New activity</label>
+				<div class="flex gap-2">
+					<input
+						id="new-activity-name"
+						name="name"
+						type="text"
+						required
+						class="input w-44"
+						placeholder="e.g. Browse"
+					/>
+					<button type="submit" class="btn btn-primary">Add activity</button>
+				</div>
 			</form>
-			<form method="POST" action="?/deleteActivity" class="delete-form">
-				<input type="hidden" name="activityId" value={activityHeader.activityId} />
-				<button type="submit">Delete activity</button>
-			</form>
-			<form method="POST" action="?/addStep" class="add-step-form">
-				<input type="hidden" name="activityId" value={activityHeader.activityId} />
-				<input type="text" name="name" placeholder="New step" required aria-label="New step name" />
-				<button type="submit">Add step</button>
+
+			<form method="POST" action="?/createSlice" class="flex flex-col gap-1.5">
+				<label for="new-slice-name" class="field-label">New slice</label>
+				<div class="flex gap-2">
+					<input
+						id="new-slice-name"
+						name="name"
+						type="text"
+						required
+						class="input w-44"
+						placeholder="e.g. Release 1"
+					/>
+					<button type="submit" class="btn btn-quiet">Add slice</button>
+				</div>
 			</form>
 		</div>
-	{/each}
+	</div>
 
-	{#if data.board.activityHeaders.length === 0}
-		<p class="empty-hint" style="grid-column: 2; grid-row: 1;">No activities yet.</p>
+	{#if dragError ?? form?.error}
+		<p class="error" role="alert">{dragError ?? form?.error}</p>
 	{/if}
 
-	{#each data.board.columns as column (column.stepId)}
+	<div class="panel overflow-x-auto p-0">
 		<div
-			class="step-header"
-			data-testid="step-{column.stepId}"
-			style="grid-column: {column.gridColumn}; grid-row: 2;"
+			class="bg-line grid min-w-max gap-px"
+			data-testid="board"
+			style="grid-template-columns: max-content repeat({data.board
+				.totalColumns}, minmax(240px, 1fr)); grid-template-rows: auto auto repeat({data.board.rows
+				.length}, minmax(140px, auto));"
 		>
-			<form method="POST" action="?/renameStep" class="rename-form">
-				<input type="hidden" name="stepId" value={column.stepId} />
-				<input type="text" name="name" value={column.name} aria-label="Rename step" />
-				<button type="submit">Save</button>
-			</form>
-			<form method="POST" action="?/deleteStep" class="delete-form">
-				<input type="hidden" name="stepId" value={column.stepId} />
-				<button type="submit">Delete step</button>
-			</form>
-		</div>
-	{/each}
+			<div class="sticky left-0 z-20 bg-slate-50" style="grid-column: 1; grid-row: 1 / 3;"></div>
 
-	{#each data.board.rows as row (row.sliceId ?? 'unsliced')}
-		<div
-			class="row-label"
-			data-testid="row-label-{row.sliceId ?? 'unsliced'}"
-			style="grid-column: 1; grid-row: {row.gridRow};"
-		>
-			{#if row.sliceId}
-				<form method="POST" action="?/renameSlice" class="rename-form">
-					<input type="hidden" name="sliceId" value={row.sliceId} />
-					<input type="text" name="name" value={row.name} aria-label="Rename slice" />
-					<button type="submit">Save</button>
-				</form>
-				<form method="POST" action="?/deleteSlice" class="delete-form">
-					<input type="hidden" name="sliceId" value={row.sliceId} />
-					<button type="submit">Delete slice</button>
-				</form>
-			{:else}
-				<span class="unsliced-label">{row.name}</span>
+			{#each data.board.activityHeaders as activityHeader (activityHeader.activityId)}
+				<div
+					class="bg-brand-soft flex flex-col gap-2 p-3"
+					data-testid="activity-{activityHeader.activityId}"
+					style="grid-column: {activityHeader.gridColumnStart} / {activityHeader.gridColumnEnd}; grid-row: 1;"
+				>
+					<div class="flex flex-wrap items-center gap-2">
+						<form method="POST" action="?/renameActivity" class="flex gap-1.5">
+							<input type="hidden" name="activityId" value={activityHeader.activityId} />
+							<input
+								type="text"
+								name="name"
+								value={activityHeader.name}
+								aria-label="Rename activity"
+								class="input w-40 font-semibold"
+							/>
+							<button type="submit" class="btn btn-quiet">Save</button>
+						</form>
+						<form method="POST" action="?/deleteActivity">
+							<input type="hidden" name="activityId" value={activityHeader.activityId} />
+							<button type="submit" class="btn btn-danger-quiet px-1.5 text-xs"
+								>Delete activity</button
+							>
+						</form>
+					</div>
+					<form method="POST" action="?/addStep" class="flex gap-1.5">
+						<input
+							type="text"
+							name="name"
+							placeholder="New step"
+							required
+							aria-label="New step name"
+							class="input w-40"
+						/>
+						<input type="hidden" name="activityId" value={activityHeader.activityId} />
+						<button type="submit" class="btn btn-quiet">Add step</button>
+					</form>
+				</div>
+			{/each}
+
+			{#if data.board.activityHeaders.length === 0}
+				<p class="text-ink-muted bg-white p-6 text-sm" style="grid-column: 2; grid-row: 1;">
+					No activities yet.
+				</p>
 			{/if}
-		</div>
-	{/each}
 
-	{#each data.board.cells as cell (`${cell.stepId}-${cell.sliceId ?? 'unsliced'}`)}
-		<div class="cell" style="grid-column: {cell.gridColumn}; grid-row: {cell.gridRow};">
-			<StoryDndZone
-				items={cell.stories.map((s) => ({ id: s.id, title: s.title }))}
-				stepId={cell.stepId}
-				sliceId={cell.sliceId}
-				onMove={handleMove}
-			/>
-			{#if cell.sliceId === null}
-				<form method="POST" action="?/addStory" class="add-story-form">
-					<input type="hidden" name="stepId" value={cell.stepId} />
-					<input
-						type="text"
-						name="title"
-						placeholder="New story"
-						required
-						aria-label="New story title"
+			{#each data.board.columns as column (column.stepId)}
+				<div
+					class="flex flex-wrap items-center gap-2 bg-slate-50 p-3"
+					data-testid="step-{column.stepId}"
+					style="grid-column: {column.gridColumn}; grid-row: 2;"
+				>
+					<form method="POST" action="?/renameStep" class="flex gap-1.5">
+						<input type="hidden" name="stepId" value={column.stepId} />
+						<input
+							type="text"
+							name="name"
+							value={column.name}
+							aria-label="Rename step"
+							class="input w-36"
+						/>
+						<button type="submit" class="btn btn-quiet">Save</button>
+					</form>
+					<form method="POST" action="?/deleteStep">
+						<input type="hidden" name="stepId" value={column.stepId} />
+						<button type="submit" class="btn btn-danger-quiet px-1.5 text-xs">Delete step</button>
+					</form>
+				</div>
+			{/each}
+
+			{#each data.board.rows as row (row.sliceId ?? 'unsliced')}
+				<div
+					class="sticky left-0 z-10 flex flex-col justify-center gap-2 bg-slate-50 p-3"
+					data-testid="row-label-{row.sliceId ?? 'unsliced'}"
+					style="grid-column: 1; grid-row: {row.gridRow};"
+				>
+					{#if row.sliceId}
+						<form method="POST" action="?/renameSlice" class="flex gap-1.5">
+							<input type="hidden" name="sliceId" value={row.sliceId} />
+							<input
+								type="text"
+								name="name"
+								value={row.name}
+								aria-label="Rename slice"
+								class="input w-36 font-semibold"
+							/>
+							<button type="submit" class="btn btn-quiet">Save</button>
+						</form>
+						<form method="POST" action="?/deleteSlice">
+							<input type="hidden" name="sliceId" value={row.sliceId} />
+							<button type="submit" class="btn btn-danger-quiet self-start px-1.5 text-xs"
+								>Delete slice</button
+							>
+						</form>
+					{:else}
+						<span
+							class="text-ink-muted text-xs font-semibold tracking-wide whitespace-nowrap uppercase"
+							>{row.name}</span
+						>
+					{/if}
+				</div>
+			{/each}
+
+			{#each data.board.cells as cell (`${cell.stepId}-${cell.sliceId ?? 'unsliced'}`)}
+				<div
+					class="flex flex-col gap-2 bg-white p-1.5"
+					style="grid-column: {cell.gridColumn}; grid-row: {cell.gridRow};"
+				>
+					<StoryDndZone
+						items={cell.stories.map((s) => ({ id: s.id, title: s.title }))}
+						stepId={cell.stepId}
+						sliceId={cell.sliceId}
+						onMove={handleMove}
 					/>
-					<button type="submit">Add story</button>
-				</form>
-			{/if}
+					{#if cell.sliceId === null}
+						<form method="POST" action="?/addStory" class="flex gap-1.5 px-1.5 pb-1">
+							<input type="hidden" name="stepId" value={cell.stepId} />
+							<input
+								type="text"
+								name="title"
+								placeholder="New story"
+								required
+								aria-label="New story title"
+								class="input"
+							/>
+							<button type="submit" class="btn btn-quiet">Add story</button>
+						</form>
+					{/if}
+				</div>
+			{/each}
 		</div>
-	{/each}
+	</div>
 </div>
-
-<style>
-	.error {
-		color: darkred;
-	}
-
-	.add-activity-form,
-	.add-slice-form {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		margin-right: 1.5rem;
-		margin-bottom: 1rem;
-	}
-
-	.board {
-		display: grid;
-		gap: 1px;
-		background: #ddd;
-		border: 1px solid #ddd;
-		overflow-x: auto;
-	}
-
-	.activity-header,
-	.step-header,
-	.row-label,
-	.cell {
-		background: white;
-		padding: 0.5rem;
-	}
-
-	.activity-header {
-		background: #eef3fb;
-		font-weight: 600;
-	}
-
-	.step-header {
-		background: #f5f5f5;
-	}
-
-	.row-label {
-		background: #f5f5f5;
-		display: flex;
-		align-items: center;
-		font-weight: 600;
-		white-space: nowrap;
-	}
-
-	.rename-form,
-	.delete-form,
-	.add-step-form,
-	.add-story-form {
-		display: flex;
-		gap: 0.3rem;
-		margin: 0.15rem 0;
-	}
-
-	.rename-form input[type='text'] {
-		width: 9rem;
-	}
-
-	.empty-hint {
-		color: #666;
-	}
-</style>
