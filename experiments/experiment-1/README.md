@@ -1,42 +1,60 @@
-# sv
+# experiment-1 — user story mapping
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+A self-contained SvelteKit vertical slice of Jeff Patton's user story mapping technique,
+built to test an architecture before the project commits to one.
 
-## Creating a project
+You can create a map, build a backbone of **activities** and the **steps** beneath them,
+add **story** cards under any step, drag cards to reorder them, and drag them onto release
+**slice** bands. Order and slice membership are server-derived and survive a reload.
 
-If you're seeing this, you've probably already done this step. Congrats!
+Nothing outside this directory is needed to build or run it, and nothing here is shared
+with other experiments (ADR 0001).
 
-```sh
-# create a new project
-npx sv create my-app
-```
+## Running it
 
-To recreate this project with the same configuration:
-
-```sh
-# recreate this project
-pnpm dlx sv@0.17.0 create --template minimal --types ts --add prettier eslint vitest="usages:unit,component" playwright drizzle="database:sqlite+sqlite:better-sqlite3" sveltekit-adapter="adapter:node" --install pnpm experiment-1
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+Everything runs through `corepack pnpm`, from this directory. The `packageManager` field in
+`package.json` pins the pnpm version; a bare `pnpm` picks up whatever is on your PATH, and
+versions before 10 reject this directory's `pnpm-workspace.yaml` outright.
 
 ```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+cp .env.example .env      # DATABASE_URL=local.db
+corepack pnpm install
+corepack pnpm dev
 ```
 
-## Building
+Migrations apply automatically when the DB module loads, so there is no separate migrate
+step — `dev` and the e2e server both self-migrate against a fresh `DATABASE_URL`.
 
-To create a production version of your app:
+| Task             | Command                                                                 |
+| ---------------- | ----------------------------------------------------------------------- |
+| Dev server       | `corepack pnpm dev`                                                     |
+| Full suite       | `corepack pnpm test`                                                    |
+| Unit + component | `corepack pnpm test:unit -- --run`                                      |
+| Single unit test | `corepack pnpm vitest run src/lib/domain/story-map.test.ts -t "<name>"` |
+| E2e              | `corepack pnpm test:e2e`                                                |
+| Single e2e test  | `corepack pnpm playwright test -g "<name>"`                             |
+| Types            | `corepack pnpm check`                                                   |
+| Lint / format    | `corepack pnpm lint` / `corepack pnpm format`                           |
+| New migration    | `corepack pnpm db:generate` (commit `drizzle/`)                         |
+| Inspect DB       | `corepack pnpm db:studio`                                               |
 
-```sh
-npm run build
-```
+## Reading it
 
-You can preview the production build with `npm run preview`.
+Start with [`documentation/`](./documentation/) — [`glossary.md`](./documentation/glossary.md)
+first, because this codebase says **Step** where Patton says _user task_, and the
+narrative-order vs. priority-order distinction is the usual source of confusion. Then
+[`domain-model.md`](./documentation/domain-model.md) for the entities and invariants, and
+[`architecture.md`](./documentation/architecture.md) for the layering.
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+The decision record is in [`documentation/adr/`](./documentation/adr/). ADR 0006 answers
+"would hexagonal architecture help here?" directly and is worth reading even if you skip
+the rest.
+
+[`CLAUDE.md`](./CLAUDE.md) carries the same commands plus the architectural constraints and
+testing gotchas that changes to this directory need to respect.
+
+## Stack
+
+SvelteKit 2 with Svelte 5 in runes mode, Drizzle ORM over SQLite (better-sqlite3), Vitest
+for unit and component tests, Playwright for e2e. `svelte-dnd-action` handles dragging,
+isolated behind a single component so it can be swapped.
