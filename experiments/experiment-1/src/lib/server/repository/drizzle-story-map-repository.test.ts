@@ -216,4 +216,51 @@ describe('DrizzleStoryMapRepository', () => {
 			.filter((a) => a.mapId === map.id);
 		expect(remainingActivities).toHaveLength(0);
 	});
+
+	// The rank uniqueness invariant lives in the domain; these assert the
+	// schema actually backs it up, which is the point of a real-SQLite test.
+	describe('rank uniqueness index', () => {
+		it('rejects a duplicate rank within a sliced scope', async () => {
+			const map = buildSampleMap();
+			await repository.save(map);
+			const story = map.stories.find((s) => s.sliceId !== null)!;
+
+			expect(() =>
+				db
+					.insert(schema.stories)
+					.values({
+						id: 'dupe-sliced',
+						stepId: story.stepId,
+						title: 'Duplicate rank',
+						description: null,
+						sliceId: story.sliceId,
+						rank: story.rank
+					})
+					.run()
+			).toThrow(/UNIQUE/i);
+		});
+
+		it('rejects a duplicate rank in the unsliced band', async () => {
+			const map = buildSampleMap();
+			await repository.save(map);
+			const story = map.stories.find((s) => s.sliceId === null)!;
+
+			// SQLite treats NULLs as distinct in a UNIQUE index, so an index on
+			// (step_id, slice_id, rank) alone never fires here — and the unsliced
+			// band is where addStory puts every story by default.
+			expect(() =>
+				db
+					.insert(schema.stories)
+					.values({
+						id: 'dupe-unsliced',
+						stepId: story.stepId,
+						title: 'Duplicate rank',
+						description: null,
+						sliceId: null,
+						rank: story.rank
+					})
+					.run()
+			).toThrow(/UNIQUE/i);
+		});
+	});
 });

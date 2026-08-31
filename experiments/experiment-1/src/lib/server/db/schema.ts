@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 // StoryMap — the aggregate root. See documentation/domain-model.md.
@@ -68,6 +69,12 @@ export const stories = sqliteTable(
 		rank: text('rank').notNull()
 	},
 	(table) => [
-		uniqueIndex('stories_step_id_slice_id_rank_idx').on(table.stepId, table.sliceId, table.rank)
+		uniqueIndex('stories_step_id_slice_id_rank_idx').on(table.stepId, table.sliceId, table.rank),
+		// SQLite treats NULLs as distinct in a UNIQUE index, so the index above
+		// never fires for the unsliced band — which is where `addStory` puts
+		// every story by default. This partial index covers that scope.
+		uniqueIndex('stories_step_id_unsliced_rank_idx')
+			.on(table.stepId, table.rank)
+			.where(sql`${table.sliceId} is null`)
 	]
 );

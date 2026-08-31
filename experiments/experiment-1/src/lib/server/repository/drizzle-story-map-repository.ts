@@ -226,7 +226,41 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 	}
 
 	async delete(id: MapId): Promise<void> {
-		this.db.delete(schema.maps).where(eq(schema.maps.id, id)).run();
+		// Delete leaf-first rather than leaning on the FK cascades. `stories`
+		// references `slices` with ON DELETE SET NULL, so cascading from the map
+		// would un-slice every story on the way out — and un-slicing en masse
+		// collides in the unsliced scope, whose ranks are only unique within
+		// that scope. Deleting a map means the stories go too, not that they
+		// move to the unsliced band.
+		this.db.transaction((tx) => {
+			const activityIds = tx
+				.select({ id: schema.activities.id })
+				.from(schema.activities)
+				.where(eq(schema.activities.mapId, id))
+				.all()
+				.map((r) => r.id);
+
+			const stepIds = activityIds.length
+				? tx
+						.select({ id: schema.steps.id })
+						.from(schema.steps)
+						.where(inArray(schema.steps.activityId, activityIds))
+						.all()
+						.map((r) => r.id)
+				: [];
+
+			for (const stepId of stepIds) {
+				tx.delete(schema.stories).where(eq(schema.stories.stepId, stepId)).run();
+			}
+			for (const stepId of stepIds) {
+				tx.delete(schema.steps).where(eq(schema.steps.id, stepId)).run();
+			}
+			for (const activityId of activityIds) {
+				tx.delete(schema.activities).where(eq(schema.activities.id, activityId)).run();
+			}
+			tx.delete(schema.slices).where(eq(schema.slices.mapId, id)).run();
+			tx.delete(schema.maps).where(eq(schema.maps.id, id)).run();
+		});
 	}
 }
 

@@ -15,6 +15,13 @@
       "when": 1788202227360,
       "tag": "0001_tiresome_colonel_america",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788203067031,
+      "tag": "0002_silent_shaman",
+      "breakpoints": true
     }
   ]
 }

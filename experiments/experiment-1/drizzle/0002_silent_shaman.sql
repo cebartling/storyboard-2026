@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `stories_step_id_unsliced_rank_idx` ON `stories` (`step_id`,`rank`) WHERE "stories"."slice_id" is null;
