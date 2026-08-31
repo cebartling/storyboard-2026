@@ -50,8 +50,11 @@
 		@apply border-line text-ink placeholder:text-ink-muted/60 w-full rounded-lg border bg-white px-3 py-1.5 text-sm shadow-xs transition;
 	}
 
-	.input:focus {
-		@apply border-brand outline-none;
+	/* `:focus-visible`, not `:focus`, and no `outline-none`: this layer sorts
+	   after `@layer base`, so suppressing the outline here would silently
+	   cancel the base focus ring for every input in the app. */
+	.input:focus-visible {
+		@apply border-brand;
 	}
 
 	.btn {
