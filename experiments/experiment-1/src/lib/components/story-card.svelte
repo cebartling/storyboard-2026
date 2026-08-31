@@ -21,10 +21,10 @@
 		<!-- The hover-reveal is gated on `hover: hover`: a touch device never
 		     fires `:hover`, so an ungated `opacity-0` would leave an invisible
 		     but still tappable delete on a card the user is trying to drag.
-		     `size-6` keeps the target at the WCAG 2.2 24x24 minimum. -->
+		     `.btn-icon` keeps the target at the WCAG 2.2 24x24 minimum. -->
 		<button
 			type="submit"
-			class="btn-danger-quiet grid size-6 place-items-center rounded text-base leading-none group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:hover)]:opacity-0"
+			class="btn btn-icon btn-danger-quiet rounded text-base leading-none group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:hover)]:opacity-0"
 			aria-label="Delete story {title}"
 			title="Delete">×</button
 		>

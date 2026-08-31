@@ -70,8 +70,14 @@
 		@apply border-line text-ink border bg-white hover:bg-surface;
 	}
 
+	/* Square icon button. Defined after `.btn` so its padding wins. */
+	.btn-icon {
+		@apply size-6 p-0;
+	}
+
+	/* A colour modifier only — always used on top of `.btn`. */
 	.btn-danger-quiet {
-		@apply text-ink-muted hover:text-danger cursor-pointer bg-transparent transition;
+		@apply text-ink-muted hover:text-danger bg-transparent;
 	}
 
 	/* Kept as a class (not only utilities) because the e2e suite asserts on
