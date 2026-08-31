@@ -12,7 +12,7 @@
 
 <div class="flex min-h-screen flex-col">
 	<header class="border-line sticky top-0 z-30 border-b bg-white/80 backdrop-blur">
-		<div class="mx-auto flex max-w-full items-center gap-3 px-6 py-3">
+		<div class="flex items-center gap-3 px-6 py-3">
 			<a href={resolve('/')} class="flex items-center gap-2.5">
 				<span
 					class="bg-brand grid size-7 place-items-center rounded-lg text-sm font-bold text-white"
@@ -24,7 +24,7 @@
 		</div>
 	</header>
 
-	<main class="mx-auto w-full max-w-full flex-1 px-6 py-8">
+	<main class="w-full flex-1 px-6 py-8">
 		{@render children()}
 	</main>
 </div>

@@ -91,7 +91,7 @@
 		<p class="error" role="alert">{dragError ?? form?.error}</p>
 	{/if}
 
-	<div class="panel overflow-x-auto p-0">
+	<div class="panel overflow-x-auto">
 		<div
 			class="bg-line grid min-w-max gap-px"
 			data-testid="board"
