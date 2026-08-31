@@ -99,7 +99,7 @@
 				.totalColumns}, minmax(240px, 1fr)); grid-template-rows: auto auto repeat({data.board.rows
 				.length}, minmax(140px, auto));"
 		>
-			<div class="sticky left-0 z-20 bg-slate-50" style="grid-column: 1; grid-row: 1 / 3;"></div>
+			<div class="sticky left-0 z-20 bg-surface" style="grid-column: 1; grid-row: 1 / 3;"></div>
 
 			{#each data.board.activityHeaders as activityHeader (activityHeader.activityId)}
 				<div
@@ -149,7 +149,7 @@
 
 			{#each data.board.columns as column (column.stepId)}
 				<div
-					class="flex flex-wrap items-center gap-2 bg-slate-50 p-3"
+					class="flex flex-wrap items-center gap-2 bg-surface p-3"
 					data-testid="step-{column.stepId}"
 					style="grid-column: {column.gridColumn}; grid-row: 2;"
 				>
@@ -173,7 +173,7 @@
 
 			{#each data.board.rows as row (row.sliceId ?? 'unsliced')}
 				<div
-					class="sticky left-0 z-10 flex flex-col justify-center gap-2 bg-slate-50 p-3"
+					class="sticky left-0 z-10 flex flex-col justify-center gap-2 bg-surface p-3"
 					data-testid="row-label-{row.sliceId ?? 'unsliced'}"
 					style="grid-column: 1; grid-row: {row.gridRow};"
 				>
