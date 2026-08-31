@@ -18,20 +18,25 @@ is the one that constrains most changes.
 
 ## Commands
 
-| Task                 | Command                                                                           |
-| -------------------- | --------------------------------------------------------------------------------- |
-| Dev server           | `pnpm dev`                                                                        |
-| Full suite           | `pnpm test` (Vitest then Playwright)                                              |
-| All unit + component | `pnpm test:unit -- --run`                                                         |
-| All e2e              | `pnpm test:e2e`                                                                   |
-| **Single unit test** | `pnpm vitest run src/lib/domain/story-map.test.ts -t "moves story between steps"` |
-| **Single e2e test**  | `pnpm playwright test -g "drag story to slice"`                                   |
-| Types                | `pnpm check`                                                                      |
-| Lint / format        | `pnpm lint` / `pnpm format`                                                       |
-| New migration        | `pnpm db:generate` (commit `drizzle/`)                                            |
-| Inspect DB           | `pnpm db:studio`                                                                  |
+`package.json` pins `packageManager: pnpm@11.24.0`. Run everything through `corepack pnpm`
+so the pinned version is used — a bare `pnpm` picks up whatever is on your PATH, and
+versions before 10 reject this directory's `pnpm-workspace.yaml` with
+`packages field missing or empty`.
 
-Migrations apply automatically at db-module load, so `pnpm dev` and the e2e server
+| Task                 | Command                                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------ |
+| Dev server           | `corepack pnpm dev`                                                                        |
+| Full suite           | `corepack pnpm test` (Vitest then Playwright)                                              |
+| All unit + component | `corepack pnpm test:unit -- --run`                                                         |
+| All e2e              | `corepack pnpm test:e2e`                                                                   |
+| **Single unit test** | `corepack pnpm vitest run src/lib/domain/story-map.test.ts -t "moves story between steps"` |
+| **Single e2e test**  | `corepack pnpm playwright test -g "drag story to slice"`                                   |
+| Types                | `corepack pnpm check`                                                                      |
+| Lint / format        | `corepack pnpm lint` / `corepack pnpm format`                                              |
+| New migration        | `corepack pnpm db:generate` (commit `drizzle/`)                                            |
+| Inspect DB           | `corepack pnpm db:studio`                                                                  |
+
+Migrations apply automatically at db-module load, so `corepack pnpm dev` and the e2e server
 self-migrate. E2e runs against a throwaway `e2e.db` and never touch `local.db`.
 
 ## Architecture constraints
@@ -50,7 +55,7 @@ self-migrate. E2e runs against a throwaway `e2e.db` and never touch `local.db`.
 
 ## Testing notes
 
-On Ubuntu 26.04, `playwright install` (which `pnpm test` and `pnpm test:e2e` run first)
+On Ubuntu 26.04, `playwright install` (which `corepack pnpm test` and `corepack pnpm test:e2e` run first)
 fails against the host platform. Prefix it once with
 `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64` to seed the browsers; afterwards the
 suites run normally.
