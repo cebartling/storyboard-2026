@@ -13,6 +13,7 @@
 
 import type { ActivityId, MapId, SliceId, StepId, StoryId } from '$lib/domain/ids';
 import type { StoryMapRepository } from '$lib/domain/ports';
+import { InvariantError } from '$lib/domain/errors';
 import * as domain from '$lib/domain/story-map';
 import {
 	createStoryMap,
@@ -36,7 +37,7 @@ export async function listMaps(repository: StoryMapRepository): Promise<MapSumma
 export async function createMap(repository: StoryMapRepository, name: string): Promise<StoryMap> {
 	const trimmed = name.trim();
 	if (trimmed.length === 0) {
-		throw new Error('Map name must not be empty');
+		throw new InvariantError('Map name must not be empty');
 	}
 	const map = createStoryMap(trimmed);
 	return repository.save(map);
@@ -49,7 +50,7 @@ export async function loadMap(repository: StoryMapRepository, id: MapId): Promis
 async function loadOrThrow(repository: StoryMapRepository, id: MapId): Promise<StoryMap> {
 	const map = await repository.load(id);
 	if (!map) {
-		throw new Error(`No story map with id ${id}`);
+		throw new InvariantError(`No story map with id ${id}`);
 	}
 	return map;
 }
@@ -57,7 +58,7 @@ async function loadOrThrow(repository: StoryMapRepository, id: MapId): Promise<S
 function requireNonEmpty(value: string, label: string): string {
 	const trimmed = value.trim();
 	if (trimmed.length === 0) {
-		throw new Error(`${label} must not be empty`);
+		throw new InvariantError(`${label} must not be empty`);
 	}
 	return trimmed;
 }

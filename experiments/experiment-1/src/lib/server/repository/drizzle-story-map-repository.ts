@@ -11,6 +11,7 @@
  * `StoryMap`, `save()` takes one.
  */
 
+import { ConflictError } from '$lib/domain/errors';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type { ActivityId, MapId, SliceId, StepId, StoryId } from '$lib/domain/ids';
@@ -123,12 +124,12 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 					.get();
 
 				if (existing) {
-					throw new Error(
+					throw new ConflictError(
 						`Story map ${map.id} changed since it was loaded (expected version ${map.version}, current version ${existing.version})`
 					);
 				}
 				if (map.version !== 0) {
-					throw new Error(`Story map ${map.id} no longer exists`);
+					throw new ConflictError(`Story map ${map.id} no longer exists`);
 				}
 
 				tx.insert(schema.maps)

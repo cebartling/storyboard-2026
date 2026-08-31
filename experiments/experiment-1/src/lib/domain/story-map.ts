@@ -13,6 +13,7 @@
 import type { ActivityId, MapId, SliceId, StepId, StoryId } from './ids';
 import { newId } from './ids';
 import { rankAtEnd, rankBetween, type Rank } from './rank';
+import { InvariantError } from './errors';
 
 export interface Activity {
 	id: ActivityId;
@@ -83,7 +84,7 @@ export function createStoryMap(name: string, createdAt: Date = new Date()): Stor
 
 export function findActivity(map: StoryMap, activityId: ActivityId): Activity {
 	const activity = map.activities.find((a) => a.id === activityId);
-	if (!activity) throw new Error(`Activity not found: ${activityId}`);
+	if (!activity) throw new InvariantError(`Activity not found: ${activityId}`);
 	return activity;
 }
 
@@ -92,24 +93,24 @@ export function findStep(map: StoryMap, stepId: StepId): Step {
 		const step = activity.steps.find((s) => s.id === stepId);
 		if (step) return step;
 	}
-	throw new Error(`Step not found: ${stepId}`);
+	throw new InvariantError(`Step not found: ${stepId}`);
 }
 
 export function findSlice(map: StoryMap, sliceId: SliceId): Slice {
 	const slice = map.slices.find((s) => s.id === sliceId);
-	if (!slice) throw new Error(`Slice not found: ${sliceId}`);
+	if (!slice) throw new InvariantError(`Slice not found: ${sliceId}`);
 	return slice;
 }
 
 export function findStory(map: StoryMap, storyId: StoryId): Story {
 	const story = map.stories.find((s) => s.id === storyId);
-	if (!story) throw new Error(`Story not found: ${storyId}`);
+	if (!story) throw new InvariantError(`Story not found: ${storyId}`);
 	return story;
 }
 
 function activityOwning(map: StoryMap, stepId: StepId): Activity {
 	const activity = map.activities.find((a) => a.steps.some((s) => s.id === stepId));
-	if (!activity) throw new Error(`Step not found: ${stepId}`);
+	if (!activity) throw new InvariantError(`Step not found: ${stepId}`);
 	return activity;
 }
 
@@ -159,7 +160,7 @@ function requireInScope<TId>(
 ): Rank {
 	const item = scopeItems.find((i) => i.id === id);
 	if (!item) {
-		throw new Error(`${which} (${id}) is not a member of the target scope: ${scopeLabel}`);
+		throw new InvariantError(`${which} (${id}) is not a member of the target scope: ${scopeLabel}`);
 	}
 	return item.rank;
 }
@@ -235,7 +236,7 @@ export function addStory(
 
 function assertSliceBelongsToMap(map: StoryMap, sliceId: SliceId): void {
 	if (!map.slices.some((s) => s.id === sliceId)) {
-		throw new Error(`Slice ${sliceId} does not belong to map ${map.id}`);
+		throw new InvariantError(`Slice ${sliceId} does not belong to map ${map.id}`);
 	}
 }
 

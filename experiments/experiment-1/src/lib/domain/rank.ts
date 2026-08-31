@@ -10,6 +10,7 @@
  */
 
 import { generateKeyBetween } from 'fractional-indexing';
+import { InvariantError } from './errors';
 
 export type Rank = string;
 
@@ -23,7 +24,7 @@ export type Rank = string;
  */
 export function rankBetween(prev: Rank | null, next: Rank | null): Rank {
 	if (prev !== null && next !== null && prev >= next) {
-		throw new Error(`rankBetween: prev (${prev}) must sort before next (${next})`);
+		throw new InvariantError(`rankBetween: prev (${prev}) must sort before next (${next})`);
 	}
 	return generateKeyBetween(prev, next);
 }
