@@ -35,16 +35,6 @@ export function rankAtEnd(existingRanks: readonly Rank[]): Rank {
 	return rankBetween(last, null);
 }
 
-/** Computes a rank that sorts before every rank in `existingRanks`. */
-export function rankAtStart(existingRanks: readonly Rank[]): Rank {
-	const first = minRank(existingRanks);
-	return rankBetween(null, first);
-}
-
 function maxRank(ranks: readonly Rank[]): Rank | null {
 	return ranks.reduce<Rank | null>((max, r) => (max === null || r > max ? r : max), null);
-}
-
-function minRank(ranks: readonly Rank[]): Rank | null {
-	return ranks.reduce<Rank | null>((min, r) => (min === null || r < min ? r : min), null);
 }

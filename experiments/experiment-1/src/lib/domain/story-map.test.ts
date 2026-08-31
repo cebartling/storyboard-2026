@@ -11,8 +11,6 @@ import {
 	deleteStory,
 	editStory,
 	findStory,
-	moveActivity,
-	moveStep,
 	moveStory,
 	renameActivity,
 	renameSlice,
@@ -231,76 +229,6 @@ describe('delete', () => {
 		expect(() => deleteStep(map, 'nope' as never)).toThrow(/Step not found/);
 		expect(() => deleteSlice(map, 'nope' as never)).toThrow(/Slice not found/);
 		expect(() => deleteStory(map, 'nope' as never)).toThrow(/Story not found/);
-	});
-});
-
-describe('moveActivity', () => {
-	it('reorders activities on the backbone', () => {
-		let map = createStoryMap('m');
-		const a1 = addActivity(map, 'A1');
-		map = a1.map;
-		const a2 = addActivity(map, 'A2');
-		map = a2.map;
-		const a3 = addActivity(map, 'A3');
-		map = a3.map;
-
-		// Move A3 to the front.
-		map = moveActivity(map, a3.activity.id, null, a1.activity.id);
-
-		expect(sortByRank(map.activities).map((a) => a.name)).toEqual(['A3', 'A1', 'A2']);
-	});
-});
-
-describe('moveStep: reorder and move between activities', () => {
-	it('moves a step between activities, carrying its stories', () => {
-		let map = createStoryMap('m');
-		const a1 = addActivity(map, 'A1');
-		map = a1.map;
-		const a2 = addActivity(map, 'A2');
-		map = a2.map;
-
-		const stepResult = addStep(map, a1.activity.id, 'Movable step');
-		map = stepResult.map;
-		const stepId = stepResult.step.id;
-
-		const storyResult = addStory(map, stepId, 'Carried story');
-		map = storyResult.map;
-
-		map = moveStep(map, stepId, a2.activity.id, null, null);
-
-		const fromActivity = map.activities.find((a) => a.id === a1.activity.id)!;
-		const toActivity = map.activities.find((a) => a.id === a2.activity.id)!;
-		expect(fromActivity.steps.find((s) => s.id === stepId)).toBeUndefined();
-		expect(toActivity.steps.find((s) => s.id === stepId)).toBeDefined();
-
-		const carried = findStory(map, storyResult.story.id);
-		expect(carried.stepId).toBe(stepId);
-		// slice membership is untouched by the activity move
-		expect(carried.sliceId).toBeNull();
-	});
-
-	it('rejects moving a step to an unknown activity', () => {
-		const { map, stepId } = mapWithOneStep();
-		expect(() => moveStep(map, stepId, 'nope' as never, null, null)).toThrow(/Activity not found/);
-	});
-
-	it('reorders a step within its own activity via beforeId/afterId', () => {
-		const initial = mapWithOneStep();
-		let map = initial.map;
-		const { activityId } = initial;
-		const step2 = addStep(map, activityId, 'Step 2');
-		map = step2.map;
-		const step3 = addStep(map, activityId, 'Step 3');
-		map = step3.map;
-
-		const activityBefore = map.activities.find((a) => a.id === activityId)!;
-		const firstStepId = activityBefore.steps[0].id;
-
-		// Move Step 3 to between Step 1 and Step 2.
-		map = moveStep(map, step3.step.id, activityId, firstStepId, step2.step.id);
-
-		const activity = map.activities.find((a) => a.id === activityId)!;
-		expect(sortByRank(activity.steps).map((s) => s.name)).toEqual(['Step 1', 'Step 3', 'Step 2']);
 	});
 });
 

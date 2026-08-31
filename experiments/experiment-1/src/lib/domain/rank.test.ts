@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rankAtEnd, rankAtStart, rankBetween } from './rank';
+import { rankAtEnd, rankBetween } from './rank';
 
 describe('rankBetween', () => {
 	it('generates a rank at the start of an empty scope', () => {
@@ -50,17 +50,5 @@ describe('rankAtEnd', () => {
 
 	it('returns a rank for an empty list', () => {
 		expect(rankAtEnd([])).toBeTypeOf('string');
-	});
-});
-
-describe('rankAtStart', () => {
-	it('returns a rank before every rank in a non-empty list', () => {
-		const ranks = ['a0', 'a1', 'a2'];
-		const start = rankAtStart(ranks);
-		expect(ranks.every((r) => start < r)).toBe(true);
-	});
-
-	it('returns a rank for an empty list', () => {
-		expect(rankAtStart([])).toBeTypeOf('string');
 	});
 });
