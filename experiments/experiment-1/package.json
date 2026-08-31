@@ -14,7 +14,7 @@
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
 		"test:unit": "vitest",
-		"test": "npm run test:unit -- --run && npm run test:e2e",
+		"test": "vitest run && playwright install && playwright test",
 		"test:e2e": "playwright install && playwright test",
 		"db:push": "drizzle-kit push",
 		"db:generate": "drizzle-kit generate",

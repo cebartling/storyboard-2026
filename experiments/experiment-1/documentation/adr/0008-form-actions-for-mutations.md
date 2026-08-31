@@ -17,8 +17,10 @@ authoritative result back.
 All mutations go through SvelteKit named form actions (`?/addStory`, `?/moveStory`,
 `?/addSlice`, etc.), not a hand-rolled REST or RPC API. Drag-and-drop posts `?/moveStory`
 with the dropped-on neighbours (`beforeId`/`afterId`) and target scope
-(`stepId`/`sliceId`) on `finalize`, then calls SvelteKit's `invalidate()` to rerun the
-page's `load()` and refetch state. The server computes and writes the new rank (and slice
+(`stepId`/`sliceId`) on `finalize`, then calls SvelteKit's `invalidateAll()` to rerun the
+page's `load()` and refetch state. (`invalidateAll()` rather than a targeted `invalidate()`
+of a registered dependency: this page has exactly one load function, so there is nothing
+narrower to invalidate. Worth revisiting if a layout load is added.) The server computes and writes the new rank (and slice
 reassignment, if applicable) — see `documentation/architecture.md`'s `moveStory` trace —
 and is the sole authority on what the rank actually is; the client never computes or
 trusts a rank of its own.
@@ -34,5 +36,5 @@ it would be added as a new inbound surface calling into the same `src/lib/app/` 
 not by exposing the form actions themselves.
 
 Server-authoritative ranks mean a drag's visual result during the request round-trip is
-provisional until `invalidate()` refetches the real state; there's no optimistic
+provisional until `invalidateAll()` refetches the real state; there's no optimistic
 rank-guessing on the client to keep in sync with the server's fractional-indexing scheme.

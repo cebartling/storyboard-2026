@@ -55,7 +55,6 @@ export interface BoardViewModel {
 	rows: RowVM[];
 	cells: CellVM[];
 	totalColumns: number;
-	totalRows: number;
 }
 
 export function buildBoardViewModel(map: StoryMap): BoardViewModel {
@@ -100,7 +99,6 @@ export function buildBoardViewModel(map: StoryMap): BoardViewModel {
 	}));
 	const unslicedRow = 3 + map.slices.length;
 	rows.push({ sliceId: null, name: 'Unsliced', gridRow: unslicedRow });
-	const totalRows = unslicedRow;
 
 	const cells: CellVM[] = [];
 	for (const column of columns) {
@@ -126,7 +124,6 @@ export function buildBoardViewModel(map: StoryMap): BoardViewModel {
 		columns,
 		rows,
 		cells,
-		totalColumns,
-		totalRows
+		totalColumns
 	};
 }

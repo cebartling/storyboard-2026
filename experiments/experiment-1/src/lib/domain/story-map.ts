@@ -141,7 +141,16 @@ function resolveRank<TId>(
 		beforeId != null ? requireInScope(scopeItems, beforeId, scopeLabel, 'beforeId') : null;
 	const next = afterId != null ? requireInScope(scopeItems, afterId, scopeLabel, 'afterId') : null;
 	if (prev === null && next === null) {
-		return rankAtEnd(scopeItems.map((i) => i.rank));
+		// A drop into a populated scope always has at least one neighbour, so a
+		// payload with neither can only mean the client derived them wrongly.
+		// Appending silently would put the card somewhere the user did not drop
+		// it; every other path in this function rejects a bad neighbour.
+		if (scopeItems.length > 0) {
+			throw new InvariantError(
+				`neither beforeId nor afterId given for non-empty scope: ${scopeLabel}`
+			);
+		}
+		return rankAtEnd([]);
 	}
 	return rankBetween(prev, next);
 }
@@ -270,7 +279,19 @@ export function editStory(
 	findStory(map, storyId);
 	return {
 		...map,
-		stories: map.stories.map((s) => (s.id === storyId ? { ...s, ...changes } : s))
+		stories: map.stories.map((s) =>
+			s.id === storyId
+				? {
+						...s,
+						// Assigned explicitly rather than spread: a spread copies keys whose
+						// value is `undefined`, so `{ title: undefined }` would blank a
+						// required field. `description` needs the `!== undefined` form
+						// because `null` is a legal value that must still clear it.
+						title: changes.title ?? s.title,
+						description: changes.description !== undefined ? changes.description : s.description
+					}
+				: s
+		)
 	};
 }
 

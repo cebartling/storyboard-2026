@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { ConflictError, InvariantError } from './errors';
-import { addStory, createStoryMap, deleteActivity, moveStory, renameStep } from './story-map';
+import {
+	addActivity,
+	addSlice,
+	addStep,
+	addStory,
+	createStoryMap,
+	deleteActivity,
+	editStory,
+	moveStory,
+	renameStep
+} from './story-map';
 import type { ActivityId, StepId, StoryId } from './ids';
 
 /**
@@ -37,5 +47,70 @@ describe('domain error types', () => {
 		expect(new ConflictError('x')).not.toBeInstanceOf(InvariantError);
 		expect(new InvariantError('x').name).toBe('InvariantError');
 		expect(new ConflictError('x').name).toBe('ConflictError');
+	});
+
+	it('rejects an ambiguous move: no neighbours given for a non-empty scope', () => {
+		let map = createStoryMap('Test map');
+		const activity = addActivity(map, 'Find groceries');
+		map = activity.map;
+		const step = addStep(map, activity.activity.id, 'Search');
+		map = step.map;
+		const first = addStory(map, step.step.id, 'Keyword search');
+		map = first.map;
+		const second = addStory(map, step.step.id, 'Browse');
+		map = second.map;
+
+		// Dropping into a populated cell always has at least one neighbour, so
+		// a payload with neither can only mean the client got them wrong.
+		expect(() => moveStory(map, second.story.id, step.step.id, null, null, null)).toThrow(
+			InvariantError
+		);
+	});
+
+	it('still appends when the target scope is genuinely empty', () => {
+		let map = createStoryMap('Test map');
+		const activity = addActivity(map, 'Find groceries');
+		map = activity.map;
+		const step = addStep(map, activity.activity.id, 'Search');
+		map = step.map;
+		const slice = addSlice(map, 'Release 1');
+		map = slice.map;
+		const story = addStory(map, step.step.id, 'Keyword search');
+		map = story.map;
+
+		// Moving into the empty Release 1 band: no neighbours is correct here.
+		const moved = moveStory(map, story.story.id, step.step.id, slice.slice.id, null, null);
+		expect(moved.stories[0].sliceId).toBe(slice.slice.id);
+	});
+});
+
+describe('editStory field handling', () => {
+	it('does not blank a field when a change is explicitly undefined', () => {
+		let map = createStoryMap('Test map');
+		const activity = addActivity(map, 'Find groceries');
+		map = activity.map;
+		const step = addStep(map, activity.activity.id, 'Search');
+		map = step.map;
+		const story = addStory(map, step.step.id, 'Keyword search', { description: 'original' });
+		map = story.map;
+
+		const edited = editStory(map, story.story.id, { title: undefined });
+
+		expect(edited.stories[0].title).toBe('Keyword search');
+		expect(edited.stories[0].description).toBe('original');
+	});
+
+	it('still clears a description set explicitly to null', () => {
+		let map = createStoryMap('Test map');
+		const activity = addActivity(map, 'Find groceries');
+		map = activity.map;
+		const step = addStep(map, activity.activity.id, 'Search');
+		map = step.map;
+		const story = addStory(map, step.step.id, 'Keyword search', { description: 'original' });
+		map = story.map;
+
+		const edited = editStory(map, story.story.id, { description: null });
+
+		expect(edited.stories[0].description).toBeNull();
 	});
 });

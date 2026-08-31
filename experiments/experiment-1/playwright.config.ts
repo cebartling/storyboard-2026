@@ -6,8 +6,7 @@ import { defineConfig } from '@playwright/test';
 // re-applies migrations to the fresh file automatically.
 export default defineConfig({
 	webServer: {
-		command:
-			'rm -f e2e.db e2e.db-journal e2e.db-wal e2e.db-shm && npm run build && npm run preview',
+		command: 'rm -f e2e.db e2e.db-journal e2e.db-wal e2e.db-shm && vite build && vite preview',
 		port: 4173,
 		env: { DATABASE_URL: 'e2e.db' },
 		reuseExistingServer: false

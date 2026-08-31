@@ -35,7 +35,10 @@ function requireString(value: FormDataEntryValue | null, field: string): string 
 	if (typeof value !== 'string' || value.trim().length === 0) {
 		throw new InvariantError(`${field} is required.`);
 	}
-	return value;
+	// Trim what we return, not just what we validate: id fields flow straight
+	// into a domain lookup, where stray whitespace surfaces as a confusing
+	// "not found" instead of being normalised.
+	return value.trim();
 }
 
 /** Empty string means "no neighbour on this side" (start/end of scope). */

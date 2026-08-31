@@ -40,8 +40,10 @@ request-flow trace.
                                                       ▲
                                               composition root:
                                               src/lib/server/deps.ts
-                                              wires concrete adapters,
-                                              handed to use-cases per request
+                                              wires concrete adapters as a
+                                              module-level singleton,
+                                              imported by routes and passed
+                                              into use cases
 ```
 
 ## The two outbound ports, and why only two
@@ -84,8 +86,8 @@ DB client directly — that is the boundary the repository port exists to enforc
    calls the pure domain function `StoryMap.moveStory(...)` (computes the new rank via
    `generateKeyBetween`, and reassigns `sliceId` if the drop crossed a slice line — see
    `domain-model.md`'s worked examples), then calls `StoryMapRepository.save(map)`.
-5. The action returns; the client calls SvelteKit's `invalidate()` for the map's data
-   dependency, which reruns `load()` and refetches the map, showing the server-authoritative
+5. The action returns; the client calls SvelteKit's `invalidateAll()`, which reruns
+   `load()` and refetches the map, showing the server-authoritative
    rank and slice. The client never computes or trusts its own rank — the server's write
    is the source of truth, and a failed/rejected move simply reverts on reload.
 
