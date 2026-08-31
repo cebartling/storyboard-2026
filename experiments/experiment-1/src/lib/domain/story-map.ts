@@ -108,12 +108,6 @@ export function findStory(map: StoryMap, storyId: StoryId): Story {
 	return story;
 }
 
-function activityOwning(map: StoryMap, stepId: StepId): Activity {
-	const activity = map.activities.find((a) => a.steps.some((s) => s.id === stepId));
-	if (!activity) throw new InvariantError(`Step not found: ${stepId}`);
-	return activity;
-}
-
 // ---------------------------------------------------------------------------
 // Rank-scope helpers
 // ---------------------------------------------------------------------------
