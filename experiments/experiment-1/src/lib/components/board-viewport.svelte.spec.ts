@@ -38,6 +38,45 @@ describe('BoardViewport', () => {
 		expect(camera.zoom).toBeGreaterThan(startZoom);
 	});
 
+	it('does not advance a zoom step per event during a trackpad pinch', async () => {
+		const camera = createCamera();
+		render(BoardViewport, { camera, children: worldSnippet });
+
+		const el = page.getByTestId('board-viewport').element() as HTMLElement;
+		const startZoom = camera.zoom;
+
+		// A pinch arrives as many small-delta events; five of them are well under
+		// one notch and must not take five zoom steps.
+		for (let i = 0; i < 5; i++) {
+			el.dispatchEvent(
+				new WheelEvent('wheel', {
+					deltaY: -8,
+					ctrlKey: true,
+					clientX: 10,
+					clientY: 10,
+					bubbles: true,
+					cancelable: true
+				})
+			);
+		}
+		expect(camera.zoom).toBe(startZoom);
+
+		// Keep going and the accumulated delta eventually earns exactly one step.
+		for (let i = 0; i < 3; i++) {
+			el.dispatchEvent(
+				new WheelEvent('wheel', {
+					deltaY: -8,
+					ctrlKey: true,
+					clientX: 10,
+					clientY: 10,
+					bubbles: true,
+					cancelable: true
+				})
+			);
+		}
+		expect(camera.zoom).toBe(1.25);
+	});
+
 	it('does not zoom or preventDefault on a plain wheel event', async () => {
 		const camera = createCamera();
 		render(BoardViewport, { camera, children: worldSnippet });

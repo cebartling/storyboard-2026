@@ -116,14 +116,32 @@
 	// manually with `{ passive: false }` so ctrl/cmd+wheel (and trackpad
 	// pinch, which browsers report as ctrl+wheel) can suppress the browser's
 	// native page-zoom.
+	//
+	// Zoom levels are snapped (see `ZOOM_STEPS`), so a step has to be earned
+	// rather than taken per event: a pinch arrives as dozens of events with
+	// small deltas, and stepping on each one would cross the whole zoom range in
+	// a single gesture. Accumulating instead means one mouse notch (100 in
+	// Chrome, comfortably over the threshold) still zooms immediately, while a
+	// pinch advances at a usable rate.
+	const WHEEL_STEP_THRESHOLD = 50;
+	let wheelAccum = 0;
+
 	$effect(() => {
 		if (!viewportEl) return;
 		function handleWheel(e: WheelEvent) {
 			if (!(e.ctrlKey || e.metaKey)) return;
 			e.preventDefault();
 			if (!viewportEl) return;
+			// Reversing direction mid-gesture discards the residue, so the first
+			// event of the new direction is not cancelled out by the old one.
+			if (wheelAccum !== 0 && Math.sign(e.deltaY) !== Math.sign(wheelAccum)) {
+				wheelAccum = 0;
+			}
+			wheelAccum += e.deltaY;
+			if (Math.abs(wheelAccum) < WHEEL_STEP_THRESHOLD) return;
+			const dir = wheelAccum < 0 ? 1 : -1;
+			wheelAccum = 0;
 			const rect = viewportEl.getBoundingClientRect();
-			const dir = e.deltaY < 0 ? 1 : -1;
 			camera.zoomAt(e.clientX - rect.left, e.clientY - rect.top, dir);
 		}
 		viewportEl.addEventListener('wheel', handleWheel, { passive: false });
