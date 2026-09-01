@@ -91,6 +91,29 @@ DB client directly — that is the boundary the repository port exists to enforc
    rank and slice. The client never computes or trusts its own rank — the server's write
    is the source of truth, and a failed/rejected move simply reverts on reload.
 
+## Board canvas: pan, zoom, and the minimap
+
+`src/routes/maps/[mapId]/+page.svelte` used to wrap the board grid directly in
+`<div class="panel overflow-x-auto">` — horizontal scroll only, no overview, no zoom. It now
+wraps the same, unmodified grid in `BoardViewport` (`src/lib/components/board-viewport.svelte`):
+a bounded-height `overflow-auto` container that owns every pan/zoom gesture (wheel, ctrl/cmd+wheel
+and pinch, background/middle-mouse/space drag, keyboard shortcuts) and reports measured sizes and
+scroll back into a `Camera` (`src/lib/canvas/camera.svelte.ts`). `ZoomControls` and `BoardMinimap`
+render as corner overlays alongside it, driven by the same `Camera`.
+
+Pan is native browser scrolling; zoom is the CSS `zoom` property on a wrapper around the board,
+not `transform: scale()` — see ADR 0010 for why (in short: `zoom` is layout-affecting, so scroll
+extents, `sticky` positioning, and scroll-into-view all keep working against the visual size for
+free, and `svelte-dnd-action`'s drop detection and drag mirror are viewport-space either way). All
+of this state and math lives in `src/lib/canvas/`, outside `src/lib/domain/`: it is presentation
+state for one route, not a story-mapping domain invariant, so ADR 0006's pure-core boundary does
+not apply to it, but the math (`camera-math.ts`) is still plain, DOM-free TypeScript, unit-tested
+the same way the domain layer is. `minimap-model.ts` similarly takes a structural subset of
+`BoardViewModel`'s shape rather than importing the route module, so `src/lib/` still never depends
+on `src/routes/`. Camera state persists per map in `localStorage`
+(`camera-storage.ts`, key `storyboard:camera:v1:${mapId}`), read only inside `$effect` so it never
+runs during SSR.
+
 ## Test strategy
 
 Three layers, each tested at the boundary where it's cheapest to get signal: the domain

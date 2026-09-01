@@ -23,18 +23,21 @@ so the pinned version is used — a bare `pnpm` picks up whatever is on your PAT
 versions before 10 reject this directory's `pnpm-workspace.yaml` with
 `packages field missing or empty`.
 
-| Task                 | Command                                                                                    |
-| -------------------- | ------------------------------------------------------------------------------------------ |
-| Dev server           | `corepack pnpm dev`                                                                        |
-| Full suite           | `corepack pnpm test` (Vitest then Playwright)                                              |
-| All unit + component | `corepack pnpm test:unit -- --run`                                                         |
-| All e2e              | `corepack pnpm test:e2e`                                                                   |
-| **Single unit test** | `corepack pnpm vitest run src/lib/domain/story-map.test.ts -t "moves story between steps"` |
-| **Single e2e test**  | `corepack pnpm playwright test -g "drag story to slice"`                                   |
-| Types                | `corepack pnpm check`                                                                      |
-| Lint / format        | `corepack pnpm lint` / `corepack pnpm format`                                              |
-| New migration        | `corepack pnpm db:generate` (commit `drizzle/`)                                            |
-| Inspect DB           | `corepack pnpm db:studio`                                                                  |
+| Task                             | Command                                                                                    |
+| -------------------------------- | ------------------------------------------------------------------------------------------ |
+| Dev server                       | `corepack pnpm dev`                                                                        |
+| Full suite                       | `corepack pnpm test` (Vitest then Playwright)                                              |
+| All unit + component             | `corepack pnpm test:unit -- --run`                                                         |
+| All e2e                          | `corepack pnpm test:e2e`                                                                   |
+| **Single unit test**             | `corepack pnpm vitest run src/lib/domain/story-map.test.ts -t "moves story between steps"` |
+| **Single canvas unit test**      | `corepack pnpm vitest run src/lib/canvas/camera-math.test.ts`                              |
+| **Single canvas component test** | `corepack pnpm vitest run src/lib/components/board-viewport.svelte.spec.ts`                |
+| **Single e2e test**              | `corepack pnpm playwright test -g "drag story to slice"`                                   |
+| **Single canvas e2e test**       | `corepack pnpm playwright test -g "pan and zoom persist"`                                  |
+| Types                            | `corepack pnpm check`                                                                      |
+| Lint / format                    | `corepack pnpm lint` / `corepack pnpm format`                                              |
+| New migration                    | `corepack pnpm db:generate` (commit `drizzle/`)                                            |
+| Inspect DB                       | `corepack pnpm db:studio`                                                                  |
 
 Migrations apply automatically at db-module load, so `corepack pnpm dev` and the e2e server
 self-migrate. E2e runs against a throwaway `e2e.db` and never touch `local.db`.
@@ -50,6 +53,16 @@ self-migrate. E2e runs against a throwaway `e2e.db` and never touch `local.db`.
   computes a rank — it sends neighbour ids and the server derives the rank. See ADR 0005.
 - Drag-and-drop is isolated behind `src/lib/components/story-dnd-zone.svelte` so
   `svelte-dnd-action` can be swapped without touching the board.
+- The board's pan/zoom canvas (ADR 0010) lives in `src/lib/canvas/`: `camera-math.ts` (pure
+  math, no DOM types), `camera.svelte.ts` (the `Camera` rune object), `minimap-model.ts`
+  (flattens board grid geometry for the minimap — takes a structural input type so it
+  never imports the route's `board-view-model.ts`), and `camera-storage.ts` (the
+  `localStorage` persistence, read/written only inside `$effect`). Like `src/lib/domain/`,
+  `camera-math.ts` stays DOM-free and unit-testable, but it is presentation state for one
+  route, not a domain invariant, so it lives outside `src/lib/domain/` and ADR 0006's
+  pure-core boundary does not apply to it. `src/lib/components/board-viewport.svelte`,
+  `zoom-controls.svelte`, and `board-minimap.svelte` are the DOM-facing pieces that turn
+  gestures into `Camera` calls; they own no pan/zoom state of their own.
 - Styling is **Tailwind CSS v4** (ADR 0009). The palette and the repeated control classes
   (`.panel`, `.input`, `.btn` + `.btn-primary`/`.btn-quiet`/`.btn-icon`/`.btn-danger-quiet`,
   `.field-label`, `.error`) live in `src/app.css`; everything else is utilities in the
