@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted, 2026-08-31
+Accepted, 2026-08-31. Amended by ADR 0011: the actions and the server-authoritative ranks
+below are unchanged, but board mutations are now submitted with `use:enhance` from modal
+dialogs rather than as full-page posts, which gives up the no-JS fallback this ADR's
+consequences claim.
 
 ## Context
 

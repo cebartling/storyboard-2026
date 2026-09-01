@@ -2,8 +2,8 @@
 
 /* The one place the app's visual vocabulary is defined. Routes and components
    use Tailwind utilities directly; only the handful of controls that repeat on
-   every form (button, input, panel) get a named class here, so a board full of
-   inline forms stays readable. See documentation/adr/0009-tailwind-css.md. */
+   every form (button, input, panel) get a named class here, so the board's
+   dialog editors stay readable. See documentation/adr/0009-tailwind-css.md. */
 
 @theme {
 	--color-canvas: oklch(0.985 0.005 260);
