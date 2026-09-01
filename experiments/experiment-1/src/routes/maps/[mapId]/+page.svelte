@@ -17,8 +17,14 @@
 	import { toMinimapModel } from '$lib/canvas/minimap-model';
 	import type { PageProps } from './$types';
 
-	let { data, form }: PageProps = $props();
-	let dragError = $state<string | null>(null);
+	let { data }: PageProps = $props();
+
+	// The board's own error line. Nothing populates SvelteKit's `form` prop
+	// any more — every board form is enhanced with `applyAction` suppressed
+	// (ADR 0011) — so this is the sole source. It carries the two failures
+	// that have nowhere better to go: a drag that the server rejected, and a
+	// dialog submission whose result arrived after the user closed it.
+	let boardError = $state<string | null>(null);
 
 	// The board itself is read-only (ADR 0011); every mutation happens in the
 	// dialog this drives. Rendered as a sibling of `BoardViewport`, never an
@@ -172,7 +178,7 @@
 	// source of truth for the resulting rank; a failed move just leaves the
 	// board as `load()` last returned it once `invalidateAll()` reruns.
 	async function handleMove(detail: MoveDetail) {
-		dragError = null;
+		boardError = null;
 		const body = new FormData();
 		body.set('storyId', detail.storyId);
 		body.set('stepId', detail.stepId);
@@ -184,12 +190,12 @@
 			const response = await fetch('?/moveStory', { method: 'POST', body });
 			const result = deserialize(await response.text());
 			if (result.type === 'failure') {
-				dragError = actionError(result.data) ?? 'Failed to move story.';
+				boardError = actionError(result.data) ?? 'Failed to move story.';
 			} else if (!response.ok || result.type === 'error') {
-				dragError = 'Failed to move story.';
+				boardError = 'Failed to move story.';
 			}
 		} catch {
-			dragError = 'Unable to save the story move. Check your connection and try again.';
+			boardError = 'Unable to save the story move. Check your connection and try again.';
 		} finally {
 			await invalidateAll();
 		}
@@ -220,8 +226,8 @@
 		</div>
 	</div>
 
-	{#if dragError ?? form?.error}
-		<p class="error" role="alert">{dragError ?? form?.error}</p>
+	{#if boardError}
+		<p class="error" role="alert">{boardError}</p>
 	{/if}
 
 	<div class="panel relative flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -379,5 +385,5 @@
 <BoardDialogs
 	{dialog}
 	onClose={() => (dialog = null)}
-	onLateFailure={(message) => (dragError = message)}
+	onLateFailure={(message) => (boardError = message)}
 />
