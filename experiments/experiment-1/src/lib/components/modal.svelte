@@ -36,8 +36,15 @@
 		if (!dialogEl) return;
 		// The `.open` guards are not defensive padding: `showModal()` on an
 		// already-open dialog throws InvalidStateError.
-		if (open && !dialogEl.open) dialogEl.showModal();
-		else if (!open && dialogEl.open) dialogEl.close();
+		if (open && !dialogEl.open) {
+			dialogEl.showModal();
+			// `showModal()` would otherwise focus the close button, which is
+			// first in the markup so that a keyboard user reaches it before a
+			// dialog's Delete rather than after. Focusing the first field
+			// explicitly buys the natural tab order without giving up the
+			// sensible starting point.
+			dialogEl.querySelector<HTMLElement>('input, textarea, select')?.focus();
+		} else if (!open && dialogEl.open) dialogEl.close();
 	});
 
 	// Backdrop click. The backdrop's hit area belongs to the <dialog> box
@@ -69,17 +76,18 @@
 	onmousedown={onMouseDown}
 	onclick={onClick}
 >
-	<h2 id={titleId} class="text-ink pr-8 text-lg font-semibold tracking-tight">{title}</h2>
-	<div class="mt-4">
-		{@render children()}
-	</div>
-	<!-- Rendered last, positioned first. `showModal()` focuses the earliest
-	     focusable descendant, so a close button written at the top of the
-	     markup would take the focus every dialog's first field wants. -->
+	<!-- First in the markup, so tabbing forward reaches Close before a
+	     dialog's Delete button rather than after it. The effect above moves
+	     the initial focus to the first field, which is what `showModal()`
+	     would otherwise have given to whatever came first here. -->
 	<button
 		type="button"
 		class="btn btn-icon btn-danger-quiet absolute top-4 right-4 rounded text-base leading-none"
 		aria-label="Close"
 		onclick={onClose}>×</button
 	>
+	<h2 id={titleId} class="text-ink pr-8 text-lg font-semibold tracking-tight">{title}</h2>
+	<div class="mt-4">
+		{@render children()}
+	</div>
 </dialog>

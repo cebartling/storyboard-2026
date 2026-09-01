@@ -22,6 +22,18 @@ function dialogEl(): HTMLDialogElement {
 	return page.getByTestId('test-modal').element() as HTMLDialogElement;
 }
 
+// A body shaped like the real dialogs: a field first, a destructive button
+// after it. Both of the focus guarantees below are invisible with a body that
+// has no form controls.
+const formSnippet = createRawSnippet(() => ({
+	render: () => `
+		<form>
+			<input name="title" data-testid="modal-field" />
+			<button type="submit" data-testid="modal-delete">Delete</button>
+		</form>
+	`
+}));
+
 describe('Modal', () => {
 	it('stays closed while `open` is false', async () => {
 		renderModal(false);
@@ -43,6 +55,37 @@ describe('Modal', () => {
 
 		const labelledBy = dialogEl().getAttribute('aria-labelledby');
 		expect(document.getElementById(labelledBy!)?.textContent).toBe('Edit step');
+	});
+
+	it('puts the initial focus on the first field, not the close button', async () => {
+		render(Modal, {
+			open: true,
+			title: 'Edit story',
+			testid: 'test-modal',
+			onClose: () => {},
+			children: formSnippet
+		});
+		await tick();
+
+		expect(document.activeElement).toBe(page.getByTestId('modal-field').element());
+	});
+
+	it('places the close button before the body in tab order', async () => {
+		render(Modal, {
+			open: true,
+			title: 'Edit story',
+			testid: 'test-modal',
+			onClose: () => {},
+			children: formSnippet
+		});
+		await tick();
+
+		// Close must come before a dialog's Delete, so tabbing towards it never
+		// parks focus on the destructive control on the way.
+		const focusables = [...dialogEl().querySelectorAll('button, input')].map(
+			(el) => el.getAttribute('aria-label') ?? el.getAttribute('data-testid')
+		);
+		expect(focusables).toEqual(['Close', 'modal-field', 'modal-delete']);
 	});
 
 	it('closes and calls onClose when `open` flips back to false', async () => {
