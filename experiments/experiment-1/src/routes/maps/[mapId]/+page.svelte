@@ -1,17 +1,50 @@
 <script lang="ts">
 	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
+	import BoardDialogs, {
+		actionError,
+		type BoardDialog
+	} from '$lib/components/board-dialogs.svelte';
 	import BoardMinimap from '$lib/components/board-minimap.svelte';
 	import BoardViewport from '$lib/components/board-viewport.svelte';
-	import StoryDndZone, { type MoveDetail } from '$lib/components/story-dnd-zone.svelte';
+	import StoryDndZone, {
+		type DndStoryItem,
+		type MoveDetail
+	} from '$lib/components/story-dnd-zone.svelte';
 	import ZoomControls from '$lib/components/zoom-controls.svelte';
 	import { createCamera } from '$lib/canvas/camera.svelte';
 	import { loadCameraState, saveCameraState } from '$lib/canvas/camera-storage';
 	import { toMinimapModel } from '$lib/canvas/minimap-model';
+	import Pencil from '@lucide/svelte/icons/pencil';
+	import Plus from '@lucide/svelte/icons/plus';
+	import { tooltip } from '$lib/actions/tooltip';
 	import type { PageProps } from './$types';
 
-	let { data, form }: PageProps = $props();
-	let dragError = $state<string | null>(null);
+	let { data }: PageProps = $props();
+
+	// The board's own error line. Nothing populates SvelteKit's `form` prop
+	// any more — every board form is enhanced with `applyAction` suppressed
+	// (ADR 0011) — so this is the sole source. It carries the two failures
+	// that have nowhere better to go: a drag that the server rejected, and a
+	// dialog submission whose result arrived after the user closed it.
+	let boardError = $state<string | null>(null);
+
+	// The board itself is read-only (ADR 0011); every mutation happens in the
+	// dialog this drives. Rendered as a sibling of `BoardViewport`, never an
+	// ancestor of a dnd zone — `svelte-dnd-action` picks its drag-mirror
+	// parent with `originDropZone.closest('dialog')`, so a modal wrapping the
+	// board would relocate the mirror (see ADR 0010).
+	let dialog = $state<BoardDialog | null>(null);
+
+	// The board's banner is cleared when an editor opens, the same way
+	// `BoardDialogs` clears its own error on that transition. Only a drag reset
+	// it before, so a late failure could sit above a board the user had since
+	// edited successfully several times over, contradicting what they could
+	// see. Opening an editor is the next deliberate thing they do, and the
+	// message has had its moment by then.
+	$effect(() => {
+		if (dialog) boardError = null;
+	});
 	const camera = createCamera();
 	const minimapModel = $derived(toMinimapModel(data.board));
 
@@ -78,32 +111,76 @@
 	});
 
 	// Row 1 (activity headers) and row 2 (step headers) are both `sticky
-	// top-*` so column context survives vertical scrolling, but row 1's
-	// height is content-dependent (see ADR 0010: track sizes stay
-	// `minmax(...)`, so it cannot be known statically). Row 2's sticky
-	// offset is measured from row 1's rendered height rather than
-	// hard-coded, so it settles directly beneath row 1 instead of
-	// overlapping it.
+	// top-*` so column context survives vertical scrolling, but their heights
+	// are content-dependent (see ADR 0010: track sizes stay `minmax(...)`, so
+	// they cannot be known statically). Row 2's sticky offset is measured from
+	// row 1's rendered height rather than hard-coded, so it settles directly
+	// beneath row 1 instead of overlapping it; both together give the band the
+	// content rows have to stay clear of when something is scrolled into view.
 	let activityHeaderEls: (HTMLDivElement | undefined)[] = $state([]);
 	let activityHeaderHeight = $state(0);
+	let stepHeaderEls: (HTMLDivElement | undefined)[] = $state([]);
+	let stepHeaderHeight = $state(0);
 
-	$effect(() => {
-		const els = activityHeaderEls.filter((el): el is HTMLDivElement => el !== undefined);
-		if (els.length === 0) {
-			activityHeaderHeight = 0;
-			return;
-		}
-		const observer = new ResizeObserver(() => {
-			activityHeaderHeight = Math.max(...els.map((el) => el.offsetHeight));
+	/**
+	 * Keeps `set` fed with the tallest of `getEls()`. Called once per sticky
+	 * row during initialisation, so the `$effect` it creates is a normal
+	 * component effect.
+	 */
+	function trackMaxHeight(
+		getEls: () => (HTMLDivElement | undefined)[],
+		set: (height: number) => void
+	) {
+		$effect(() => {
+			const els = getEls().filter((el): el is HTMLDivElement => el !== undefined);
+			if (els.length === 0) {
+				set(0);
+				return;
+			}
+			const measure = () => set(Math.max(...els.map((el) => el.offsetHeight)));
+			const observer = new ResizeObserver(measure);
+			els.forEach((el) => observer.observe(el));
+			measure();
+			return () => observer.disconnect();
 		});
-		els.forEach((el) => observer.observe(el));
-		activityHeaderHeight = Math.max(...els.map((el) => el.offsetHeight));
-		return () => observer.disconnect();
-	});
+	}
 
-	function actionError(data: unknown): string | null {
-		if (typeof data !== 'object' || data === null || !('error' in data)) return null;
-		return typeof data.error === 'string' ? data.error : null;
+	trackMaxHeight(
+		() => activityHeaderEls,
+		(h) => (activityHeaderHeight = h)
+	);
+	trackMaxHeight(
+		() => stepHeaderEls,
+		(h) => (stepHeaderHeight = h)
+	);
+
+	// Published to the grid as a custom property and consumed by `.board-cell`
+	// in app.css: the sticky rows float over the content rows, so a card or a
+	// button scrolled into view — by `scrollIntoView`, by the browser
+	// following keyboard focus, or by a test harness — has to stop below them
+	// instead of at the container's edge, where the headers are.
+	const stickyHeaderHeight = $derived(activityHeaderHeight + stepHeaderHeight);
+
+	// The add-story dialog tells the user which cell it is adding to; the cell
+	// itself only carries ids.
+	const stepNames = $derived(
+		new Map<string, string>(data.board.columns.map((c) => [c.stepId, c.name]))
+	);
+	const rowNames = $derived(
+		new Map<string | null, string>(data.board.rows.map((r) => [r.sliceId, r.name]))
+	);
+
+	function cellLabel(stepId: string, sliceId: string | null): string {
+		return `${stepNames.get(stepId) ?? 'step'} · ${rowNames.get(sliceId) ?? 'Unsliced'}`;
+	}
+
+	function handleEditStory(item: DndStoryItem) {
+		dialog = {
+			kind: 'editStory',
+			storyId: item.id,
+			title: item.title,
+			description: item.description
+		};
 	}
 
 	// Drag persistence isn't a <form> submission (it's triggered by
@@ -114,7 +191,7 @@
 	// source of truth for the resulting rank; a failed move just leaves the
 	// board as `load()` last returned it once `invalidateAll()` reruns.
 	async function handleMove(detail: MoveDetail) {
-		dragError = null;
+		boardError = null;
 		const body = new FormData();
 		body.set('storyId', detail.storyId);
 		body.set('stepId', detail.stepId);
@@ -126,12 +203,12 @@
 			const response = await fetch('?/moveStory', { method: 'POST', body });
 			const result = deserialize(await response.text());
 			if (result.type === 'failure') {
-				dragError = actionError(result.data) ?? 'Failed to move story.';
+				boardError = actionError(result.data) ?? 'Failed to move story.';
 			} else if (!response.ok || result.type === 'error') {
-				dragError = 'Failed to move story.';
+				boardError = 'Failed to move story.';
 			}
 		} catch {
-			dragError = 'Unable to save the story move. Check your connection and try again.';
+			boardError = 'Unable to save the story move. Check your connection and try again.';
 		} finally {
 			await invalidateAll();
 		}
@@ -148,41 +225,22 @@
 			</p>
 		</div>
 
-		<div class="flex flex-wrap items-end gap-3">
-			<form method="POST" action="?/addActivity" class="flex flex-col gap-1.5">
-				<label for="new-activity-name" class="field-label">New activity</label>
-				<div class="flex gap-2">
-					<input
-						id="new-activity-name"
-						name="name"
-						type="text"
-						required
-						class="input w-44"
-						placeholder="e.g. Browse"
-					/>
-					<button type="submit" class="btn btn-primary">Add activity</button>
-				</div>
-			</form>
-
-			<form method="POST" action="?/createSlice" class="flex flex-col gap-1.5">
-				<label for="new-slice-name" class="field-label">New slice</label>
-				<div class="flex gap-2">
-					<input
-						id="new-slice-name"
-						name="name"
-						type="text"
-						required
-						class="input w-44"
-						placeholder="e.g. Release 1"
-					/>
-					<button type="submit" class="btn btn-quiet">Add slice</button>
-				</div>
-			</form>
+		<div class="flex flex-wrap items-end gap-2">
+			<button
+				type="button"
+				class="btn btn-primary"
+				onclick={() => (dialog = { kind: 'addActivity' })}
+			>
+				Add activity
+			</button>
+			<button type="button" class="btn btn-quiet" onclick={() => (dialog = { kind: 'addSlice' })}>
+				Add slice
+			</button>
 		</div>
 	</div>
 
-	{#if dragError ?? form?.error}
-		<p class="error" role="alert">{dragError ?? form?.error}</p>
+	{#if boardError}
+		<p class="error" role="alert">{boardError}</p>
 	{/if}
 
 	<div class="panel relative flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -198,7 +256,7 @@
 				data-testid="board"
 				style="grid-template-columns: max-content repeat({data.board
 					.totalColumns}, minmax(240px, 1fr)); grid-template-rows: auto auto repeat({data.board.rows
-					.length}, minmax(140px, auto));"
+					.length}, minmax(140px, auto)); --board-sticky-header-height: {stickyHeaderHeight}px;"
 			>
 				<div
 					class="sticky top-0 left-0 z-30 bg-surface"
@@ -213,36 +271,37 @@
 						style="grid-column: {activityHeader.gridColumnStart} / {activityHeader.gridColumnEnd}; grid-row: 1;"
 					>
 						<div class="flex flex-wrap items-center gap-2">
-							<form method="POST" action="?/renameActivity" class="flex gap-1.5">
-								<input type="hidden" name="activityId" value={activityHeader.activityId} />
-								<input
-									type="text"
-									name="name"
-									value={activityHeader.name}
-									aria-label="Rename activity"
-									class="input w-40 font-semibold"
-								/>
-								<button type="submit" class="btn btn-quiet">Save</button>
-							</form>
-							<form method="POST" action="?/deleteActivity">
-								<input type="hidden" name="activityId" value={activityHeader.activityId} />
-								<button type="submit" class="btn btn-danger-quiet px-1.5 text-xs"
-									>Delete activity</button
-								>
-							</form>
+							<h2 class="text-ink flex-1 text-sm font-semibold break-words">
+								{activityHeader.name}
+							</h2>
+							<button
+								type="button"
+								class="btn btn-icon btn-quiet"
+								aria-label="Edit activity"
+								use:tooltip={'Edit activity'}
+								onclick={() =>
+									(dialog = {
+										kind: 'editActivity',
+										activityId: activityHeader.activityId,
+										name: activityHeader.name
+									})}
+							>
+								<Pencil class="size-3.5" />
+							</button>
 						</div>
-						<form method="POST" action="?/addStep" class="flex gap-1.5">
-							<input
-								type="text"
-								name="name"
-								placeholder="New step"
-								required
-								aria-label="New step name"
-								class="input w-40"
-							/>
-							<input type="hidden" name="activityId" value={activityHeader.activityId} />
-							<button type="submit" class="btn btn-quiet">Add step</button>
-						</form>
+						<button
+							type="button"
+							class="btn btn-quiet self-start px-2 text-xs"
+							onclick={() =>
+								(dialog = {
+									kind: 'addStep',
+									activityId: activityHeader.activityId,
+									activityName: activityHeader.name
+								})}
+						>
+							<Plus class="size-3.5" />
+							Add step
+						</button>
 					</div>
 				{/each}
 
@@ -252,27 +311,27 @@
 					</p>
 				{/if}
 
-				{#each data.board.columns as column (column.stepId)}
+				{#each data.board.columns as column, i (column.stepId)}
 					<div
+						bind:this={stepHeaderEls[i]}
 						class="sticky z-20 flex flex-wrap items-center gap-2 bg-surface p-3"
 						data-testid="step-{column.stepId}"
 						style="grid-column: {column.gridColumn}; grid-row: 2; top: {activityHeaderHeight}px;"
 					>
-						<form method="POST" action="?/renameStep" class="flex gap-1.5">
-							<input type="hidden" name="stepId" value={column.stepId} />
-							<input
-								type="text"
-								name="name"
-								value={column.name}
-								aria-label="Rename step"
-								class="input w-36"
-							/>
-							<button type="submit" class="btn btn-quiet">Save</button>
-						</form>
-						<form method="POST" action="?/deleteStep">
-							<input type="hidden" name="stepId" value={column.stepId} />
-							<button type="submit" class="btn btn-danger-quiet px-1.5 text-xs">Delete step</button>
-						</form>
+						<span class="text-ink flex-1 text-sm font-medium break-words">{column.name}</span>
+						<!-- Same pencil as the story card: the header is mostly the step
+						     name, and a full-width text button crowded it out. `.btn-icon`
+						     holds the WCAG 2.2 24x24 target. -->
+						<button
+							type="button"
+							class="btn btn-icon btn-quiet"
+							aria-label="Edit step"
+							use:tooltip={'Edit step'}
+							onclick={() =>
+								(dialog = { kind: 'editStep', stepId: column.stepId, name: column.name })}
+						>
+							<Pencil class="size-3.5" />
+						</button>
 					</div>
 				{/each}
 
@@ -283,23 +342,17 @@
 						style="grid-column: 1; grid-row: {row.gridRow};"
 					>
 						{#if row.sliceId}
-							<form method="POST" action="?/renameSlice" class="flex gap-1.5">
-								<input type="hidden" name="sliceId" value={row.sliceId} />
-								<input
-									type="text"
-									name="name"
-									value={row.name}
-									aria-label="Rename slice"
-									class="input w-36 font-semibold"
-								/>
-								<button type="submit" class="btn btn-quiet">Save</button>
-							</form>
-							<form method="POST" action="?/deleteSlice">
-								<input type="hidden" name="sliceId" value={row.sliceId} />
-								<button type="submit" class="btn btn-danger-quiet self-start px-1.5 text-xs"
-									>Delete slice</button
-								>
-							</form>
+							<span class="text-ink text-sm font-semibold break-words">{row.name}</span>
+							<button
+								type="button"
+								class="btn btn-icon btn-quiet self-start"
+								aria-label="Edit slice"
+								use:tooltip={'Edit slice'}
+								onclick={() =>
+									(dialog = { kind: 'editSlice', sliceId: row.sliceId!, name: row.name })}
+							>
+								<Pencil class="size-3.5" />
+							</button>
 						{:else}
 							<span
 								class="text-ink-muted text-xs font-semibold tracking-wide whitespace-nowrap uppercase"
@@ -311,32 +364,50 @@
 
 				{#each data.board.cells as cell (`${cell.stepId}-${cell.sliceId ?? 'unsliced'}`)}
 					<div
-						class="flex flex-col gap-2 bg-white p-1.5"
+						class="board-cell flex flex-col gap-2 bg-white p-1.5"
 						style="grid-column: {cell.gridColumn}; grid-row: {cell.gridRow};"
 					>
+						<!-- Every cell, not just the unsliced band: adding straight
+						     into a release slice was impossible with the old inline
+						     form, which only existed on the unsliced row.
+
+						     Above the cards rather than below them: the board's
+						     corner overlays (minimap, zoom controls) sit over the
+						     bottom of the panel, and on a board with no overflow
+						     there is no way to scroll a control out from under
+						     them. -->
+						<button
+							type="button"
+							class="btn btn-quiet self-start px-2 text-xs"
+							data-testid="add-story-{cell.stepId}-{cell.sliceId ?? 'unsliced'}"
+							aria-label="Add story to {cellLabel(cell.stepId, cell.sliceId)}"
+							onclick={() =>
+								(dialog = {
+									kind: 'addStory',
+									stepId: cell.stepId,
+									sliceId: cell.sliceId,
+									scopeLabel: cellLabel(cell.stepId, cell.sliceId)
+								})}
+						>
+							<Plus class="size-3.5" />
+							Add story
+						</button>
 						<StoryDndZone
-							items={cell.stories.map((s) => ({ id: s.id, title: s.title }))}
+							items={cell.stories}
 							stepId={cell.stepId}
 							sliceId={cell.sliceId}
 							onMove={handleMove}
+							onEditStory={handleEditStory}
 						/>
-						{#if cell.sliceId === null}
-							<form method="POST" action="?/addStory" class="flex gap-1.5 px-1.5 pb-1">
-								<input type="hidden" name="stepId" value={cell.stepId} />
-								<input
-									type="text"
-									name="title"
-									placeholder="New story"
-									required
-									aria-label="New story title"
-									class="input"
-								/>
-								<button type="submit" class="btn btn-quiet">Add story</button>
-							</form>
-						{/if}
 					</div>
 				{/each}
 			</div>
 		</BoardViewport>
 	</div>
 </div>
+
+<BoardDialogs
+	{dialog}
+	onClose={() => (dialog = null)}
+	onLateFailure={(message) => (boardError = message)}
+/>

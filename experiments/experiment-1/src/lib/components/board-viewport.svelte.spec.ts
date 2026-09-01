@@ -294,6 +294,51 @@ describe('BoardViewport', () => {
 		expect(camera.zoom).toBeLessThan(1);
 	});
 
+	it('ignores the zoom shortcuts while a modal dialog is open', async () => {
+		const camera = createCamera();
+		camera.setWorldSize(4000, 4000);
+		camera.setViewportSize(400, 400);
+		render(BoardViewport, { camera, children: worldSnippet });
+
+		// A modal dialog inerts the board. Its buttons are not typing targets,
+		// so without the explicit guard "0"/"1" would still reach the camera.
+		const dialog = document.createElement('dialog');
+		document.body.appendChild(dialog);
+		dialog.showModal();
+
+		camera.zoomIn();
+		const zoomed = camera.zoom;
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: '0' }));
+		expect(camera.zoom).toBe(zoomed);
+
+		dialog.close();
+		dialog.remove();
+
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: '0' }));
+		expect(camera.zoom).toBe(1);
+	});
+
+	it('keeps the zoom shortcuts live while a non-modal dialog is open', async () => {
+		const camera = createCamera();
+		camera.setWorldSize(4000, 4000);
+		camera.setViewportSize(400, 400);
+		render(BoardViewport, { camera, children: worldSnippet });
+
+		// `show()` leaves the board fully interactive, so the guard must not
+		// treat it the way it treats a modal.
+		const dialog = document.createElement('dialog');
+		document.body.appendChild(dialog);
+		dialog.show();
+
+		camera.zoomIn();
+		expect(camera.zoom).not.toBe(1);
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: '0' }));
+		expect(camera.zoom).toBe(1);
+
+		dialog.close();
+		dialog.remove();
+	});
+
 	it('keeps the zoom shortcuts live while a button has focus, but not Space', async () => {
 		const camera = createCamera();
 		camera.setWorldSize(4000, 4000);

@@ -52,4 +52,22 @@ describe('ZoomControls', () => {
 			.element(page.getByTestId('zoom-readout'))
 			.toHaveTextContent(`${Math.round(camera.zoom * 100)}%`);
 	});
+
+	// The cluster reads as one control only if its four marks share a stroke
+	// width and an optical size — which text glyphs from four different
+	// Unicode blocks (U+2212, U+002B, U+2922, U+29BF) never did.
+	it.each([
+		['zoom-out', 'lucide-minus'],
+		['zoom-in', 'lucide-plus'],
+		['zoom-fit', 'lucide-maximize'],
+		['zoom-reset', 'lucide-rotate-ccw']
+	])('draws %s as the %s icon', async (testid, iconClass) => {
+		const camera = createCamera();
+		render(ZoomControls, { camera });
+
+		const button = page.getByTestId(testid).element() as HTMLElement;
+
+		expect(button.querySelector(`svg.${iconClass}`)).not.toBeNull();
+		expect(button.textContent?.trim()).toBe('');
+	});
 });

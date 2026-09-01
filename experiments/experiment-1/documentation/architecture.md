@@ -91,6 +91,22 @@ DB client directly — that is the boundary the repository port exists to enforc
    rank and slice. The client never computes or trusts its own rank — the server's write
    is the source of truth, and a failed/rejected move simply reverts on reload.
 
+## Board editing: read-only grid, dialog editors
+
+The board grid renders names, cards, and trigger buttons — no form controls (ADR 0011).
+Every create/update/delete lives in `src/lib/components/board-dialogs.svelte`, rendered
+inside `modal.svelte` (a wrapper over the native `<dialog>` + `showModal()`) as a **sibling
+of `BoardViewport`, never an ancestor of a dnd zone** — `svelte-dnd-action` resolves its
+drag-mirror parent through `originDropZone.closest('dialog')`, so a modal wrapping the board
+would relocate the mirror ADR 0010 measured.
+
+Which editor is open is one `$state` discriminated union in the route
+(`BoardDialog`), so the payload to prefill travels with the kind. The forms post the same
+named actions described below, through `use:enhance` with an explicit `invalidateAll()`:
+without a page navigation nothing else reruns `load()`. The `SubmitFunction` returns a
+callback, which suppresses `enhance`'s default `applyAction` — the dialog owns its own
+error, and the default would render the same message a second time in the board's banner.
+
 ## Board canvas: pan, zoom, and the minimap
 
 `src/routes/maps/[mapId]/+page.svelte` used to wrap the board grid directly in

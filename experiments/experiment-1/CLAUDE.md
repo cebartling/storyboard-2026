@@ -14,7 +14,8 @@ Run every command below from `experiments/experiment-1/`, not the repo root.
 Read `documentation/` before changing anything structural — `glossary.md` for the Patton
 vocabulary (note: we say **Step** where Patton says _user task_), `domain-model.md` for
 entities and invariants, `architecture.md` for the layering, and `adr/` for why. ADR 0006
-is the one that constrains most changes.
+is the one that constrains most changes; ADR 0010 (canvas) and ADR 0011 (dialog editing)
+constrain most board work.
 
 ## Commands
 
@@ -63,12 +64,24 @@ self-migrate. E2e runs against a throwaway `e2e.db` and never touch `local.db`.
   pure-core boundary does not apply to it. `src/lib/components/board-viewport.svelte`,
   `zoom-controls.svelte`, and `board-minimap.svelte` are the DOM-facing pieces that turn
   gestures into `Camera` calls; they own no pan/zoom state of their own.
+- The board grid is **read-only** (ADR 0011). Every create/update/delete happens in
+  `src/lib/components/board-dialogs.svelte`, shown by `modal.svelte` (native `<dialog>` +
+  `showModal()`) and submitted with `use:enhance` + `invalidateAll()`. Dialogs render as a
+  sibling of `BoardViewport`, never an ancestor of a dnd zone — see the drag-mirror note in
+  ADR 0010. Adding a control to a cell or header means adding a `BoardDialog` case, not an
+  inline form.
 - Styling is **Tailwind CSS v4** (ADR 0009). The palette and the repeated control classes
-  (`.panel`, `.input`, `.btn` + `.btn-primary`/`.btn-quiet`/`.btn-icon`/`.btn-danger-quiet`,
+  (`.panel`, `.input`, `.btn` + `.btn-primary`/`.btn-quiet`/`.btn-icon`/`.btn-danger`/`.btn-danger-quiet`,
   `.field-label`, `.error`) live in `src/app.css`; everything else is utilities in the
   markup. Components have no `<style>` blocks — add utilities or extend `src/app.css`
   instead. The board's `grid-column`/`grid-row` inline styles stay inline: they are data
-  from `board-view-model.ts`, not design.
+  from `board-view-model.ts`, not design. Icons come from `@lucide/svelte` (ADR 0012),
+  imported one at a time (`@lucide/svelte/icons/pencil`) and sized with a `size-*` class —
+  never typed in as Unicode glyphs, and never labelled themselves: the `aria-label` stays
+  on the button. An icon-only button also takes
+  `use:tooltip={'…'}` (`src/lib/actions/tooltip.ts`, ADR 0013) rather than `title`, whose
+  ~1s delay the browser owns; the tooltip is a body-level popover so the board's `zoom`
+  and `overflow` never touch it.
 - Svelte 5 runes mode is forced: `onclick` not `on:click`, callback props not
   `createEventDispatcher`, snippets not slots. Runes work only in `.svelte`/`.svelte.ts`.
 

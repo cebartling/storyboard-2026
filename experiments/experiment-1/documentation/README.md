@@ -15,6 +15,6 @@ Start here:
 
 Then the decision record:
 
-- **[adr/](./adr/)** — the numbered ADRs (0001–0009) behind the choices above. 0006 is the
+- **[adr/](./adr/)** — the numbered ADRs (0001–0013) behind the choices above. 0006 is the
   direct written answer to "would hexagonal architecture be helpful here?" and is worth
   reading even if you skip the others.

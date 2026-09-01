@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { addActivity, addSlice, addStep, createMap } from './board-helpers';
 
 // E2e coverage for ADR 0010's camera persistence (commit 7 of the plan):
 // zoom and scroll position must survive a full page reload, keyed per map in
@@ -8,31 +9,24 @@ import { expect, test } from '@playwright/test';
 // guarantee it, and zooms in (rather than out) so the enlarged world size
 // makes the overflow only more certain.
 test('pan and zoom persist across reload', async ({ page }) => {
-	await page.goto('/');
-	const mapName = `E2E camera board ${Date.now()}`;
-	await page.getByLabel('New map name').fill(mapName);
-	await page.getByRole('button', { name: 'Create map' }).click();
-	await expect(page).toHaveURL(/\/maps\/[^/]+$/);
+	await createMap(page, `E2E camera board ${Date.now()}`);
 
 	for (const name of ['Search', 'Browse', 'Compare', 'Decide', 'Check out', 'Confirm']) {
-		await page.getByLabel('New activity').fill(name);
-		await page.getByRole('button', { name: 'Add activity' }).click();
+		await addActivity(page, name);
 	}
-	await expect(page.getByRole('heading', { name: mapName })).toBeVisible();
 
 	const activityHeaders = page.locator('[data-testid^="activity-"]');
 	const activityCount = await activityHeaders.count();
 	for (let i = 0; i < activityCount; i++) {
-		const header = activityHeaders.nth(i);
-		await header.getByLabel('New step name').fill(`Step ${i}`);
-		await header.getByRole('button', { name: 'Add step' }).click();
+		// The "Add step" trigger is per activity header, so it has to be
+		// scoped — every header renders one.
+		await addStep(page, `Step ${i}`, activityHeaders.nth(i));
 	}
 
 	for (const name of ['Release 1', 'Release 2', 'Release 3', 'Release 4', 'Release 5']) {
-		await page.getByLabel('New slice').fill(name);
-		await page.getByRole('button', { name: 'Add slice' }).click();
+		await addSlice(page, name);
 	}
-	await expect(page.getByRole('button', { name: 'Delete slice' })).toHaveCount(5);
+	await expect(page.getByRole('button', { name: 'Edit slice' })).toHaveCount(5);
 
 	// --- Zoom in one step, then pan away from the origin ---------------------
 	//
