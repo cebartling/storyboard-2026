@@ -60,8 +60,6 @@
 <!-- Escape is the keyboard equivalent of the backdrop click below, and the
      browser provides it natively, so these pointer handlers need no keyboard
      counterpart of their own. -->
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <dialog
 	bind:this={dialogEl}
 	class="panel text-ink m-auto w-[min(32rem,calc(100vw-2rem))] p-5 backdrop:bg-ink/40"

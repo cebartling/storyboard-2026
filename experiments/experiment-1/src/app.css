@@ -75,6 +75,12 @@
 		@apply size-6 p-0;
 	}
 
+	/* Solid destructive action. Repeats across the four delete dialogs, which
+	   is the threshold this file's other named classes were pulled out at. */
+	.btn-danger {
+		@apply bg-danger text-white shadow-sm hover:brightness-110 active:brightness-95;
+	}
+
 	/* A colour modifier only — always used on top of `.btn`. */
 	.btn-danger-quiet {
 		@apply text-ink-muted hover:text-danger bg-transparent;

@@ -1,0 +1,293 @@
+<script lang="ts" module>
+	/**
+	 * Which board editor is open, and the data it needs to prefill. One
+	 * discriminated union rather than a boolean-and-id per editor: only one
+	 * modal can be open at a time, so the payload travels with the kind and
+	 * there is no way for "which editor" and "which entity" to disagree.
+	 */
+	export type BoardDialog =
+		| { kind: 'addActivity' }
+		| { kind: 'editActivity'; activityId: string; name: string }
+		| { kind: 'addStep'; activityId: string; activityName: string }
+		| { kind: 'editStep'; stepId: string; name: string }
+		| { kind: 'addSlice' }
+		| { kind: 'editSlice'; sliceId: string; name: string }
+		| { kind: 'addStory'; stepId: string; sliceId: string | null; scopeLabel: string }
+		| { kind: 'editStory'; storyId: string; title: string; description: string | null };
+
+	/** Reads the `{ error }` payload `run-action.ts` puts in every `fail()`. */
+	export function actionError(data: unknown): string | null {
+		if (typeof data !== 'object' || data === null || !('error' in data)) return null;
+		return typeof data.error === 'string' ? data.error : null;
+	}
+
+	const TITLES: Record<BoardDialog['kind'], string> = {
+		addActivity: 'Add activity',
+		editActivity: 'Edit activity',
+		addStep: 'Add step',
+		editStep: 'Edit step',
+		addSlice: 'Add slice',
+		editSlice: 'Edit slice',
+		addStory: 'Add story',
+		editStory: 'Edit story'
+	};
+</script>
+
+<script lang="ts">
+	// Every create/update/delete on the board (ADR 0011). The board itself is
+	// read-only; it renders triggers that set `dialog`, and this component
+	// renders the matching form.
+	//
+	// These forms post the same named actions the inline forms used to
+	// (ADR 0008) — only the submission path changed: `use:enhance` instead of
+	// a full-page navigation, because navigating away would tear down the
+	// dialog the user is standing in.
+	import { enhance } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
+	import type { SubmitFunction } from '@sveltejs/kit';
+	import Modal from './modal.svelte';
+
+	let { dialog, onClose }: { dialog: BoardDialog | null; onClose: () => void } = $props();
+
+	let error = $state<string | null>(null);
+	let submitting = $state(false);
+
+	// A failure keeps the dialog open with its message; opening a different
+	// editor must not inherit it. Only the open transition needs clearing —
+	// while `dialog` is null there is nothing rendered to show a stale error.
+	$effect(() => {
+		if (dialog) error = null;
+	});
+
+	// Returning a callback suppresses `enhance`'s defaults wholesale, which is
+	// the point: the default `applyAction` would push the failure into the
+	// page's `form` prop and the same message would render twice — once here,
+	// once in the board's own error banner. This dialog owns its errors.
+	//
+	// `invalidateAll()` is what replaces the removed navigation: with no page
+	// load, nothing else reruns `load()`. It is the same refresh the drag path
+	// already uses, for the reason ADR 0008 gives (this page has exactly one
+	// load function, so there is nothing narrower to invalidate).
+	const submit: SubmitFunction = () => {
+		error = null;
+		submitting = true;
+		return async ({ result }) => {
+			submitting = false;
+			if (result.type === 'failure') {
+				error = actionError(result.data) ?? 'Something went wrong. Please try again.';
+				return;
+			}
+			if (result.type === 'error') {
+				error = 'Something went wrong. Please try again.';
+				return;
+			}
+			// Refetch before closing, so focus returns to a trigger that is
+			// already sitting on up-to-date content.
+			await invalidateAll();
+			onClose();
+		};
+	};
+</script>
+
+<Modal
+	open={dialog !== null}
+	title={dialog ? TITLES[dialog.kind] : ''}
+	testid="board-dialog"
+	{onClose}
+>
+	{#if error}
+		<p class="error mb-3" role="alert">{error}</p>
+	{/if}
+
+	{#if dialog?.kind === 'addActivity'}
+		<form method="POST" action="?/addActivity" use:enhance={submit} class="flex flex-col gap-3">
+			<div class="flex flex-col gap-1.5">
+				<label for="dialog-activity-name" class="field-label">New activity</label>
+				<input
+					id="dialog-activity-name"
+					name="name"
+					type="text"
+					required
+					class="input"
+					placeholder="e.g. Browse"
+				/>
+			</div>
+			<button type="submit" class="btn btn-primary self-start" disabled={submitting}>
+				Add activity
+			</button>
+		</form>
+	{:else if dialog?.kind === 'editActivity'}
+		<form method="POST" action="?/renameActivity" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="activityId" value={dialog.activityId} />
+			<div class="flex flex-col gap-1.5">
+				<label for="dialog-activity-rename" class="field-label">Rename activity</label>
+				<input
+					id="dialog-activity-rename"
+					name="name"
+					type="text"
+					required
+					value={dialog.name}
+					class="input"
+				/>
+			</div>
+			<button type="submit" class="btn btn-primary self-start" disabled={submitting}>Save</button>
+		</form>
+		<form
+			method="POST"
+			action="?/deleteActivity"
+			use:enhance={submit}
+			class="border-line mt-5 border-t pt-4"
+		>
+			<input type="hidden" name="activityId" value={dialog.activityId} />
+			<p class="text-ink-muted mb-2 text-sm">
+				Deleting an activity also deletes its steps and stories.
+			</p>
+			<button type="submit" class="btn btn-danger" disabled={submitting}>Delete activity</button>
+		</form>
+	{:else if dialog?.kind === 'addStep'}
+		<form method="POST" action="?/addStep" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="activityId" value={dialog.activityId} />
+			<div class="flex flex-col gap-1.5">
+				<label for="dialog-step-name" class="field-label">New step name</label>
+				<input
+					id="dialog-step-name"
+					name="name"
+					type="text"
+					required
+					class="input"
+					placeholder="e.g. Find a product"
+				/>
+			</div>
+			<p class="text-ink-muted text-sm">Added to <strong>{dialog.activityName}</strong>.</p>
+			<button type="submit" class="btn btn-primary self-start" disabled={submitting}>
+				Add step
+			</button>
+		</form>
+	{:else if dialog?.kind === 'editStep'}
+		<form method="POST" action="?/renameStep" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="stepId" value={dialog.stepId} />
+			<div class="flex flex-col gap-1.5">
+				<label for="dialog-step-rename" class="field-label">Rename step</label>
+				<input
+					id="dialog-step-rename"
+					name="name"
+					type="text"
+					required
+					value={dialog.name}
+					class="input"
+				/>
+			</div>
+			<button type="submit" class="btn btn-primary self-start" disabled={submitting}>Save</button>
+		</form>
+		<form
+			method="POST"
+			action="?/deleteStep"
+			use:enhance={submit}
+			class="border-line mt-5 border-t pt-4"
+		>
+			<input type="hidden" name="stepId" value={dialog.stepId} />
+			<p class="text-ink-muted mb-2 text-sm">Deleting a step also deletes its stories.</p>
+			<button type="submit" class="btn btn-danger" disabled={submitting}>Delete step</button>
+		</form>
+	{:else if dialog?.kind === 'addSlice'}
+		<form method="POST" action="?/createSlice" use:enhance={submit} class="flex flex-col gap-3">
+			<div class="flex flex-col gap-1.5">
+				<label for="dialog-slice-name" class="field-label">New slice</label>
+				<input
+					id="dialog-slice-name"
+					name="name"
+					type="text"
+					required
+					class="input"
+					placeholder="e.g. Release 1"
+				/>
+			</div>
+			<button type="submit" class="btn btn-primary self-start" disabled={submitting}>
+				Add slice
+			</button>
+		</form>
+	{:else if dialog?.kind === 'editSlice'}
+		<form method="POST" action="?/renameSlice" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="sliceId" value={dialog.sliceId} />
+			<div class="flex flex-col gap-1.5">
+				<label for="dialog-slice-rename" class="field-label">Rename slice</label>
+				<input
+					id="dialog-slice-rename"
+					name="name"
+					type="text"
+					required
+					value={dialog.name}
+					class="input"
+				/>
+			</div>
+			<button type="submit" class="btn btn-primary self-start" disabled={submitting}>Save</button>
+		</form>
+		<form
+			method="POST"
+			action="?/deleteSlice"
+			use:enhance={submit}
+			class="border-line mt-5 border-t pt-4"
+		>
+			<input type="hidden" name="sliceId" value={dialog.sliceId} />
+			<p class="text-ink-muted mb-2 text-sm">
+				Stories in this slice move back to the unsliced band.
+			</p>
+			<button type="submit" class="btn btn-danger" disabled={submitting}>Delete slice</button>
+		</form>
+	{:else if dialog?.kind === 'addStory'}
+		<form method="POST" action="?/addStory" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="stepId" value={dialog.stepId} />
+			<input type="hidden" name="sliceId" value={dialog.sliceId ?? ''} />
+			<div class="flex flex-col gap-1.5">
+				<label for="dialog-story-title" class="field-label">New story title</label>
+				<input
+					id="dialog-story-title"
+					name="title"
+					type="text"
+					required
+					class="input"
+					placeholder="e.g. Search by keyword"
+				/>
+			</div>
+			<p class="text-ink-muted text-sm">Added to <strong>{dialog.scopeLabel}</strong>.</p>
+			<button type="submit" class="btn btn-primary self-start" disabled={submitting}>
+				Add story
+			</button>
+		</form>
+	{:else if dialog?.kind === 'editStory'}
+		<form method="POST" action="?/editStory" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="storyId" value={dialog.storyId} />
+			<div class="flex flex-col gap-1.5">
+				<label for="dialog-story-edit-title" class="field-label">Story title</label>
+				<input
+					id="dialog-story-edit-title"
+					name="title"
+					type="text"
+					required
+					value={dialog.title}
+					class="input"
+				/>
+			</div>
+			<div class="flex flex-col gap-1.5">
+				<label for="dialog-story-description" class="field-label">Description</label>
+				<textarea
+					id="dialog-story-description"
+					name="description"
+					rows="4"
+					class="input resize-y"
+					placeholder="Optional detail, acceptance notes, open questions…"
+					value={dialog.description ?? ''}></textarea>
+			</div>
+			<button type="submit" class="btn btn-primary self-start" disabled={submitting}>Save</button>
+		</form>
+		<form
+			method="POST"
+			action="?/deleteStory"
+			use:enhance={submit}
+			class="border-line mt-5 border-t pt-4"
+		>
+			<input type="hidden" name="storyId" value={dialog.storyId} />
+			<button type="submit" class="btn btn-danger" disabled={submitting}>Delete story</button>
+		</form>
+	{/if}
+</Modal>
