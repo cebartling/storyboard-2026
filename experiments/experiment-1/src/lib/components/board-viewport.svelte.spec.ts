@@ -187,4 +187,24 @@ describe('BoardViewport', () => {
 		window.dispatchEvent(new KeyboardEvent('keydown', { key: '1' }));
 		expect(camera.zoom).toBeLessThan(1);
 	});
+
+	it('leaves the browser page-zoom shortcuts alone when a modifier is held', async () => {
+		const camera = createCamera();
+		camera.setWorldSize(4000, 4000);
+		camera.setViewportSize(400, 400);
+		camera.zoomIn();
+		render(BoardViewport, { camera, children: worldSnippet });
+
+		const zoomed = camera.zoom;
+
+		for (const modifier of ['ctrlKey', 'metaKey', 'altKey'] as const) {
+			for (const key of ['0', '1', '-', '=']) {
+				const event = new KeyboardEvent('keydown', { key, [modifier]: true, cancelable: true });
+				window.dispatchEvent(event);
+				expect(event.defaultPrevented).toBe(false);
+			}
+		}
+
+		expect(camera.zoom).toBe(zoomed);
+	});
 });

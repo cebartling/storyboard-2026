@@ -187,6 +187,10 @@
 		function onKeyDown(e: KeyboardEvent) {
 			if (isTypingTarget(document.activeElement)) return;
 
+			// Leave the browser's own Ctrl/Cmd+0/-/= page zoom alone. Shift is allowed
+			// through because '+' needs it on most layouts.
+			if (e.ctrlKey || e.metaKey || e.altKey) return;
+
 			if (e.code === 'Space') {
 				if (!e.repeat) spaceHeld = true;
 				e.preventDefault();
