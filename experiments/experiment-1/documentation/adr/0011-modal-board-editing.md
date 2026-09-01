@@ -47,6 +47,11 @@ update, and delete happens in a modal dialog.
   story dialog a title field and a description textarea.
 - Deletes live in the dialog that edits the thing, as a second form. The dialog is the
   confirmation step; there is no separate confirm.
+- **Every dialog closes on success except add-story, which resets and stays open.** Adding
+  stories is the one repetitive loop on this board — a mapping session enters a column of
+  them at a sitting — and the inline form this replaced let you type a title, press Enter,
+  and keep typing. Closing after each one would make the common case slower than what it
+  replaced. Every other editor is a one-off edit, where closing is the right end to it.
 - The story card's trigger is a pencil **button**, not a click on the card. `svelte-dnd-action`
   owns the card body's pointer stream and nothing in this app distinguishes a click from the
   start of a drag. Being a `<button>` also keeps it inside `BoardViewport`'s

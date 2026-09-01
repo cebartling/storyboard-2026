@@ -80,7 +80,7 @@
 	// load, nothing else reruns `load()`. It is the same refresh the drag path
 	// already uses, for the reason ADR 0008 gives (this page has exactly one
 	// load function, so there is nothing narrower to invalidate).
-	const submit: SubmitFunction = () => {
+	const submit: SubmitFunction = ({ formElement }) => {
 		error = null;
 		submitting = true;
 		// Captured at submit time: the user can close the dialog while the
@@ -115,9 +115,24 @@
 			// does, and it is not enhanced), so there is no case to handle yet.
 			// An action that starts redirecting needs an explicit branch here.
 			//
-			// Refetch before closing, so focus returns to a trigger that is
-			// already sitting on up-to-date content.
 			await invalidateAll();
+
+			// Adding stories is the one repetitive loop on this board — a
+			// mapping session enters a column of them at a sitting — and the
+			// inline form this replaced let you type, press Enter, and keep
+			// typing. So this one dialog stays open and resets instead of
+			// closing; Escape and the close button are still the way out.
+			// Every other editor is a one-off edit, and closing is the right
+			// end to it.
+			if (submittedFor?.kind === 'addStory') {
+				formElement.reset();
+				submitting = false;
+				formElement.querySelector<HTMLInputElement>('input[name="title"]')?.focus();
+				return;
+			}
+
+			// Closing after the refetch, so focus returns to a trigger that is
+			// already sitting on up-to-date content.
 			onClose();
 			submitting = false;
 		};

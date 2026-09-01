@@ -54,11 +54,25 @@ export async function addSlice(page: Page, name: string) {
 	await submitDialog(page, 'Add slice');
 }
 
-/** `sliceKey` is a slice id, or the literal 'unsliced' for the bottom band. */
+/**
+ * `sliceKey` is a slice id, or the literal 'unsliced' for the bottom band.
+ *
+ * Unlike every other editor, the add-story dialog stays open on success and
+ * clears itself, so several stories can be entered in a row (ADR 0011). This
+ * closes it explicitly and waits for the card rather than for the dialog to
+ * vanish on its own.
+ */
 export async function addStory(page: Page, stepId: string, sliceKey: string, title: string) {
 	await page.getByTestId(`add-story-${stepId}-${sliceKey}`).click();
-	await dialog(page).getByLabel('New story title').fill(title);
-	await submitDialog(page, 'Add story');
+	const open = dialog(page);
+	await open.getByLabel('New story title').fill(title);
+	await open.getByRole('button', { name: 'Add story' }).click();
+	// Cleared and refocused is what "the add succeeded" looks like here; a
+	// failure would leave the typed title in place and show an error.
+	await expect(open.getByLabel('New story title')).toHaveValue('');
+	await expect(open.locator('p.error')).toHaveCount(0);
+	await open.getByRole('button', { name: 'Close' }).click();
+	await expect(open).toBeHidden();
 }
 
 /** The first step's id, as the board actually rendered it. */
