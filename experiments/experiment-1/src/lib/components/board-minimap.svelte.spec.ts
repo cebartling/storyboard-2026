@@ -40,6 +40,26 @@ describe('BoardMinimap', () => {
 		expect(withStories).toHaveLength(2);
 	});
 
+	it('keeps the focusable handle in the accessibility tree', async () => {
+		const camera = cameraWithGeometry();
+		render(BoardMinimap, { camera, model });
+
+		// `role="img"` on the svg would make every child presentational, taking the
+		// handle out of the accessibility tree despite its tabindex.
+		const svg = page.getByTestId('board-minimap').element() as SVGSVGElement;
+		expect(svg.getAttribute('role')).toBe('group');
+
+		const handle = page.getByTestId('minimap-viewport').element() as SVGRectElement;
+		expect(handle.getAttribute('tabindex')).toBe('0');
+		// Not `button`: the handle has no Enter/Space activation to offer.
+		expect(handle.getAttribute('role')).toBe('application');
+		expect(handle.getAttribute('aria-label')).toBeTruthy();
+
+		for (const decorative of page.getByTestId('minimap-cell').elements()) {
+			expect(decorative.getAttribute('aria-hidden')).toBe('true');
+		}
+	});
+
 	it('dragging the viewport rect pans the camera', async () => {
 		const camera = cameraWithGeometry();
 		render(BoardMinimap, { camera, model });

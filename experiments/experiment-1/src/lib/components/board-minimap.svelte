@@ -108,7 +108,7 @@
 
 <svg
 	bind:this={svgEl}
-	role="img"
+	role="group"
 	aria-label="Board overview"
 	data-testid="board-minimap"
 	viewBox="0 0 {WIDTH} {HEIGHT}"
@@ -120,6 +120,7 @@
 	{#each model.rows as row, i (row.sliceId ?? `unsliced-${i}`)}
 		<rect
 			data-testid="minimap-row"
+			aria-hidden="true"
 			x="0"
 			y={i * cellHeight}
 			width={WIDTH}
@@ -133,6 +134,7 @@
 	{#each model.cells as cell (`${cell.col}-${cell.row}`)}
 		<rect
 			data-testid="minimap-cell"
+			aria-hidden="true"
 			data-story-count={cell.storyCount}
 			x={cell.col * cellWidth}
 			y={cell.row * cellHeight}
@@ -142,9 +144,22 @@
 		/>
 	{/each}
 
+	<!--
+		`group`, not `img`: an `img` has presentational children, which would drop
+		this focusable handle out of the accessibility tree entirely. The handle is
+		`application` rather than `button` because it is a 2D pan surface driven by
+		the arrow keys — the role has to put a screen reader into focus mode so
+		those keys reach `onHandleKeyDown`, and `button` would promise an
+		Enter/Space activation that does not exist here.
+
+		Svelte's a11y checker does not count `application` among its interactive
+		roles, so it flags the tabindex and the listeners; both are deliberate and
+		are what makes the handle reachable at all.
+	-->
+	<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 	<rect
 		data-testid="minimap-viewport"
-		role="button"
+		role="application"
 		aria-label="Visible area of the board; drag or use arrow keys to pan"
 		tabindex="0"
 		x={viewportRect.x}
