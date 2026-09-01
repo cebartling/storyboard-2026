@@ -43,8 +43,11 @@ Take icons from Lucide, via the `@lucide/svelte` package in `dependencies` (alon
   the thing worth stating — that this control draws _the pencil_ — and because the class is
   derived from the icon name rather than from internal structure.
 
-The six in use: `pencil` (edit story, edit step), `x` (modal close), `minus` / `plus` /
-`maximize` / `target` (zoom cluster).
+The six in use: `pencil` (edit story, edit step, edit activity, edit slice), `x` (modal
+close), `plus` (add step, add story), and `minus` / `maximize` / `rotate-ccw` (zoom
+cluster). `rotate-ccw` rather than the `target` that literally translated the old `⦿`:
+at 16px its concentric rings read denser than every single-stroke mark beside it, and
+"reset" is what the control does.
 
 ## Alternatives rejected
 

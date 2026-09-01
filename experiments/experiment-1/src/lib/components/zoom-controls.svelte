@@ -5,7 +5,7 @@
 	import Maximize from '@lucide/svelte/icons/maximize';
 	import Minus from '@lucide/svelte/icons/minus';
 	import Plus from '@lucide/svelte/icons/plus';
-	import Target from '@lucide/svelte/icons/target';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import { tooltip } from '$lib/actions/tooltip';
 	import type { Camera } from '$lib/canvas/camera.svelte';
 
@@ -65,6 +65,6 @@
 		aria-keyshortcuts="0"
 		onclick={() => camera.resetZoom()}
 	>
-		<Target class="size-4" />
+		<RotateCcw class="size-4" />
 	</button>
 </div>

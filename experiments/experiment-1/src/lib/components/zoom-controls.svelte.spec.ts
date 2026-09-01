@@ -60,7 +60,7 @@ describe('ZoomControls', () => {
 		['zoom-out', 'lucide-minus'],
 		['zoom-in', 'lucide-plus'],
 		['zoom-fit', 'lucide-maximize'],
-		['zoom-reset', 'lucide-target']
+		['zoom-reset', 'lucide-rotate-ccw']
 	])('draws %s as the %s icon', async (testid, iconClass) => {
 		const camera = createCamera();
 		render(ZoomControls, { camera });
