@@ -6,8 +6,15 @@ import BoardDialogs, { type BoardDialog, actionError } from './board-dialogs.sve
 
 // These tests assert what each `kind` renders — the action it posts, the
 // hidden ids it carries, and that fields prefill. They deliberately never
-// submit: `use:enhance` would issue a real POST against the test page, and
-// the submit policy is covered end to end by the Playwright suite instead.
+// submit: `use:enhance` would issue a real POST against the test page.
+//
+// The submit policy is therefore covered in `page.svelte.e2e.ts` instead, not
+// here: "adds a story into a slice band…" drives the success paths, and "a
+// failed dialog submission…" drives the failure path (the dialog stays open,
+// owns its message, and does not echo it into the board's banner). The
+// late-failure route through `onLateFailure` — a result arriving after the
+// user closed the dialog — is the one branch nothing exercises yet; it needs
+// a delayed response to trigger deterministically.
 async function open(dialog: BoardDialog) {
 	render(BoardDialogs, { dialog, onClose: () => {}, onLateFailure: () => {} });
 	await tick();

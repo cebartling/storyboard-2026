@@ -188,6 +188,57 @@ test('adds a story into a slice band and edits its description', async ({ page }
 	);
 });
 
+// The dialog submit policy's failure path (ADR 0011). Every other e2e drives
+// the happy path, where a dialog closing *is* the assertion — so a failure
+// keeping the dialog open, owning its own message, and not echoing it into the
+// board's banner is only exercised here.
+test('a failed dialog submission keeps the dialog open and owns the error', async ({ page }) => {
+	await createMap(page, `E2E dialog failure ${Date.now()}`);
+	await addActivity(page, 'Search');
+	await addStep(page, 'Find a product');
+	await addSlice(page, 'Release 1');
+	await addSlice(page, 'Release 2');
+	await addSlice(page, 'Release 3');
+
+	const stepId = await firstStepId(page);
+	const sliceId = await firstSliceId(page);
+	await addStory(page, stepId, sliceId, 'Doomed story');
+
+	// Open the editor, then delete the story behind the rendered page — the
+	// same stale-client setup the drag failure test uses — so Save posts
+	// against a story the server no longer has.
+	await page.getByRole('button', { name: 'Edit story Doomed story' }).click();
+	const editor = page.getByRole('dialog');
+	const storyId = await editor.locator('input[name="storyId"]').first().inputValue();
+	await page.evaluate(async (id) => {
+		const body = new FormData();
+		body.set('storyId', id);
+		await fetch('?/deleteStory', { method: 'POST', body });
+	}, storyId);
+
+	await editor.getByLabel('Story title').fill('Renamed after deletion');
+	await editor.getByRole('button', { name: 'Save' }).click();
+
+	// Still open, carrying the domain's own message.
+	await expect(editor).toBeVisible();
+	await expect(editor.locator('p.error')).toContainText(`Story not found: ${storyId}`);
+
+	// And not echoed into the board's banner: suppressing applyAction is what
+	// keeps the message in one place, so a duplicate here means that broke.
+	await expect(page.locator('main > div > p.error[role="alert"]')).toHaveCount(0);
+
+	// The typed value survives, so the user can retry or copy it out rather
+	// than losing the edit to a failed save.
+	await expect(editor.getByLabel('Story title')).toHaveValue('Renamed after deletion');
+
+	// Opening a different editor must not inherit the dead story's message.
+	await page.getByRole('button', { name: 'Close' }).click();
+	await expect(editor).toBeHidden();
+	await page.getByRole('button', { name: 'Edit step' }).click();
+	await expect(editor).toBeVisible();
+	await expect(editor.locator('p.error')).toHaveCount(0);
+});
+
 // Empirical check for the zoom/dnd interaction ADR 0010 discusses: drop
 // hit-testing and the drag mirror are both viewport-space, so a drag should
 // behave the same at any CSS `zoom` level as it does at 100%. This zooms out
