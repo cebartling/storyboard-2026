@@ -112,6 +112,24 @@ describe('tooltip action', () => {
 		expect(open.map((el) => el.textContent)).toEqual(['Edit step']);
 	});
 
+	// A trigger can vanish under the pointer — Escape on a dialog hides the
+	// close button it was hovering — and then no `pointerleave`, `click` or
+	// `blur` ever arrives to hide the tooltip. Being a body-level popover in
+	// the top layer, it outlives the thing it describes unless the action
+	// notices for itself.
+	it('hides itself when its trigger stops being rendered', async () => {
+		vi.useRealTimers();
+		const { button } = mountButton();
+
+		// Focus shows with no delay, so this needs no timer at all.
+		button.dispatchEvent(new FocusEvent('focus'));
+		expect(tip()?.matches(':popover-open')).toBe(true);
+
+		button.style.display = 'none';
+
+		await vi.waitFor(() => expect(tip()?.matches(':popover-open') ?? false).toBe(false));
+	});
+
 	it('takes its element with it when destroyed', () => {
 		const { button, handle } = mountButton();
 		hover(button);

@@ -397,3 +397,30 @@ test('drag story to slice at non-100% zoom', async ({ page }) => {
 	await expect(sliceCell.locator('[data-testid^="story-"]')).toHaveText([/Story A/]);
 	await expect(unslicedCell.locator('[data-testid^="story-"]')).toHaveCount(0);
 });
+
+// The tooltip's own escape hatch, at the one place a trigger reliably vanishes
+// under the pointer: Escape on a dialog. Nothing else fires — the close button
+// is not focused (the first field is), so there is no `blur`, and a control
+// that goes `display:none` under the cursor does not always get `pointerleave`.
+test('a tooltip does not outlive the control it describes', async ({ page }) => {
+	await createMap(page, `E2E tooltip lifetime ${Date.now()}`);
+	await addActivity(page, 'Search');
+	await addStep(page, 'Find a product');
+
+	await page.getByRole('button', { name: 'Edit step' }).click();
+	const editor = page.getByRole('dialog');
+	await expect(editor).toBeVisible();
+
+	await editor.getByRole('button', { name: 'Close' }).hover();
+	await expect(page.locator('[data-tooltip]:visible')).toHaveText('Close', { timeout: 500 });
+
+	await page.keyboard.press('Escape');
+
+	await expect(editor).toBeHidden();
+
+	// The Close tooltip goes with its button. Exactly one is left, and it is
+	// the pencil's: closing a dialog returns focus to the trigger that opened
+	// it, and a focused icon button showing its own label is the behaviour
+	// this action is supposed to have — so this pins both halves at once.
+	await expect(page.locator('[data-tooltip]:visible')).toHaveText('Edit step');
+});

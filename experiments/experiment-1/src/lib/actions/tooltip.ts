@@ -40,6 +40,15 @@ export const tooltip: Action<HTMLElement, string> = (node, text) => {
 	let tip: HTMLElement | undefined;
 	let label = text;
 	let timer: ReturnType<typeof setTimeout> | undefined;
+	// Runs only while a tooltip is open. A trigger can stop being rendered
+	// under the pointer — Escape on a dialog hides the close button it was
+	// hovering — and then none of the listeners below ever fire: no `click`,
+	// no `blur` (the dialog focuses its first field, not Close), and a control
+	// that goes `display:none` under the cursor is not guaranteed a
+	// `pointerleave`. The tooltip is a body-level popover in the top layer, so
+	// nothing about the trigger disappearing removes it. This is how it finds
+	// out on its own, rather than every caller having to remember to say so.
+	let visibility: IntersectionObserver | undefined;
 
 	function ensure(): HTMLElement {
 		if (tip) return tip;
@@ -75,6 +84,10 @@ export const tooltip: Action<HTMLElement, string> = (node, text) => {
 
 	function show() {
 		clearTimeout(timer);
+		// A trigger already gone by the time the delay elapses gets no tooltip
+		// at all, which is cheaper than showing one and retracting it.
+		if (!node.isConnected || !node.checkVisibility()) return;
+
 		const el = ensure();
 		if (el.matches(':popover-open')) return;
 		if (openTip && openTip !== el && openTip.matches(':popover-open')) openTip.hidePopover();
@@ -83,10 +96,18 @@ export const tooltip: Action<HTMLElement, string> = (node, text) => {
 		// Positioned after showing: a display:none popover has no measurable
 		// size, so its height is only known once it is in the top layer.
 		position(el);
+
+		// The observer reports the trigger's current state as soon as it is
+		// observed, so a hide is caught whether it happens now or later.
+		visibility ??= new IntersectionObserver((entries) => {
+			if (entries.some((entry) => !entry.isIntersecting)) hide();
+		});
+		visibility.observe(node);
 	}
 
 	function hide() {
 		clearTimeout(timer);
+		visibility?.disconnect();
 		if (tip?.matches(':popover-open')) tip.hidePopover();
 		if (openTip === tip) openTip = undefined;
 	}
@@ -117,6 +138,7 @@ export const tooltip: Action<HTMLElement, string> = (node, text) => {
 		},
 		destroy() {
 			clearTimeout(timer);
+			visibility?.disconnect();
 			node.removeEventListener('pointerenter', onPointerEnter);
 			node.removeEventListener('pointerleave', hide);
 			node.removeEventListener('pointerdown', hide);
