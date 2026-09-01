@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
-import { createRawSnippet } from 'svelte';
+import { createRawSnippet, tick } from 'svelte';
 import BoardViewport from './board-viewport.svelte';
 import { createCamera } from '$lib/canvas/camera.svelte';
 
@@ -170,6 +170,34 @@ describe('BoardViewport', () => {
 		expect(viewportEl.scrollTop).toBe(20);
 
 		window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space' }));
+	});
+
+	it('suppresses text selection while panning with the left button', async () => {
+		const camera = createCamera();
+		render(BoardViewport, { camera, children: worldSnippet });
+
+		const viewportEl = page.getByTestId('board-viewport').element() as HTMLElement;
+		viewportEl.setPointerCapture = () => {};
+		viewportEl.releasePointerCapture = () => {};
+
+		const down = new PointerEvent('pointerdown', {
+			pointerId: 9,
+			button: 0,
+			clientX: 300,
+			clientY: 300,
+			bubbles: true,
+			cancelable: true
+		});
+		viewportEl.dispatchEvent(down);
+
+		// preventDefault is the guard that actually stops the selection starting;
+		// the class is a backstop and only lands on the next flush.
+		expect(down.defaultPrevented).toBe(true);
+		await tick();
+		expect(viewportEl.className).toContain('select-none');
+		// preventDefault drops the default focus, so panning must restore it or
+		// keyboard panning stops working after a drag.
+		expect(document.activeElement).toBe(viewportEl);
 	});
 
 	it('releases a held space when the window loses focus, so cards stay draggable', async () => {

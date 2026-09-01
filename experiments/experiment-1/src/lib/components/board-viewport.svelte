@@ -148,11 +148,17 @@
 			e.preventDefault();
 		} else if (isLeft) {
 			if (!spaceHeld && isInteractiveTarget(e.target)) return; // never steal dnd/forms/buttons
+			// Otherwise the pan drags a native text selection along with it,
+			// leaving the labels it crossed highlighted.
+			e.preventDefault();
 		} else {
 			return;
 		}
 
 		if (!viewportEl) return;
+		// `preventDefault` above suppresses the default focus along with the
+		// selection, and this container needs focus for keyboard panning.
+		viewportEl.focus({ preventScroll: true });
 		viewportEl.setPointerCapture(e.pointerId);
 		isPanning = true;
 		panState = {
@@ -260,7 +266,7 @@
 		? isPanning
 			? 'cursor-grabbing'
 			: 'cursor-grab'
-		: ''}"
+		: ''} {isPanning ? 'select-none' : ''}"
 	onscroll={onScroll}
 	onpointerdown={onPointerDown}
 	onpointermove={onPointerMove}
