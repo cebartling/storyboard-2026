@@ -49,13 +49,14 @@ One Svelte action, `src/lib/actions/tooltip.ts`, used as `use:tooltip={'Edit ste
 - **Where `showPopover` is missing, it falls back to setting `title`.** Slow is worse than
   fast; both are better than an unlabelled icon.
 
-Applied to all seven icon buttons: both pencils, the modal close, and the four zoom
-controls.
+Applied to all nine icon buttons: the four pencils (edit story, edit activity, edit step,
+edit slice), the modal close, and the four zoom controls.
 
 ## Consequences
 
 Hover hints arrive in 120ms instead of ~1s, at a constant size regardless of board zoom,
-and now exist on five controls that never had them.
+and now exist on seven controls that never had them (only the two pencils carried a
+`title`).
 
 The costs: tooltip text lives in the markup as an action argument rather than in the
 `title` attribute a browser would render for free, so it is one more thing to keep in step
