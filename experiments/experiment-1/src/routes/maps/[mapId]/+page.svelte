@@ -376,4 +376,8 @@
 	</div>
 </div>
 
-<BoardDialogs {dialog} onClose={() => (dialog = null)} />
+<BoardDialogs
+	{dialog}
+	onClose={() => (dialog = null)}
+	onLateFailure={(message) => (dragError = message)}
+/>

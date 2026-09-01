@@ -9,7 +9,7 @@ import BoardDialogs, { type BoardDialog, actionError } from './board-dialogs.sve
 // submit: `use:enhance` would issue a real POST against the test page, and
 // the submit policy is covered end to end by the Playwright suite instead.
 async function open(dialog: BoardDialog) {
-	render(BoardDialogs, { dialog, onClose: () => {} });
+	render(BoardDialogs, { dialog, onClose: () => {}, onLateFailure: () => {} });
 	await tick();
 	return page.getByTestId('board-dialog').element() as HTMLDialogElement;
 }

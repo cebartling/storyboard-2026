@@ -47,7 +47,19 @@
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import Modal from './modal.svelte';
 
-	let { dialog, onClose }: { dialog: BoardDialog | null; onClose: () => void } = $props();
+	let {
+		dialog,
+		onClose,
+		onLateFailure
+	}: {
+		dialog: BoardDialog | null;
+		onClose: () => void;
+		/**
+		 * A failure that arrived after the dialog was already closed. There is
+		 * nowhere in here to render it, so the board shows it instead.
+		 */
+		onLateFailure: (message: string) => void;
+	} = $props();
 
 	let error = $state<string | null>(null);
 	let submitting = $state(false);
@@ -71,6 +83,17 @@
 	const submit: SubmitFunction = () => {
 		error = null;
 		submitting = true;
+		// Captured at submit time: the user can close the dialog while the
+		// request is in flight, and a message shown in a closed dialog is a
+		// message nobody reads.
+		const submittedFor = dialog;
+
+		function report(message: string) {
+			submitting = false;
+			if (dialog === submittedFor) error = message;
+			else onLateFailure(message);
+		}
+
 		return async ({ result }) => {
 			// `submitting` disables every button in the dialog, and it is the
 			// only double-submit guard here — so it is cleared per path, never
@@ -78,13 +101,11 @@
 			// re-enable Save and Delete for a whole round trip while the dialog
 			// is still open, which is long enough to click twice.
 			if (result.type === 'failure') {
-				submitting = false;
-				error = actionError(result.data) ?? 'Something went wrong. Please try again.';
+				report(actionError(result.data) ?? 'Something went wrong. Please try again.');
 				return;
 			}
 			if (result.type === 'error') {
-				submitting = false;
-				error = 'Something went wrong. Please try again.';
+				report('Something went wrong. Please try again.');
 				return;
 			}
 			// Refetch before closing, so focus returns to a trigger that is
