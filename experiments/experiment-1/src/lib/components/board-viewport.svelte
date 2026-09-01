@@ -215,6 +215,11 @@
 	// --- Space-held tracking + keyboard zoom shortcuts -----------------------
 	$effect(() => {
 		function onKeyDown(e: KeyboardEvent) {
+			// A modal dialog inerts the rest of the document, so the board must
+			// not react to keys typed into it. `isTypingTarget` is not enough:
+			// it deliberately excludes buttons, so pressing "1" with a modal's
+			// Delete button focused would silently fit() the board underneath.
+			if (document.querySelector('dialog[open]')) return;
 			if (isTypingTarget(document.activeElement)) return;
 
 			// Leave the browser's own Ctrl/Cmd+0/-/= page zoom alone. Shift is allowed
