@@ -1,15 +1,18 @@
 <script lang="ts">
 	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
+	import BoardMinimap from '$lib/components/board-minimap.svelte';
 	import BoardViewport from '$lib/components/board-viewport.svelte';
 	import StoryDndZone, { type MoveDetail } from '$lib/components/story-dnd-zone.svelte';
 	import ZoomControls from '$lib/components/zoom-controls.svelte';
 	import { createCamera } from '$lib/canvas/camera.svelte';
+	import { toMinimapModel } from '$lib/canvas/minimap-model';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
 	let dragError = $state<string | null>(null);
 	const camera = createCamera();
+	const minimapModel = $derived(toMinimapModel(data.board));
 
 	// Row 1 (activity headers) and row 2 (step headers) are both `sticky
 	// top-*` so column context survives vertical scrolling, but row 1's
@@ -122,6 +125,9 @@
 	<div class="panel relative flex min-h-0 flex-1 flex-col overflow-hidden">
 		<div class="pointer-events-none absolute right-4 bottom-4 z-40">
 			<ZoomControls {camera} />
+		</div>
+		<div class="pointer-events-auto absolute bottom-4 left-4 z-40">
+			<BoardMinimap {camera} model={minimapModel} />
 		</div>
 		<BoardViewport {camera}>
 			<div

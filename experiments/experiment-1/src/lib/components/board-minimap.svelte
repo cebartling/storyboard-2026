@@ -1,0 +1,165 @@
+<script lang="ts">
+	// Overview navigator for the board's Camera (ADR 0010): a small SVG
+	// approximating the board's grid (uniform column widths/row heights —
+	// see `minimap-model.ts` for why real track sizes are not modeled), with
+	// a viewport rectangle computed from the camera's *measured* world/view
+	// sizes and scroll, which is always truthful even though the grid is an
+	// approximation.
+	import { scrollForMinimapPoint, viewportRectInMinimap } from '$lib/canvas/camera-math';
+	import type { Camera } from '$lib/canvas/camera.svelte';
+	import type { MinimapModel } from '$lib/canvas/minimap-model';
+
+	let { camera, model }: { camera: Camera; model: MinimapModel } = $props();
+
+	const WIDTH = 180;
+	const HEIGHT = 120;
+	/** World-space pixels nudged per arrow-key press on the viewport handle. */
+	const KEYBOARD_PAN_STEP = 48;
+
+	let svgEl: SVGSVGElement | undefined = $state();
+
+	const colCount = $derived(Math.max(model.columns, 1));
+	const rowCount = $derived(Math.max(model.rows.length, 1));
+	const cellWidth = $derived(WIDTH / colCount);
+	const cellHeight = $derived(HEIGHT / rowCount);
+
+	const scaledWorld = $derived({
+		width: camera.worldWidth * camera.zoom,
+		height: camera.worldHeight * camera.zoom
+	});
+	const viewportSize = $derived({ width: camera.viewWidth, height: camera.viewHeight });
+	const minimapSize = { width: WIDTH, height: HEIGHT };
+
+	const viewportRect = $derived(
+		viewportRectInMinimap(
+			scaledWorld,
+			viewportSize,
+			{ scrollX: camera.scrollX, scrollY: camera.scrollY },
+			minimapSize
+		)
+	);
+
+	/** Converts a pointer event's client coordinates into the SVG's own `viewBox` units. */
+	function toLocalPoint(e: PointerEvent): { x: number; y: number } {
+		if (!svgEl) return { x: 0, y: 0 };
+		const box = svgEl.getBoundingClientRect();
+		const scaleX = box.width > 0 ? WIDTH / box.width : 1;
+		const scaleY = box.height > 0 ? HEIGHT / box.height : 1;
+		return {
+			x: (e.clientX - box.left) * scaleX,
+			y: (e.clientY - box.top) * scaleY
+		};
+	}
+
+	function panToCentre(point: { x: number; y: number }) {
+		const next = scrollForMinimapPoint(scaledWorld, viewportSize, minimapSize, point);
+		camera.panTo(next.scrollX, next.scrollY);
+	}
+
+	// Clicking anywhere on the minimap background (i.e. not the viewport
+	// handle, which stops propagation below) centres the viewport there.
+	function onBackgroundPointerDown(e: PointerEvent) {
+		panToCentre(toLocalPoint(e));
+	}
+
+	let dragOffset: { x: number; y: number } | null = null;
+
+	function onHandlePointerDown(e: PointerEvent) {
+		e.stopPropagation();
+		(e.currentTarget as SVGRectElement).setPointerCapture(e.pointerId);
+		const point = toLocalPoint(e);
+		dragOffset = { x: point.x - viewportRect.x, y: point.y - viewportRect.y };
+	}
+
+	function onHandlePointerMove(e: PointerEvent) {
+		if (!dragOffset) return;
+		const point = toLocalPoint(e);
+		panToCentre({
+			x: point.x - dragOffset.x + viewportRect.width / 2,
+			y: point.y - dragOffset.y + viewportRect.height / 2
+		});
+	}
+
+	function onHandlePointerUp(e: PointerEvent) {
+		dragOffset = null;
+		(e.currentTarget as SVGRectElement).releasePointerCapture(e.pointerId);
+	}
+
+	function onHandleKeyDown(e: KeyboardEvent) {
+		switch (e.key) {
+			case 'ArrowLeft':
+				camera.panBy(-KEYBOARD_PAN_STEP, 0);
+				break;
+			case 'ArrowRight':
+				camera.panBy(KEYBOARD_PAN_STEP, 0);
+				break;
+			case 'ArrowUp':
+				camera.panBy(0, -KEYBOARD_PAN_STEP);
+				break;
+			case 'ArrowDown':
+				camera.panBy(0, KEYBOARD_PAN_STEP);
+				break;
+			default:
+				return;
+		}
+		e.preventDefault();
+	}
+</script>
+
+<svg
+	bind:this={svgEl}
+	role="img"
+	aria-label="Board overview"
+	data-testid="board-minimap"
+	viewBox="0 0 {WIDTH} {HEIGHT}"
+	width={WIDTH}
+	height={HEIGHT}
+	class="border-line rounded border bg-white/90 shadow-sm"
+	onpointerdown={onBackgroundPointerDown}
+>
+	{#each model.rows as row, i (row.sliceId ?? `unsliced-${i}`)}
+		<rect
+			data-testid="minimap-row"
+			x="0"
+			y={i * cellHeight}
+			width={WIDTH}
+			height={cellHeight}
+			fill="none"
+			stroke="var(--color-line)"
+			stroke-width="0.5"
+		/>
+	{/each}
+
+	{#each model.cells as cell (`${cell.col}-${cell.row}`)}
+		<rect
+			data-testid="minimap-cell"
+			data-story-count={cell.storyCount}
+			x={cell.col * cellWidth}
+			y={cell.row * cellHeight}
+			width={cellWidth}
+			height={cellHeight}
+			fill={cell.storyCount > 0 ? 'var(--color-accent-soft)' : 'var(--color-brand-soft)'}
+		/>
+	{/each}
+
+	<rect
+		data-testid="minimap-viewport"
+		role="button"
+		aria-label="Visible area of the board; drag or use arrow keys to pan"
+		tabindex="0"
+		x={viewportRect.x}
+		y={viewportRect.y}
+		width={viewportRect.width}
+		height={viewportRect.height}
+		fill="var(--color-brand-soft)"
+		fill-opacity="0.5"
+		stroke="var(--color-accent-soft)"
+		stroke-width="1.5"
+		class="cursor-move"
+		onpointerdown={onHandlePointerDown}
+		onpointermove={onHandlePointerMove}
+		onpointerup={onHandlePointerUp}
+		onpointercancel={onHandlePointerUp}
+		onkeydown={onHandleKeyDown}
+	/>
+</svg>
