@@ -140,6 +140,51 @@ test('drag story to slice', async ({ page }) => {
 	await expect(page.locator('p.error[role="alert"]')).toContainText(`Story not found: ${storyAId}`);
 });
 
+// The two things the dialogs made possible that the inline forms could not do
+// (ADR 0011): adding a story straight into a release slice, and editing a
+// story's description at all.
+test('adds a story into a slice band and edits its description', async ({ page }) => {
+	await createMap(page, `E2E story editor ${Date.now()}`);
+	await addActivity(page, 'Search');
+	await addStep(page, 'Find a product');
+	// Three slices, and the story goes in the first: that band sits in the
+	// upper half of the board, clear of the minimap and zoom-control overlays
+	// pinned to the bottom of the panel.
+	await addSlice(page, 'Release 1');
+	await addSlice(page, 'Release 2');
+	await addSlice(page, 'Release 3');
+
+	const stepId = await firstStepId(page);
+	const sliceId = await firstSliceId(page);
+
+	await addStory(page, stepId, sliceId, 'Search by keyword');
+
+	// Straight into the slice band — never via the unsliced row.
+	await expect(
+		page.getByTestId(`cell-${stepId}-${sliceId}`).getByText('Search by keyword')
+	).toBeVisible();
+	await expect(
+		page.getByTestId(`cell-${stepId}-unsliced`).locator('[data-testid^="story-"]')
+	).toHaveCount(0);
+
+	// --- Give it a description, which no UI could reach before -------------
+	await page.getByRole('button', { name: 'Edit story Search by keyword' }).click();
+	const editor = page.getByRole('dialog');
+	await editor.getByLabel('Story title').fill('Search by keyword or SKU');
+	await editor.getByLabel('Description').fill('Matches product name and SKU.');
+	await editor.getByRole('button', { name: 'Save' }).click();
+	await expect(editor).toBeHidden();
+
+	await expect(page.getByText('Search by keyword or SKU')).toBeVisible();
+
+	// --- It has to survive a reload, not just the in-page refetch ----------
+	await page.reload();
+	await page.getByRole('button', { name: 'Edit story Search by keyword or SKU' }).click();
+	await expect(page.getByRole('dialog').getByLabel('Description')).toHaveValue(
+		'Matches product name and SKU.'
+	);
+});
+
 // Empirical check for the zoom/dnd interaction ADR 0010 discusses: drop
 // hit-testing and the drag mirror are both viewport-space, so a drag should
 // behave the same at any CSS `zoom` level as it does at 100%. This zooms out

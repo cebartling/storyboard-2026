@@ -62,23 +62,24 @@
      counterpart of their own. -->
 <dialog
 	bind:this={dialogEl}
-	class="panel text-ink m-auto w-[min(32rem,calc(100vw-2rem))] p-5 backdrop:bg-ink/40"
+	class="panel text-ink relative m-auto w-[min(32rem,calc(100vw-2rem))] p-5 backdrop:bg-ink/40"
 	aria-labelledby={titleId}
 	data-testid={testid}
 	onclose={onClose}
 	onmousedown={onMouseDown}
 	onclick={onClick}
 >
-	<div class="flex items-start justify-between gap-4">
-		<h2 id={titleId} class="text-ink text-lg font-semibold tracking-tight">{title}</h2>
-		<button
-			type="button"
-			class="btn btn-icon btn-danger-quiet rounded text-base leading-none"
-			aria-label="Close"
-			onclick={onClose}>×</button
-		>
-	</div>
+	<h2 id={titleId} class="text-ink pr-8 text-lg font-semibold tracking-tight">{title}</h2>
 	<div class="mt-4">
 		{@render children()}
 	</div>
+	<!-- Rendered last, positioned first. `showModal()` focuses the earliest
+	     focusable descendant, so a close button written at the top of the
+	     markup would take the focus every dialog's first field wants. -->
+	<button
+		type="button"
+		class="btn btn-icon btn-danger-quiet absolute top-4 right-4 rounded text-base leading-none"
+		aria-label="Close"
+		onclick={onClose}>×</button
+	>
 </dialog>

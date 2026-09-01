@@ -310,19 +310,18 @@
 						class="flex flex-col gap-2 bg-white p-1.5"
 						style="grid-column: {cell.gridColumn}; grid-row: {cell.gridRow};"
 					>
-						<StoryDndZone
-							items={cell.stories}
-							stepId={cell.stepId}
-							sliceId={cell.sliceId}
-							onMove={handleMove}
-							onEditStory={handleEditStory}
-						/>
 						<!-- Every cell, not just the unsliced band: adding straight
 						     into a release slice was impossible with the old inline
-						     form, which only existed on the unsliced row. -->
+						     form, which only existed on the unsliced row.
+
+						     Above the cards rather than below them: the board's
+						     corner overlays (minimap, zoom controls) sit over the
+						     bottom of the panel, and on a board with no overflow
+						     there is no way to scroll a control out from under
+						     them. -->
 						<button
 							type="button"
-							class="btn btn-quiet self-start px-1.5 pb-1 text-xs"
+							class="btn btn-quiet self-start px-1.5 text-xs"
 							data-testid="add-story-{cell.stepId}-{cell.sliceId ?? 'unsliced'}"
 							aria-label="Add story to {cellLabel(cell.stepId, cell.sliceId)}"
 							onclick={() =>
@@ -335,6 +334,13 @@
 						>
 							+ Add story
 						</button>
+						<StoryDndZone
+							items={cell.stories}
+							stepId={cell.stepId}
+							sliceId={cell.sliceId}
+							onMove={handleMove}
+							onEditStory={handleEditStory}
+						/>
 					</div>
 				{/each}
 			</div>
