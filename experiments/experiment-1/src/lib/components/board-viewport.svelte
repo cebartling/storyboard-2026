@@ -219,7 +219,11 @@
 			// not react to keys typed into it. `isTypingTarget` is not enough:
 			// it deliberately excludes buttons, so pressing "1" with a modal's
 			// Delete button focused would silently fit() the board underneath.
-			if (document.querySelector('dialog[open]')) return;
+			//
+			// `:modal`, not `[open]`: a dialog opened with `show()` carries the
+			// same `open` attribute but leaves the board interactive, so it has
+			// no claim on these shortcuts.
+			if (document.querySelector('dialog:modal')) return;
 			if (isTypingTarget(document.activeElement)) return;
 
 			// Leave the browser's own Ctrl/Cmd+0/-/= page zoom alone. Shift is allowed
