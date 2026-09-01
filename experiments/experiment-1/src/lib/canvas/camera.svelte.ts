@@ -56,6 +56,17 @@ export interface Camera {
 	 * world element at the new `zoom` and its scroll extents are accurate.
 	 */
 	restoreZoom(zoom: number): void;
+	/**
+	 * Consumes (returns and clears) the one-shot hint that the most recent
+	 * scroll change was a `fit()`/`resetZoom()` jump, which the DOM-facing
+	 * viewport uses to decide whether to animate that scroll with
+	 * `behavior: 'smooth'`. Interactive gestures (wheel-zoom, drag panning,
+	 * keyboard nudges) never set this — only these two "jump to a target"
+	 * actions read as a deliberate move worth animating. This module touches
+	 * no DOM itself (see the file header), so the `prefers-reduced-motion`
+	 * check happens in the caller, not here.
+	 */
+	consumeSmoothScrollHint(): boolean;
 }
 
 export function createCamera(): Camera {
@@ -66,6 +77,8 @@ export function createCamera(): Camera {
 	let worldHeight = $state(0);
 	let viewWidth = $state(0);
 	let viewHeight = $state(0);
+	/** Plain (non-reactive) one-shot flag — see `consumeSmoothScrollHint`'s doc. */
+	let smoothScrollRequested = false;
 
 	function scaledWorld(): Size {
 		return { width: worldWidth * zoom, height: worldHeight * zoom };
@@ -138,9 +151,11 @@ export function createCamera(): Camera {
 			setZoomCentered(nextZoomStep(zoom, -1));
 		},
 		resetZoom() {
+			smoothScrollRequested = true;
 			setZoomCentered(1);
 		},
 		fit() {
+			smoothScrollRequested = true;
 			setZoomCentered(fitZoom({ width: worldWidth, height: worldHeight }, viewport()));
 		},
 		zoomAt(cursorX: number, cursorY: number, dir: 1 | -1) {
@@ -151,6 +166,11 @@ export function createCamera(): Camera {
 		},
 		panTo(nextScrollX: number, nextScrollY: number) {
 			applyScroll({ scrollX: nextScrollX, scrollY: nextScrollY });
+		},
+		consumeSmoothScrollHint() {
+			const requested = smoothScrollRequested;
+			smoothScrollRequested = false;
+			return requested;
 		},
 		restoreZoom(nextZoom: number) {
 			zoom = clampZoom(nextZoom);

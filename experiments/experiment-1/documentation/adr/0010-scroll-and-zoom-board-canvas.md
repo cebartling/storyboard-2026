@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
@@ -17,11 +17,24 @@ layer, the view model, or any form action means picking how "the world" is scale
 moved, and that choice interacts with `svelte-dnd-action`, which the board already
 depends on for every drag interaction.
 
-## What we verified in `node_modules/svelte-dnd-action/dist/index.js`
+## What we verified in `node_modules/svelte-dnd-action/src/pointerAction.js`
 
 Both a `transform: translate() scale()` world layer and a CSS `zoom` world layer were
 considered. We read the installed drag library's source (not its docs) to check both
 against it.
+
+**Correction (Stage C):** an earlier draft of this section cited
+`node_modules/svelte-dnd-action/dist/index.js`. That is the package's `main`/CJS build,
+but it is not the file this project actually resolves at runtime. The package's
+`exports` map has a `"svelte"` condition (`"svelte": "./src/index.js"`), which
+`@sveltejs/vite-plugin-svelte` adds to Vite's resolve conditions — so both the dev
+server and the Vitest/Playwright test runs load the **unbundled source directly**,
+`node_modules/svelte-dnd-action/src/pointerAction.js`, not `dist/index.js`. The two
+files are equivalent in substance for the logic quoted below (same
+`originDropZoneRoot`/`appendChild` shape), so the conclusion is unaffected, but citing
+`dist/index.js` named the wrong file for what this app actually runs. Verified directly
+against `node_modules/svelte-dnd-action/package.json`'s `exports` field and by reading
+`src/pointerAction.js` itself.
 
 **Drop hit-testing is viewport-space either way.** Detection compares pointer
 coordinates (`clientX`/`clientY`) against `element.getBoundingClientRect()` — both are
@@ -33,13 +46,13 @@ held up.
 `document.body`.** `handleDragStart` computes:
 
 ```js
-var rootNode = originDropZone.closest("dialog") || originDropZone.closest("[popover]") || originDropZone.getRootNode();
-var originDropZoneRoot = rootNode.body || rootNode;
+const rootNode = originDropZone.closest("dialog") || originDropZone.closest("[popover]") || originDropZone.getRootNode();
+const originDropZoneRoot = rootNode.body || rootNode;
 ...
 originDropZoneRoot.appendChild(draggedEl);
 ```
 
-(`dist/index.js` lines ~2004–2017). With no `<dialog>` or `[popover]` ancestor and no
+(`src/pointerAction.js` lines ~525–537). With no `<dialog>` or `[popover]` ancestor and no
 shadow root in this app, `originDropZone.getRootNode()` returns the `Document`, and
 `rootNode.body` is `document.body`. The dragged mirror (`draggedEl`, `position: fixed`,
 set in `createDraggedElementFrom`) is appended as a child of `<body>` — a sibling of the
@@ -53,7 +66,8 @@ Consistent with that, the mirror's initial rect comes from
 `originalElement.getBoundingClientRect()` (post-transform/post-zoom, correct either
 way), and its drag-time movement is `draggedEl.style.transform =
 translate3d(dx, dy, 0)` where `dx`/`dy` are raw `clientX`/`clientY` deltas since drag
-start (`handleMouseMove`, line ~1691) — real, unscaled viewport pixels, applied to an
+start (`handleMouseMove`, `src/pointerAction.js` line ~240) — real, unscaled viewport
+pixels, applied to an
 element whose own containing block (`body`/`html`) is never scaled by a board-local
 wrapper. We could not find a mechanism by which the mirror would track the cursor at
 the wrong rate under either `transform: scale()` or `zoom` on a wrapper inside the
@@ -115,3 +129,14 @@ cursor-tracking discrepancy at zoom != 100% that this source reading missed, the
 hatch is the same one already in place for swapping drag libraries: migrate behind the
 existing `story-dnd-zone.svelte` seam to `@atlaskit/pragmatic-drag-and-drop`, whose drop
 detection and mirror positioning are also viewport-space by design.
+
+## Empirical confirmation (Stage B)
+
+The source reading above was also checked against real dragging, not just trusted on
+its own: with the zoom control at 75%, dragging a story card to a different step/slice
+cell was run five consecutive times in the running app, and every drop landed on the
+intended cell with the mirror tracking the cursor correctly throughout the drag. No
+cursor-tracking discrepancy at non-100% zoom was observed, confirming the "drag stays
+enabled at every zoom level" decision above rather than leaving it as an untested
+assumption. `src/routes/maps/[mapId]/page.svelte.e2e.ts`'s "drag story to slice at
+non-100% zoom" test automates the same scenario at 75% zoom.

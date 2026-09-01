@@ -70,13 +70,27 @@
 		});
 	}
 
+	function prefersReducedMotion(): boolean {
+		return (
+			typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+		);
+	}
+
 	// Writes the camera's scroll back onto the element when it changed
 	// programmatically (zoomAt, panTo, keyboard shortcuts) rather than by the
 	// user scrolling. Suppressed briefly afterwards so the resulting native
 	// `scroll` event does not bounce back into `setObservedScroll`.
+	//
+	// `fit()`/`resetZoom()` flag their jump as worth animating (see
+	// `consumeSmoothScrollHint`'s doc) — honoured here as `behavior: 'smooth'`
+	// unless the user has asked for reduced motion. Every other camera-driven
+	// scroll (wheel-zoom, drag panning, minimap drag, keyboard nudges) stays
+	// an instant jump: those already track a live gesture, so animating them
+	// would only add lag.
 	$effect(() => {
 		const targetX = camera.scrollX;
 		const targetY = camera.scrollY;
+		const smooth = camera.consumeSmoothScrollHint();
 		if (!viewportEl) return;
 		if (
 			Math.abs(viewportEl.scrollLeft - targetX) < 1 &&
@@ -85,8 +99,11 @@
 			return;
 		}
 		suppressScrollSync = true;
-		viewportEl.scrollLeft = targetX;
-		viewportEl.scrollTop = targetY;
+		viewportEl.scrollTo({
+			left: targetX,
+			top: targetY,
+			behavior: smooth && !prefersReducedMotion() ? 'smooth' : 'auto'
+		});
 		requestAnimationFrame(() => {
 			suppressScrollSync = false;
 		});
@@ -209,6 +226,16 @@
 	});
 </script>
 
+<!--
+	`region` is normally non-interactive, but this element is the native
+	scroll container for keyboard panning (arrows/PageUp/PageDown/Home/End): a
+	scroll container must be focusable to receive those keys at all, and
+	`role="region"` with an `aria-label` is the correct landmark role for "the
+	board canvas", not a stand-in for a button/application role. There is no
+	non-tabindex way to make a scrollable div keyboard-focusable, so this
+	warning is unavoidable rather than a sign the markup should change.
+-->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
 	bind:this={viewportEl}
 	data-testid="board-viewport"
