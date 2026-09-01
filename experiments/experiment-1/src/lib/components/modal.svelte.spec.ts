@@ -22,12 +22,16 @@ function dialogEl(): HTMLDialogElement {
 	return page.getByTestId('test-modal').element() as HTMLDialogElement;
 }
 
-// A body shaped like the real dialogs: a field first, a destructive button
-// after it. Both of the focus guarantees below are invisible with a body that
-// has no form controls.
+// A body shaped like the real dialogs: the hidden id field every editor
+// carries, then the visible field, then a destructive button. Both of the
+// focus guarantees below are invisible with a body that has no form controls,
+// and the hidden input is not decoration — it is what `board-dialogs.svelte`
+// actually renders first in six of the eight dialogs, and a selector that
+// matches it focuses nothing.
 const formSnippet = createRawSnippet(() => ({
 	render: () => `
 		<form>
+			<input type="hidden" name="storyId" value="st-1" />
 			<input name="title" data-testid="modal-field" />
 			<button type="submit" data-testid="modal-delete">Delete</button>
 		</form>
@@ -82,7 +86,7 @@ describe('Modal', () => {
 
 		// Close must come before a dialog's Delete, so tabbing towards it never
 		// parks focus on the destructive control on the way.
-		const focusables = [...dialogEl().querySelectorAll('button, input')].map(
+		const focusables = [...dialogEl().querySelectorAll('button, input:not([type="hidden"])')].map(
 			(el) => el.getAttribute('aria-label') ?? el.getAttribute('data-testid')
 		);
 		expect(focusables).toEqual(['Close', 'modal-field', 'modal-delete']);

@@ -46,7 +46,17 @@
 			// dialog's Delete rather than after. Focusing the first field
 			// explicitly buys the natural tab order without giving up the
 			// sensible starting point.
-			dialogEl.querySelector<HTMLElement>('input, textarea, select')?.focus();
+			//
+			// Hidden and disabled controls have to be excluded, not skipped as
+			// a nicety: six of the eight dialogs open with the hidden id input
+			// their action needs, `focus()` on one is a no-op, and the effect
+			// would silently leave focus on Close — the exact outcome this
+			// line exists to prevent.
+			dialogEl
+				.querySelector<HTMLElement>(
+					'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled])'
+				)
+				?.focus();
 		} else if (!open && dialogEl.open) dialogEl.close();
 	});
 
