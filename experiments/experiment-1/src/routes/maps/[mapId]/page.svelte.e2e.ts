@@ -119,10 +119,13 @@ test('drag story to slice', async ({ page }) => {
 	// The restored camera (ADR 0010) leaves the board scrolled where it was,
 	// which can put the slice band underneath the sticky activity/step
 	// headers. A pointerdown there lands on the header, not the card, and
-	// `dragTo`'s `scrollIntoViewIfNeeded` cannot help: it scrolls the card to
-	// the nearest edge, which is exactly where the sticky headers sit.
-	// Fitting the board to the window removes the overflow altogether, so the
-	// drag below starts on the card.
+	// `dragTo`'s `scrollIntoViewIfNeeded` cannot help: it scrolls each card to
+	// the nearest edge, which is exactly where the headers sit, and scrolling
+	// the second endpoint can undo the first. (The `scroll-margin-top` on
+	// `.board-cell button` in app.css covers the focus case, not this one — it
+	// is deliberately not applied to cards, since it would move the very
+	// scroll positions this choreography depends on.) Fitting the board
+	// removes the overflow, so both endpoints stay put.
 	await page.getByTestId('zoom-fit').click();
 
 	// A failed direct drag action must explain the failure instead of silently

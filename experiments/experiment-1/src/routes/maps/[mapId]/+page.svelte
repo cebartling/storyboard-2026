@@ -92,28 +92,55 @@
 	});
 
 	// Row 1 (activity headers) and row 2 (step headers) are both `sticky
-	// top-*` so column context survives vertical scrolling, but row 1's
-	// height is content-dependent (see ADR 0010: track sizes stay
-	// `minmax(...)`, so it cannot be known statically). Row 2's sticky
-	// offset is measured from row 1's rendered height rather than
-	// hard-coded, so it settles directly beneath row 1 instead of
-	// overlapping it.
+	// top-*` so column context survives vertical scrolling, but their heights
+	// are content-dependent (see ADR 0010: track sizes stay `minmax(...)`, so
+	// they cannot be known statically). Row 2's sticky offset is measured from
+	// row 1's rendered height rather than hard-coded, so it settles directly
+	// beneath row 1 instead of overlapping it; both together give the band the
+	// content rows have to stay clear of when something is scrolled into view.
 	let activityHeaderEls: (HTMLDivElement | undefined)[] = $state([]);
 	let activityHeaderHeight = $state(0);
+	let stepHeaderEls: (HTMLDivElement | undefined)[] = $state([]);
+	let stepHeaderHeight = $state(0);
 
-	$effect(() => {
-		const els = activityHeaderEls.filter((el): el is HTMLDivElement => el !== undefined);
-		if (els.length === 0) {
-			activityHeaderHeight = 0;
-			return;
-		}
-		const observer = new ResizeObserver(() => {
-			activityHeaderHeight = Math.max(...els.map((el) => el.offsetHeight));
+	/**
+	 * Keeps `set` fed with the tallest of `getEls()`. Called once per sticky
+	 * row during initialisation, so the `$effect` it creates is a normal
+	 * component effect.
+	 */
+	function trackMaxHeight(
+		getEls: () => (HTMLDivElement | undefined)[],
+		set: (height: number) => void
+	) {
+		$effect(() => {
+			const els = getEls().filter((el): el is HTMLDivElement => el !== undefined);
+			if (els.length === 0) {
+				set(0);
+				return;
+			}
+			const measure = () => set(Math.max(...els.map((el) => el.offsetHeight)));
+			const observer = new ResizeObserver(measure);
+			els.forEach((el) => observer.observe(el));
+			measure();
+			return () => observer.disconnect();
 		});
-		els.forEach((el) => observer.observe(el));
-		activityHeaderHeight = Math.max(...els.map((el) => el.offsetHeight));
-		return () => observer.disconnect();
-	});
+	}
+
+	trackMaxHeight(
+		() => activityHeaderEls,
+		(h) => (activityHeaderHeight = h)
+	);
+	trackMaxHeight(
+		() => stepHeaderEls,
+		(h) => (stepHeaderHeight = h)
+	);
+
+	// Published to the grid as a custom property and consumed by `.board-cell`
+	// in app.css: the sticky rows float over the content rows, so a card or a
+	// button scrolled into view — by `scrollIntoView`, by the browser
+	// following keyboard focus, or by a test harness — has to stop below them
+	// instead of at the container's edge, where the headers are.
+	const stickyHeaderHeight = $derived(activityHeaderHeight + stepHeaderHeight);
 
 	// The add-story dialog tells the user which cell it is adding to; the cell
 	// itself only carries ids.
@@ -210,7 +237,7 @@
 				data-testid="board"
 				style="grid-template-columns: max-content repeat({data.board
 					.totalColumns}, minmax(240px, 1fr)); grid-template-rows: auto auto repeat({data.board.rows
-					.length}, minmax(140px, auto));"
+					.length}, minmax(140px, auto)); --board-sticky-header-height: {stickyHeaderHeight}px;"
 			>
 				<div
 					class="sticky top-0 left-0 z-30 bg-surface"
@@ -262,8 +289,9 @@
 					</p>
 				{/if}
 
-				{#each data.board.columns as column (column.stepId)}
+				{#each data.board.columns as column, i (column.stepId)}
 					<div
+						bind:this={stepHeaderEls[i]}
 						class="sticky z-20 flex flex-wrap items-center gap-2 bg-surface p-3"
 						data-testid="step-{column.stepId}"
 						style="grid-column: {column.gridColumn}; grid-row: 2; top: {activityHeaderHeight}px;"
@@ -307,7 +335,7 @@
 
 				{#each data.board.cells as cell (`${cell.stepId}-${cell.sliceId ?? 'unsliced'}`)}
 					<div
-						class="flex flex-col gap-2 bg-white p-1.5"
+						class="board-cell flex flex-col gap-2 bg-white p-1.5"
 						style="grid-column: {cell.gridColumn}; grid-row: {cell.gridRow};"
 					>
 						<!-- Every cell, not just the unsliced band: adding straight
