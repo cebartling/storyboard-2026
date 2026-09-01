@@ -10,6 +10,7 @@ import {
 	deleteSlice,
 	deleteStep,
 	deleteStory,
+	editStory,
 	loadMap,
 	moveStory,
 	renameActivity,
@@ -132,6 +133,26 @@ export const actions: Actions = {
 			const sliceId =
 				typeof sliceIdRaw === 'string' && sliceIdRaw.length > 0 ? (sliceIdRaw as SliceId) : null;
 			await addStory(deps.storyMapRepository, params.mapId as MapId, stepId, title, { sliceId });
+		});
+	},
+
+	editStory: async ({ request, params }) => {
+		const form = await request.formData();
+		return runAction('editStory', async () => {
+			const storyId = requireString(form.get('storyId'), 'storyId') as StoryId;
+			const title = requireString(form.get('title'), 'Story title');
+			// A description is optional, and clearing it is a real edit: an
+			// empty textarea must write `null`, not leave the old text in
+			// place. `undefined` would mean "don't touch it" to the domain.
+			const descriptionRaw = form.get('description');
+			const description =
+				typeof descriptionRaw === 'string' && descriptionRaw.trim().length > 0
+					? descriptionRaw.trim()
+					: null;
+			await editStory(deps.storyMapRepository, params.mapId as MapId, storyId, {
+				title,
+				description
+			});
 		});
 	},
 
