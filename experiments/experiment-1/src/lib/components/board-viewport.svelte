@@ -23,9 +23,13 @@
 		return target instanceof Element && target.closest(INTERACTIVE_SELECTOR) !== null;
 	}
 
+	// Deliberately not BUTTON: a button does not consume +/-/0/1, and the zoom
+	// controls advertise those very keys with `aria-keyshortcuts`, so clicking a
+	// zoom button must not silence the shortcut it just announced. Space is the
+	// exception and is guarded at its own branch below.
 	function isTypingTarget(el: Element | null): boolean {
 		if (!el) return false;
-		if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(el.tagName)) return true;
+		if (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) return true;
 		return el instanceof HTMLElement && el.isContentEditable;
 	}
 
@@ -218,6 +222,9 @@
 			if (e.ctrlKey || e.metaKey || e.altKey) return;
 
 			if (e.code === 'Space') {
+				// Space activates a focused button; hijacking it for pan-mode here
+				// would swallow that activation.
+				if (document.activeElement instanceof HTMLButtonElement) return;
 				if (!e.repeat) spaceHeld = true;
 				e.preventDefault();
 				return;

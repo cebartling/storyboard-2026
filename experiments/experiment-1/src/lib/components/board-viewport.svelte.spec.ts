@@ -294,6 +294,30 @@ describe('BoardViewport', () => {
 		expect(camera.zoom).toBeLessThan(1);
 	});
 
+	it('keeps the zoom shortcuts live while a button has focus, but not Space', async () => {
+		const camera = createCamera();
+		camera.setWorldSize(4000, 4000);
+		camera.setViewportSize(400, 400);
+		render(BoardViewport, { camera, children: worldSnippet });
+
+		// Clicking a zoom button leaves it focused; the keys it advertises with
+		// aria-keyshortcuts have to keep working from there.
+		const button = page.getByTestId('inner-button').element() as HTMLButtonElement;
+		button.focus();
+		expect(document.activeElement).toBe(button);
+
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: '0' }));
+		expect(camera.zoom).toBe(1);
+
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: '+' }));
+		expect(camera.zoom).toBe(1.25);
+
+		// Space is the button's own activation key, so pan mode must not take it.
+		const space = new KeyboardEvent('keydown', { code: 'Space', cancelable: true });
+		window.dispatchEvent(space);
+		expect(space.defaultPrevented).toBe(false);
+	});
+
 	it('leaves the browser page-zoom shortcuts alone when a modifier is held', async () => {
 		const camera = createCamera();
 		camera.setWorldSize(4000, 4000);
