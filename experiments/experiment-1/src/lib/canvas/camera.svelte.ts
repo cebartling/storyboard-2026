@@ -156,7 +156,7 @@ export function createCamera(): Camera {
 		},
 		fit() {
 			smoothScrollRequested = true;
-			setZoomCentered(fitZoom({ width: worldWidth, height: worldHeight }, viewport()));
+			setZoomCentered(fitZoom({ width: worldWidth, height: worldHeight }, viewport(), zoom));
 		},
 		zoomAt(cursorX: number, cursorY: number, dir: 1 | -1) {
 			setZoom(nextZoomStep(zoom, dir), { x: cursorX, y: cursorY });

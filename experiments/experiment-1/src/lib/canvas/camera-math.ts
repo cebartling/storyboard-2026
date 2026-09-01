@@ -53,12 +53,27 @@ export function nextZoomStep(z: number, dir: 1 | -1): number {
  * Zoom level that fits `world` entirely inside `viewport`, clamped to the
  * supported zoom range. Guards against a zero-sized world (e.g. before the
  * board has laid out) by returning 100%.
+ *
+ * `zoom` is the zoom the world was measured at, and it is needed because the
+ * board's width is elastic: the world element stretches to at least the
+ * container's width, and its grid columns (`minmax(240px, 1fr)`) stretch with
+ * it. So a world that does not overflow horizontally reports a width of
+ * exactly `viewport.width / zoom` — stretch-sized, not content-sized — and its
+ * width ratio degenerates to the current zoom, which would pin `fit()` to
+ * "never zoom in". Only an overflowing width is a real content measurement, so
+ * only then does width constrain the fit. Height is always content-driven
+ * (the rows are `auto`), so it always counts.
  */
-export function fitZoom(world: Size, viewport: Size): number {
+export function fitZoom(world: Size, viewport: Size, zoom: number): number {
 	if (world.width === 0 || world.height === 0) {
 		return 1;
 	}
-	return clampZoom(Math.min(viewport.width / world.width, viewport.height / world.height));
+	const ratios = [viewport.height / world.height];
+	// The 1px slack absorbs sub-pixel rounding in the measured box.
+	if (world.width * zoom > viewport.width + 1) {
+		ratios.push(viewport.width / world.width);
+	}
+	return clampZoom(Math.min(...ratios));
 }
 
 /**

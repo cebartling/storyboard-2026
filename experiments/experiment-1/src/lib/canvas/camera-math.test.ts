@@ -53,20 +53,42 @@ describe('nextZoomStep', () => {
 
 describe('fitZoom', () => {
 	it('fits a wide world by its width', () => {
-		expect(fitZoom({ width: 2000, height: 500 }, { width: 1000, height: 1000 })).toBeCloseTo(0.5);
+		expect(fitZoom({ width: 2000, height: 500 }, { width: 1000, height: 1000 }, 1)).toBeCloseTo(
+			0.5
+		);
 	});
 
 	it('fits a tall world by its height', () => {
-		expect(fitZoom({ width: 500, height: 2000 }, { width: 1000, height: 1000 })).toBeCloseTo(0.5);
+		expect(fitZoom({ width: 500, height: 2000 }, { width: 1000, height: 1000 }, 1)).toBeCloseTo(
+			0.5
+		);
 	});
 
 	it('clamps the fit result into the supported zoom range', () => {
-		expect(fitZoom({ width: 100, height: 100 }, { width: 1000, height: 1000 })).toBe(MAX_ZOOM);
+		expect(fitZoom({ width: 100, height: 100 }, { width: 1000, height: 1000 }, 1)).toBe(MAX_ZOOM);
 	});
 
 	it('returns 100% when a world dimension is zero, guarding divide-by-zero', () => {
-		expect(fitZoom({ width: 0, height: 500 }, { width: 1000, height: 1000 })).toBe(1);
-		expect(fitZoom({ width: 500, height: 0 }, { width: 1000, height: 1000 })).toBe(1);
+		expect(fitZoom({ width: 0, height: 500 }, { width: 1000, height: 1000 }, 1)).toBe(1);
+		expect(fitZoom({ width: 500, height: 0 }, { width: 1000, height: 1000 }, 1)).toBe(1);
+	});
+
+	it('zooms back in when a stretch-sized world is viewed below 100%', () => {
+		// Zoomed to 50% on a board that fits: the world element stretches to the
+		// container, so it measures 2000 unzoomed for a 1000px viewport and its
+		// width ratio is exactly the current zoom. Height (500) is the real
+		// constraint and there is room to zoom in, so fit() must not stay at 0.5.
+		expect(fitZoom({ width: 2000, height: 500 }, { width: 1000, height: 1000 }, 0.5)).toBeCloseTo(
+			2
+		);
+	});
+
+	it('still lets a genuinely overflowing width constrain the fit', () => {
+		// Same 0.5 zoom, but the world is wider than the container even scaled
+		// down (3000 * 0.5 = 1500 > 1000), so the width is content-driven.
+		expect(fitZoom({ width: 3000, height: 500 }, { width: 1000, height: 1000 }, 0.5)).toBeCloseTo(
+			1 / 3
+		);
 	});
 });
 
