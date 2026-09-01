@@ -221,11 +221,21 @@
 			if (e.code === 'Space') spaceHeld = false;
 		}
 
+		// A keyup that lands in another window never reaches us, so space would stay
+		// stuck down and keep stealing pointerdown from the cards underneath.
+		function clearSpace() {
+			spaceHeld = false;
+		}
+
 		window.addEventListener('keydown', onKeyDown);
 		window.addEventListener('keyup', onKeyUp);
+		window.addEventListener('blur', clearSpace);
+		document.addEventListener('visibilitychange', clearSpace);
 		return () => {
 			window.removeEventListener('keydown', onKeyDown);
 			window.removeEventListener('keyup', onKeyUp);
+			window.removeEventListener('blur', clearSpace);
+			document.removeEventListener('visibilitychange', clearSpace);
 		};
 	});
 </script>

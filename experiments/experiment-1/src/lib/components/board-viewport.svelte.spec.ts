@@ -172,6 +172,45 @@ describe('BoardViewport', () => {
 		window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space' }));
 	});
 
+	it('releases a held space when the window loses focus, so cards stay draggable', async () => {
+		const camera = createCamera();
+		render(BoardViewport, { camera, children: worldSnippet });
+
+		const viewportEl = page.getByTestId('board-viewport').element() as HTMLElement;
+		viewportEl.style.width = '400px';
+		viewportEl.style.height = '400px';
+		viewportEl.style.overflow = 'auto';
+		viewportEl.setPointerCapture = () => {};
+		viewportEl.releasePointerCapture = () => {};
+
+		// Space goes down here, but the keyup lands in whatever window took focus.
+		window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));
+		window.dispatchEvent(new Event('blur'));
+
+		const button = page.getByTestId('inner-button').element() as HTMLElement;
+		button.dispatchEvent(
+			new PointerEvent('pointerdown', {
+				pointerId: 7,
+				button: 0,
+				clientX: 300,
+				clientY: 300,
+				bubbles: true
+			})
+		);
+		viewportEl.dispatchEvent(
+			new PointerEvent('pointermove', {
+				pointerId: 7,
+				button: 0,
+				clientX: 260,
+				clientY: 280,
+				bubbles: true
+			})
+		);
+
+		expect(viewportEl.scrollLeft).toBe(0);
+		expect(viewportEl.scrollTop).toBe(0);
+	});
+
 	it('keyboard "0" resets zoom and "1" fits, reaching the camera', async () => {
 		const camera = createCamera();
 		camera.setWorldSize(4000, 4000);
