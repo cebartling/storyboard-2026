@@ -239,6 +239,71 @@ test('a failed dialog submission keeps the dialog open and owns the error', asyn
 	await expect(editor.locator('p.error')).toHaveCount(0);
 });
 
+// The other half of the submit policy's failure path: a result that arrives
+// after the user has already closed the dialog. There is nowhere in a closed
+// dialog to show a message, so it has to reach the board's banner instead —
+// without that routing the mutation fails in total silence, which is worst
+// exactly here, on a rename or delete the user believes succeeded.
+//
+// The race is the whole point, so `page.route` holds the action's response
+// open long enough to close the dialog while the request is still in flight.
+// The hold is insurance rather than the mechanism — the natural round trip
+// already outlasts the keypress here, and the test passes with the hold set to
+// zero — but without it a fast enough response would land while the dialog was
+// still open, which is the *other* test's scenario, and this one would fail
+// looking flaky rather than wrong.
+test('a failure arriving after the dialog closed lands on the board', async ({ page }) => {
+	await createMap(page, `E2E late failure ${Date.now()}`);
+	await addActivity(page, 'Search');
+	await addStep(page, 'Find a product');
+	await addSlice(page, 'Release 1');
+	await addSlice(page, 'Release 2');
+	await addSlice(page, 'Release 3');
+
+	const stepId = await firstStepId(page);
+	const sliceId = await firstSliceId(page);
+	await addStory(page, stepId, sliceId, 'Doomed story');
+
+	await page.getByRole('button', { name: 'Edit story Doomed story' }).click();
+	const editor = page.getByRole('dialog');
+	const storyId = await editor.locator('input[name="storyId"]').first().inputValue();
+
+	// Same stale-client setup as the test above: delete behind the rendered
+	// page so the save is guaranteed to fail.
+	await page.evaluate(async (id) => {
+		const body = new FormData();
+		body.set('storyId', id);
+		await fetch('?/deleteStory', { method: 'POST', body });
+	}, storyId);
+
+	// Comfortably longer than the close below takes, so the ordering does not
+	// depend on how fast this machine is.
+	const HOLD_MS = 1500;
+	await page.route(
+		(url) => url.search.includes('/editStory'),
+		async (route) => {
+			await new Promise((resolve) => setTimeout(resolve, HOLD_MS));
+			await route.continue();
+		}
+	);
+
+	await editor.getByLabel('Story title').fill('Renamed after deletion');
+	await editor.getByRole('button', { name: 'Save' }).click();
+
+	// Escape while the request is still in flight. `submitting` disables the
+	// dialog's buttons but never blocks Escape, so this is a real thing a user
+	// does when a save feels slow.
+	await expect(editor.getByRole('button', { name: 'Save' })).toBeDisabled();
+	await page.keyboard.press('Escape');
+	await expect(editor).toBeHidden();
+
+	// When the response finally lands, the message has to surface on the board
+	// rather than into the closed dialog, where nobody would read it.
+	await expect(page.locator('main > div > p.error[role="alert"]')).toContainText(
+		`Story not found: ${storyId}`
+	);
+});
+
 // Empirical check for the zoom/dnd interaction ADR 0010 discusses: drop
 // hit-testing and the drag mirror are both viewport-space, so a drag should
 // behave the same at any CSS `zoom` level as it does at 100%. This zooms out

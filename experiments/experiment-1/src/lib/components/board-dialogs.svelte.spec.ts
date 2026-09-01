@@ -13,8 +13,9 @@ import BoardDialogs, { type BoardDialog, actionError } from './board-dialogs.sve
 // failed dialog submission…" drives the failure path (the dialog stays open,
 // owns its message, and does not echo it into the board's banner). The
 // late-failure route through `onLateFailure` — a result arriving after the
-// user closed the dialog — is the one branch nothing exercises yet; it needs
-// a delayed response to trigger deterministically.
+// user closed the dialog — is covered by "a failure arriving after the dialog
+// closed…", which holds the response open with `page.route` to keep the race
+// from depending on machine speed.
 async function open(dialog: BoardDialog) {
 	render(BoardDialogs, { dialog, onClose: () => {}, onLateFailure: () => {} });
 	await tick();
