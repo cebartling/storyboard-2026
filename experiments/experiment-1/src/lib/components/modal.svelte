@@ -1,0 +1,86 @@
+<script lang="ts">
+	// The one modal primitive (ADR 0011). A thin wrapper over the native
+	// `<dialog>` element: `showModal()` already gives the top layer, the
+	// `::backdrop`, a focus trap, Escape-to-close, inerting of the rest of the
+	// document, and focus return to the trigger — so none of that is
+	// reimplemented here. This component owns no form markup; each caller
+	// renders its own form as the child snippet.
+	//
+	// `open` is a plain prop, not `$bindable`: the parent's dialog state is the
+	// single source of truth and this effect only mirrors it onto the
+	// imperative element. Every close path (Escape, the × button, a backdrop
+	// click, a programmatic close) funnels through the element's native `close`
+	// event into `onClose`, so the two can never drift apart.
+	import type { Snippet } from 'svelte';
+
+	let {
+		open,
+		title,
+		testid,
+		onClose,
+		children
+	}: {
+		open: boolean;
+		title: string;
+		/** Applied as `data-testid` on the dialog, for e2e scoping. */
+		testid?: string;
+		/** Must be idempotent: a programmatic `close()` fires `close` too. */
+		onClose: () => void;
+		children: Snippet;
+	} = $props();
+
+	let dialogEl: HTMLDialogElement | undefined = $state();
+	const titleId = $props.id();
+
+	$effect(() => {
+		if (!dialogEl) return;
+		// The `.open` guards are not defensive padding: `showModal()` on an
+		// already-open dialog throws InvalidStateError.
+		if (open && !dialogEl.open) dialogEl.showModal();
+		else if (!open && dialogEl.open) dialogEl.close();
+	});
+
+	// Backdrop click. The backdrop's hit area belongs to the <dialog> box
+	// itself; all content lives in a child wrapper, so `e.target === dialogEl`
+	// means "outside the content". Tracking mousedown as well as click stops a
+	// text-selection drag that happens to end over the backdrop from closing
+	// the modal.
+	let pressedBackdrop = false;
+
+	function onMouseDown(e: MouseEvent) {
+		pressedBackdrop = e.target === dialogEl;
+	}
+
+	function onClick(e: MouseEvent) {
+		if (pressedBackdrop && e.target === dialogEl) onClose();
+		pressedBackdrop = false;
+	}
+</script>
+
+<!-- Escape is the keyboard equivalent of the backdrop click below, and the
+     browser provides it natively, so these pointer handlers need no keyboard
+     counterpart of their own. -->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<dialog
+	bind:this={dialogEl}
+	class="panel text-ink m-auto w-[min(32rem,calc(100vw-2rem))] p-5 backdrop:bg-ink/40"
+	aria-labelledby={titleId}
+	data-testid={testid}
+	onclose={onClose}
+	onmousedown={onMouseDown}
+	onclick={onClick}
+>
+	<div class="flex items-start justify-between gap-4">
+		<h2 id={titleId} class="text-ink text-lg font-semibold tracking-tight">{title}</h2>
+		<button
+			type="button"
+			class="btn btn-icon btn-danger-quiet rounded text-base leading-none"
+			aria-label="Close"
+			onclick={onClose}>×</button
+		>
+	</div>
+	<div class="mt-4">
+		{@render children()}
+	</div>
+</dialog>
