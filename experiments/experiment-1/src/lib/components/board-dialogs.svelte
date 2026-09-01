@@ -72,12 +72,18 @@
 		error = null;
 		submitting = true;
 		return async ({ result }) => {
-			submitting = false;
+			// `submitting` disables every button in the dialog, and it is the
+			// only double-submit guard here — so it is cleared per path, never
+			// up front. Clearing it before the `invalidateAll()` below would
+			// re-enable Save and Delete for a whole round trip while the dialog
+			// is still open, which is long enough to click twice.
 			if (result.type === 'failure') {
+				submitting = false;
 				error = actionError(result.data) ?? 'Something went wrong. Please try again.';
 				return;
 			}
 			if (result.type === 'error') {
+				submitting = false;
 				error = 'Something went wrong. Please try again.';
 				return;
 			}
@@ -85,6 +91,7 @@
 			// already sitting on up-to-date content.
 			await invalidateAll();
 			onClose();
+			submitting = false;
 		};
 	};
 </script>
