@@ -162,6 +162,58 @@ test('adds a story into a slice band and edits its description', async ({ page }
 
 	await addStory(page, stepId, sliceId, 'Search by keyword');
 
+	// The step header's editor is a pencil, like the story card's: its label
+	// lives in the accessible name, so the header stays readable as the step
+	// name — not as the name plus a wide "Edit step" button.
+	const editStep = page.getByTestId(`step-${stepId}`).getByRole('button', { name: 'Edit step' });
+	await expect(editStep.locator('svg.lucide-pencil')).toBeVisible();
+
+	// The icon's label on hover (ADR 0013). The short timeout is the assertion:
+	// `title` could not have arrived inside it, which is the whole reason the
+	// tooltip is ours. It resolves as a body-level popover, not a descendant of
+	// the button, so it escapes the zoomed and clipped board world.
+	await editStep.hover();
+	await expect(page.locator('[data-tooltip]:visible')).toHaveText('Edit step', { timeout: 500 });
+
+	// The activity header above it is the same control at a different altitude,
+	// so it reads the same way.
+	const editActivity = page.getByRole('button', { name: 'Edit activity' });
+	await expect(editActivity.locator('svg.lucide-pencil')).toBeVisible();
+
+	await editActivity.hover();
+	await expect(page.locator('[data-tooltip]:visible')).toHaveText('Edit activity', {
+		timeout: 500
+	});
+
+	// And the row labels down the left edge, the last of the board's three
+	// editable headers. Scoped to one row: there is a slice button per band.
+	const editSlice = page
+		.getByTestId(`row-label-${sliceId}`)
+		.getByRole('button', { name: 'Edit slice' });
+	await expect(editSlice.locator('svg.lucide-pencil')).toBeVisible();
+
+	await editSlice.hover();
+	await expect(page.locator('[data-tooltip]:visible')).toHaveText('Edit slice', { timeout: 500 });
+
+	// The add triggers keep their words: unlike the edit pencils, which act on
+	// the thing they sit on, "add" has no target to read off the surroundings —
+	// a bare plus in a cell and a bare plus in an activity header would be the
+	// same mark for two different things. They take the icon and the text, and
+	// no tooltip, the label being right there.
+	const addStepTrigger = page.getByRole('button', { name: 'Add step' });
+	await expect(addStepTrigger.locator('svg.lucide-plus')).toBeVisible();
+	await expect(addStepTrigger).toHaveText('Add step');
+
+	// The story trigger's accessible name still names its cell, which is why it
+	// is asserted separately from the visible text.
+	const addStoryTrigger = page.getByTestId(`add-story-${stepId}-${sliceId}`);
+	await expect(addStoryTrigger.locator('svg.lucide-plus')).toBeVisible();
+	await expect(addStoryTrigger).toHaveText('Add story');
+	await expect(addStoryTrigger).toHaveAttribute(
+		'aria-label',
+		`Add story to Find a product · Release 1`
+	);
+
 	// Straight into the slice band — never via the unsliced row.
 	await expect(
 		page.getByTestId(`cell-${stepId}-${sliceId}`).getByText('Search by keyword')

@@ -142,4 +142,15 @@ describe('Modal', () => {
 		dialog.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 		expect(onClose).toHaveBeenCalledOnce();
 	});
+
+	// Same reason as the board's other icon buttons: an SVG the stylesheet can
+	// size and stroke, not a `×` whose weight depends on the fallback font.
+	it('draws its close affordance as the x icon', async () => {
+		renderModal(true);
+
+		const button = page.getByRole('button', { name: 'Close' }).element() as HTMLElement;
+
+		expect(button.querySelector('svg.lucide-x')).not.toBeNull();
+		expect(button.textContent?.trim()).toBe('');
+	});
 });

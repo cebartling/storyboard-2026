@@ -15,6 +15,9 @@
 	import { createCamera } from '$lib/canvas/camera.svelte';
 	import { loadCameraState, saveCameraState } from '$lib/canvas/camera-storage';
 	import { toMinimapModel } from '$lib/canvas/minimap-model';
+	import Pencil from '@lucide/svelte/icons/pencil';
+	import Plus from '@lucide/svelte/icons/plus';
+	import { tooltip } from '$lib/actions/tooltip';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -263,7 +266,9 @@
 							</h2>
 							<button
 								type="button"
-								class="btn btn-quiet px-1.5 text-xs"
+								class="btn btn-icon btn-quiet"
+								aria-label="Edit activity"
+								use:tooltip={'Edit activity'}
 								onclick={() =>
 									(dialog = {
 										kind: 'editActivity',
@@ -271,12 +276,12 @@
 										name: activityHeader.name
 									})}
 							>
-								Edit activity
+								<Pencil class="size-3.5" />
 							</button>
 						</div>
 						<button
 							type="button"
-							class="btn btn-quiet self-start px-1.5 text-xs"
+							class="btn btn-quiet self-start px-2 text-xs"
 							onclick={() =>
 								(dialog = {
 									kind: 'addStep',
@@ -284,6 +289,7 @@
 									activityName: activityHeader.name
 								})}
 						>
+							<Plus class="size-3.5" />
 							Add step
 						</button>
 					</div>
@@ -303,13 +309,18 @@
 						style="grid-column: {column.gridColumn}; grid-row: 2; top: {activityHeaderHeight}px;"
 					>
 						<span class="text-ink flex-1 text-sm font-medium break-words">{column.name}</span>
+						<!-- Same pencil as the story card: the header is mostly the step
+						     name, and a full-width text button crowded it out. `.btn-icon`
+						     holds the WCAG 2.2 24x24 target. -->
 						<button
 							type="button"
-							class="btn btn-quiet px-1.5 text-xs"
+							class="btn btn-icon btn-quiet"
+							aria-label="Edit step"
+							use:tooltip={'Edit step'}
 							onclick={() =>
 								(dialog = { kind: 'editStep', stepId: column.stepId, name: column.name })}
 						>
-							Edit step
+							<Pencil class="size-3.5" />
 						</button>
 					</div>
 				{/each}
@@ -324,11 +335,13 @@
 							<span class="text-ink text-sm font-semibold break-words">{row.name}</span>
 							<button
 								type="button"
-								class="btn btn-quiet self-start px-1.5 text-xs"
+								class="btn btn-icon btn-quiet self-start"
+								aria-label="Edit slice"
+								use:tooltip={'Edit slice'}
 								onclick={() =>
 									(dialog = { kind: 'editSlice', sliceId: row.sliceId!, name: row.name })}
 							>
-								Edit slice
+								<Pencil class="size-3.5" />
 							</button>
 						{:else}
 							<span
@@ -355,7 +368,7 @@
 						     them. -->
 						<button
 							type="button"
-							class="btn btn-quiet self-start px-1.5 text-xs"
+							class="btn btn-quiet self-start px-2 text-xs"
 							data-testid="add-story-{cell.stepId}-{cell.sliceId ?? 'unsliced'}"
 							aria-label="Add story to {cellLabel(cell.stepId, cell.sliceId)}"
 							onclick={() =>
@@ -366,7 +379,8 @@
 									scopeLabel: cellLabel(cell.stepId, cell.sliceId)
 								})}
 						>
-							+ Add story
+							<Plus class="size-3.5" />
+							Add story
 						</button>
 						<StoryDndZone
 							items={cell.stories}

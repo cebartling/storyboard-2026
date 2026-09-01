@@ -75,7 +75,13 @@ self-migrate. E2e runs against a throwaway `e2e.db` and never touch `local.db`.
   `.field-label`, `.error`) live in `src/app.css`; everything else is utilities in the
   markup. Components have no `<style>` blocks — add utilities or extend `src/app.css`
   instead. The board's `grid-column`/`grid-row` inline styles stay inline: they are data
-  from `board-view-model.ts`, not design.
+  from `board-view-model.ts`, not design. Icons come from `@lucide/svelte` (ADR 0012),
+  imported one at a time (`@lucide/svelte/icons/pencil`) and sized with a `size-*` class —
+  never typed in as Unicode glyphs, and never labelled themselves: the `aria-label` stays
+  on the button. An icon-only button also takes
+  `use:tooltip={'…'}` (`src/lib/actions/tooltip.ts`, ADR 0013) rather than `title`, whose
+  ~1s delay the browser owns; the tooltip is a body-level popover so the board's `zoom`
+  and `overflow` never touch it.
 - Svelte 5 runes mode is forced: `onclick` not `on:click`, callback props not
   `createEventDispatcher`, snippets not slots. Runes work only in `.svelte`/`.svelte.ts`.
 

@@ -1,4 +1,7 @@
 <script lang="ts">
+	import X from '@lucide/svelte/icons/x';
+	import { tooltip } from '$lib/actions/tooltip';
+
 	// The one modal primitive (ADR 0011). A thin wrapper over the native
 	// `<dialog>` element: `showModal()` already gives the top layer, the
 	// `::backdrop`, a focus trap, Escape-to-close, inerting of the rest of the
@@ -82,10 +85,13 @@
 	     would otherwise have given to whatever came first here. -->
 	<button
 		type="button"
-		class="btn btn-icon btn-danger-quiet absolute top-4 right-4 rounded text-base leading-none"
+		class="btn btn-icon btn-danger-quiet absolute top-4 right-4 rounded"
 		aria-label="Close"
-		onclick={onClose}>×</button
+		use:tooltip={'Close'}
+		onclick={onClose}
 	>
+		<X class="size-4" />
+	</button>
 	<h2 id={titleId} class="text-ink pr-8 text-lg font-semibold tracking-tight">{title}</h2>
 	<div class="mt-4">
 		{@render children()}

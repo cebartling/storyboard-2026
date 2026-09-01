@@ -21,6 +21,13 @@ export default defineConfig({
 			}
 		})
 	],
+	// `@lucide/svelte` ships uncompiled `.svelte` files (ADR 0012). `vite build`
+	// bundles them, which is why the e2e suite — it runs `vite build && vite
+	// preview` — never saw this; but in dev, SSR externalises the dependency and
+	// Node then tries to `import` a raw `.svelte` file and throws
+	// ERR_UNKNOWN_FILE_EXTENSION. Keeping it noExternal leaves it in Vite's
+	// pipeline, where the Svelte plugin can compile it.
+	ssr: { noExternal: ['@lucide/svelte'] },
 	test: {
 		expect: { requireAssertions: true },
 		projects: [

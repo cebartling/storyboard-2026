@@ -1,4 +1,7 @@
 <script lang="ts">
+	import Pencil from '@lucide/svelte/icons/pencil';
+	import { tooltip } from '$lib/actions/tooltip';
+
 	// Presentational only: a single Story card. The card is read-only (ADR
 	// 0011) — editing and deleting both happen in the story dialog, which the
 	// pencil opens. Drag is wired by the parent `story-dnd-zone` wrapper, not
@@ -28,9 +31,11 @@
 	     `.btn-icon` keeps the target at the WCAG 2.2 24x24 minimum. -->
 	<button
 		type="button"
-		class="btn btn-icon btn-quiet rounded border-none bg-transparent text-xs leading-none group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:hover)]:opacity-0"
+		class="btn btn-icon btn-quiet rounded border-none bg-transparent group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:hover)]:opacity-0"
 		aria-label="Edit story {title}"
-		title="Edit"
-		onclick={onEdit}>✎</button
+		use:tooltip={'Edit story'}
+		onclick={onEdit}
 	>
+		<Pencil class="size-3.5" />
+	</button>
 </div>
