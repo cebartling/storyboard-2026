@@ -354,6 +354,12 @@ test('a failure arriving after the dialog closed lands on the board', async ({ p
 	await expect(page.locator('main > div > p.error[role="alert"]')).toContainText(
 		`Story not found: ${storyId}`
 	);
+
+	// The banner has had its moment by the time the user reaches for the next
+	// editor. Left up, it would sit there contradicting a board that has since
+	// been edited successfully — only a drag ever cleared it.
+	await page.getByRole('button', { name: 'Edit step' }).click();
+	await expect(page.locator('p.error[role="alert"]')).toHaveCount(0);
 });
 
 // Empirical check for the zoom/dnd interaction ADR 0010 discusses: drop

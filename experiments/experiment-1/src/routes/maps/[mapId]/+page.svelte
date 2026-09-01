@@ -35,6 +35,16 @@
 	// parent with `originDropZone.closest('dialog')`, so a modal wrapping the
 	// board would relocate the mirror (see ADR 0010).
 	let dialog = $state<BoardDialog | null>(null);
+
+	// The board's banner is cleared when an editor opens, the same way
+	// `BoardDialogs` clears its own error on that transition. Only a drag reset
+	// it before, so a late failure could sit above a board the user had since
+	// edited successfully several times over, contradicting what they could
+	// see. Opening an editor is the next deliberate thing they do, and the
+	// message has had its moment by then.
+	$effect(() => {
+		if (dialog) boardError = null;
+	});
 	const camera = createCamera();
 	const minimapModel = $derived(toMinimapModel(data.board));
 
