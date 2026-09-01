@@ -63,16 +63,20 @@
 	}
 
 	let dragOffset: { x: number; y: number } | null = null;
+	/** Pointer that owns the current drag; a second finger must not steer it. */
+	let dragPointerId: number | null = null;
 
 	function onHandlePointerDown(e: PointerEvent) {
+		if (dragPointerId !== null) return;
 		e.stopPropagation();
 		(e.currentTarget as SVGRectElement).setPointerCapture(e.pointerId);
+		dragPointerId = e.pointerId;
 		const point = toLocalPoint(e);
 		dragOffset = { x: point.x - viewportRect.x, y: point.y - viewportRect.y };
 	}
 
 	function onHandlePointerMove(e: PointerEvent) {
-		if (!dragOffset) return;
+		if (!dragOffset || e.pointerId !== dragPointerId) return;
 		const point = toLocalPoint(e);
 		panToCentre({
 			x: point.x - dragOffset.x + viewportRect.width / 2,
@@ -81,8 +85,13 @@
 	}
 
 	function onHandlePointerUp(e: PointerEvent) {
+		if (e.pointerId !== dragPointerId) return;
 		dragOffset = null;
-		(e.currentTarget as SVGRectElement).releasePointerCapture(e.pointerId);
+		dragPointerId = null;
+		// `pointercancel` releases the capture implicitly, and releasing a pointer
+		// that is no longer captured throws NotFoundError.
+		const el = e.currentTarget as SVGRectElement;
+		if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
 	}
 
 	function onHandleKeyDown(e: KeyboardEvent) {

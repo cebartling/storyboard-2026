@@ -60,6 +60,43 @@ describe('BoardMinimap', () => {
 		}
 	});
 
+	it('survives a cancelled pointer and ignores a second concurrent one', async () => {
+		const camera = cameraWithGeometry();
+		render(BoardMinimap, { camera, model });
+
+		const handle = page.getByTestId('minimap-viewport').element() as SVGRectElement;
+		handle.setPointerCapture = () => {};
+		// A real pointercancel has already released the capture by this point.
+		handle.hasPointerCapture = () => false;
+		handle.releasePointerCapture = () => {
+			throw new DOMException('no capture', 'NotFoundError');
+		};
+		const box = handle.getBoundingClientRect();
+		const centre = { clientX: box.x + box.width / 2, clientY: box.y + box.height / 2 };
+
+		handle.dispatchEvent(
+			new PointerEvent('pointerdown', { pointerId: 1, ...centre, bubbles: true })
+		);
+
+		// A second finger must not steer a drag owned by pointer 1.
+		const before = camera.scrollX;
+		handle.dispatchEvent(
+			new PointerEvent('pointermove', {
+				pointerId: 2,
+				clientX: centre.clientX + 40,
+				clientY: centre.clientY,
+				bubbles: true
+			})
+		);
+		expect(camera.scrollX).toBe(before);
+
+		expect(() =>
+			handle.dispatchEvent(
+				new PointerEvent('pointercancel', { pointerId: 1, ...centre, bubbles: true })
+			)
+		).not.toThrow();
+	});
+
 	it('dragging the viewport rect pans the camera', async () => {
 		const camera = cameraWithGeometry();
 		render(BoardMinimap, { camera, model });
