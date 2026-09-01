@@ -48,6 +48,14 @@ export interface Camera {
 	zoomAt(cursorX: number, cursorY: number, dir: 1 | -1): void;
 	panBy(dx: number, dy: number): void;
 	panTo(scrollX: number, scrollY: number): void;
+	/**
+	 * Sets zoom directly to a persisted value, without recentering on any
+	 * cursor or viewport point (unlike `zoomAt`/`resetZoom`/`fit`). Used only
+	 * when rehydrating saved camera state: the caller applies the matching
+	 * scroll separately, on the next frame, once the browser has reflowed the
+	 * world element at the new `zoom` and its scroll extents are accurate.
+	 */
+	restoreZoom(zoom: number): void;
 }
 
 export function createCamera(): Camera {
@@ -143,6 +151,10 @@ export function createCamera(): Camera {
 		},
 		panTo(nextScrollX: number, nextScrollY: number) {
 			applyScroll({ scrollX: nextScrollX, scrollY: nextScrollY });
+		},
+		restoreZoom(nextZoom: number) {
+			zoom = clampZoom(nextZoom);
+			applyScroll({ scrollX, scrollY });
 		}
 	};
 }

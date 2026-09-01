@@ -171,6 +171,12 @@ test('drag story to slice at non-100% zoom', async ({ page }) => {
 	await expect(page.getByTestId(/^story-/).first()).toBeVisible();
 
 	// --- Zoom out one step before dragging -----------------------------------
+	//
+	// The initial zoom is whatever `fit()` computed for this board's actual
+	// content (ADR 0010's persistence commit: no saved camera state yet ->
+	// fit to content), not necessarily 100% — so this resets to a known 100%
+	// baseline first rather than asserting on the auto-fit value.
+	await page.getByTestId('zoom-reset').click();
 	await expect(page.getByTestId('zoom-readout')).toHaveText('100%');
 	await page.getByTestId('zoom-out').click();
 	await expect(page.getByTestId('zoom-readout')).toHaveText('75%');
