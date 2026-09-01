@@ -108,6 +108,13 @@
 				report('Something went wrong. Please try again.');
 				return;
 			}
+			// Everything else is `success` — or `redirect`, which falls through
+			// here deliberately: suppressing `applyAction` means nothing would
+			// follow the redirect, so it would be discarded silently. None of
+			// the eleven board actions redirects (only `?/createMap` on `/`
+			// does, and it is not enhanced), so there is no case to handle yet.
+			// An action that starts redirecting needs an explicit branch here.
+			//
 			// Refetch before closing, so focus returns to a trigger that is
 			// already sitting on up-to-date content.
 			await invalidateAll();
