@@ -83,8 +83,10 @@ board subtree leaves the mirror on `document.body` where ADR 0010 measured it.
 layer, which is above every `z-*` on the board, and inerts what is behind it, so pointer
 events never reach the viewport underneath.
 
-**`board-viewport.svelte` suppresses its `+`/`-`/`0`/`1` shortcuts while any `dialog[open]`
-exists.** Those shortcuts are bound at the window, and the existing `isTypingTarget` check
+**`board-viewport.svelte` suppresses its `+`/`-`/`0`/`1` shortcuts while any `dialog:modal`
+exists** — modal specifically, not `dialog[open]`: a dialog opened with `show()` carries the
+same `open` attribute but leaves the board interactive behind it, so it has no claim on
+these shortcuts. Those shortcuts are bound at the window, and the existing `isTypingTarget` check
 deliberately excludes buttons (so that clicking a zoom button does not silence the shortcut
 it advertises) — which means that without the guard, pressing `1` with a dialog's Delete
 button focused would fit the board the user cannot see.
