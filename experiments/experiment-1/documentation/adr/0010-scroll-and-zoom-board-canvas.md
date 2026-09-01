@@ -119,10 +119,18 @@ We get content-bounded panning and zoom without reimplementing scroll extents, w
 touching `board-view-model.ts`'s grid geometry, and without any change to
 `svelte-dnd-action`'s drop behavior. Track sizes stay `minmax(...)` (not fixed pixels),
 so world geometry still cannot be computed statically from map data alone — the
-minimap's viewport rectangle is computed from real measured
-`scrollWidth`/`scrollLeft`/`clientWidth`, not from a modeled world size, which is why
-that one piece of geometry is always correct even though the grid itself is
-content-sized.
+minimap's viewport rectangle is computed from measured sizes rather than a modeled world
+size, which is why that one piece of geometry is always correct even though the grid
+itself is content-sized. The measurement is a `ResizeObserver` on the world wrapper, whose
+box is already scaled by the CSS `zoom` and so is divided back out (`rect / zoom`) to give
+the natural size the camera stores; scroll comes from the container's
+`scrollLeft`/`scrollTop` via `setObservedScroll`.
+
+One caveat that measurement carries: the world wrapper stretches to at least the
+container's width, so a board that fits horizontally reports a width of exactly
+`viewport / zoom` — stretch-sized rather than content-sized. `fitZoom` therefore takes the
+zoom it was measured at and lets width constrain the fit only when the world genuinely
+overflows; height, which is content-driven, always counts.
 
 If a future investigation of the live app under real dragging _does_ turn up a
 cursor-tracking discrepancy at zoom != 100% that this source reading missed, the escape

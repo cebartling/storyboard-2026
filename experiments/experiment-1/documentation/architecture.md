@@ -111,8 +111,8 @@ not apply to it, but the math (`camera-math.ts`) is still plain, DOM-free TypeSc
 the same way the domain layer is. `minimap-model.ts` similarly takes a structural subset of
 `BoardViewModel`'s shape rather than importing the route module, so `src/lib/` still never depends
 on `src/routes/`. Camera state persists per map in `localStorage`
-(`camera-storage.ts`, key `storyboard:camera:v1:${mapId}`), read only inside `$effect`/`onMount` so
-it never runs during SSR.
+(`camera-storage.ts`, key `storyboard:camera:v1:${mapId}`), read only inside `$effect` so it never
+runs during SSR.
 
 ## Test strategy
 
