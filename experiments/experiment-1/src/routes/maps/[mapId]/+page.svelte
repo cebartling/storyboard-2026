@@ -3,6 +3,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import BoardViewport from '$lib/components/board-viewport.svelte';
 	import StoryDndZone, { type MoveDetail } from '$lib/components/story-dnd-zone.svelte';
+	import ZoomControls from '$lib/components/zoom-controls.svelte';
 	import { createCamera } from '$lib/canvas/camera.svelte';
 	import type { PageProps } from './$types';
 
@@ -118,7 +119,10 @@
 		<p class="error" role="alert">{dragError ?? form?.error}</p>
 	{/if}
 
-	<div class="panel flex min-h-0 flex-1 flex-col overflow-hidden">
+	<div class="panel relative flex min-h-0 flex-1 flex-col overflow-hidden">
+		<div class="pointer-events-none absolute right-4 bottom-4 z-40">
+			<ZoomControls {camera} />
+		</div>
 		<BoardViewport {camera}>
 			<div
 				class="bg-line grid min-w-max gap-px"
