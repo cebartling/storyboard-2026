@@ -1,9 +1,16 @@
 <script lang="ts">
 	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
+	import BoardDialogs, {
+		actionError,
+		type BoardDialog
+	} from '$lib/components/board-dialogs.svelte';
 	import BoardMinimap from '$lib/components/board-minimap.svelte';
 	import BoardViewport from '$lib/components/board-viewport.svelte';
-	import StoryDndZone, { type MoveDetail } from '$lib/components/story-dnd-zone.svelte';
+	import StoryDndZone, {
+		type DndStoryItem,
+		type MoveDetail
+	} from '$lib/components/story-dnd-zone.svelte';
 	import ZoomControls from '$lib/components/zoom-controls.svelte';
 	import { createCamera } from '$lib/canvas/camera.svelte';
 	import { loadCameraState, saveCameraState } from '$lib/canvas/camera-storage';
@@ -12,6 +19,13 @@
 
 	let { data, form }: PageProps = $props();
 	let dragError = $state<string | null>(null);
+
+	// The board itself is read-only (ADR 0011); every mutation happens in the
+	// dialog this drives. Rendered as a sibling of `BoardViewport`, never an
+	// ancestor of a dnd zone — `svelte-dnd-action` picks its drag-mirror
+	// parent with `originDropZone.closest('dialog')`, so a modal wrapping the
+	// board would relocate the mirror (see ADR 0010).
+	let dialog = $state<BoardDialog | null>(null);
 	const camera = createCamera();
 	const minimapModel = $derived(toMinimapModel(data.board));
 
@@ -101,9 +115,26 @@
 		return () => observer.disconnect();
 	});
 
-	function actionError(data: unknown): string | null {
-		if (typeof data !== 'object' || data === null || !('error' in data)) return null;
-		return typeof data.error === 'string' ? data.error : null;
+	// The add-story dialog tells the user which cell it is adding to; the cell
+	// itself only carries ids.
+	const stepNames = $derived(
+		new Map<string, string>(data.board.columns.map((c) => [c.stepId, c.name]))
+	);
+	const rowNames = $derived(
+		new Map<string | null, string>(data.board.rows.map((r) => [r.sliceId, r.name]))
+	);
+
+	function cellLabel(stepId: string, sliceId: string | null): string {
+		return `${stepNames.get(stepId) ?? 'step'} · ${rowNames.get(sliceId) ?? 'Unsliced'}`;
+	}
+
+	function handleEditStory(item: DndStoryItem) {
+		dialog = {
+			kind: 'editStory',
+			storyId: item.id,
+			title: item.title,
+			description: item.description
+		};
 	}
 
 	// Drag persistence isn't a <form> submission (it's triggered by
@@ -148,36 +179,17 @@
 			</p>
 		</div>
 
-		<div class="flex flex-wrap items-end gap-3">
-			<form method="POST" action="?/addActivity" class="flex flex-col gap-1.5">
-				<label for="new-activity-name" class="field-label">New activity</label>
-				<div class="flex gap-2">
-					<input
-						id="new-activity-name"
-						name="name"
-						type="text"
-						required
-						class="input w-44"
-						placeholder="e.g. Browse"
-					/>
-					<button type="submit" class="btn btn-primary">Add activity</button>
-				</div>
-			</form>
-
-			<form method="POST" action="?/createSlice" class="flex flex-col gap-1.5">
-				<label for="new-slice-name" class="field-label">New slice</label>
-				<div class="flex gap-2">
-					<input
-						id="new-slice-name"
-						name="name"
-						type="text"
-						required
-						class="input w-44"
-						placeholder="e.g. Release 1"
-					/>
-					<button type="submit" class="btn btn-quiet">Add slice</button>
-				</div>
-			</form>
+		<div class="flex flex-wrap items-end gap-2">
+			<button
+				type="button"
+				class="btn btn-primary"
+				onclick={() => (dialog = { kind: 'addActivity' })}
+			>
+				Add activity
+			</button>
+			<button type="button" class="btn btn-quiet" onclick={() => (dialog = { kind: 'addSlice' })}>
+				Add slice
+			</button>
 		</div>
 	</div>
 
@@ -213,36 +225,34 @@
 						style="grid-column: {activityHeader.gridColumnStart} / {activityHeader.gridColumnEnd}; grid-row: 1;"
 					>
 						<div class="flex flex-wrap items-center gap-2">
-							<form method="POST" action="?/renameActivity" class="flex gap-1.5">
-								<input type="hidden" name="activityId" value={activityHeader.activityId} />
-								<input
-									type="text"
-									name="name"
-									value={activityHeader.name}
-									aria-label="Rename activity"
-									class="input w-40 font-semibold"
-								/>
-								<button type="submit" class="btn btn-quiet">Save</button>
-							</form>
-							<form method="POST" action="?/deleteActivity">
-								<input type="hidden" name="activityId" value={activityHeader.activityId} />
-								<button type="submit" class="btn btn-danger-quiet px-1.5 text-xs"
-									>Delete activity</button
-								>
-							</form>
+							<h2 class="text-ink flex-1 text-sm font-semibold break-words">
+								{activityHeader.name}
+							</h2>
+							<button
+								type="button"
+								class="btn btn-quiet px-1.5 text-xs"
+								onclick={() =>
+									(dialog = {
+										kind: 'editActivity',
+										activityId: activityHeader.activityId,
+										name: activityHeader.name
+									})}
+							>
+								Edit activity
+							</button>
 						</div>
-						<form method="POST" action="?/addStep" class="flex gap-1.5">
-							<input
-								type="text"
-								name="name"
-								placeholder="New step"
-								required
-								aria-label="New step name"
-								class="input w-40"
-							/>
-							<input type="hidden" name="activityId" value={activityHeader.activityId} />
-							<button type="submit" class="btn btn-quiet">Add step</button>
-						</form>
+						<button
+							type="button"
+							class="btn btn-quiet self-start px-1.5 text-xs"
+							onclick={() =>
+								(dialog = {
+									kind: 'addStep',
+									activityId: activityHeader.activityId,
+									activityName: activityHeader.name
+								})}
+						>
+							Add step
+						</button>
 					</div>
 				{/each}
 
@@ -258,21 +268,15 @@
 						data-testid="step-{column.stepId}"
 						style="grid-column: {column.gridColumn}; grid-row: 2; top: {activityHeaderHeight}px;"
 					>
-						<form method="POST" action="?/renameStep" class="flex gap-1.5">
-							<input type="hidden" name="stepId" value={column.stepId} />
-							<input
-								type="text"
-								name="name"
-								value={column.name}
-								aria-label="Rename step"
-								class="input w-36"
-							/>
-							<button type="submit" class="btn btn-quiet">Save</button>
-						</form>
-						<form method="POST" action="?/deleteStep">
-							<input type="hidden" name="stepId" value={column.stepId} />
-							<button type="submit" class="btn btn-danger-quiet px-1.5 text-xs">Delete step</button>
-						</form>
+						<span class="text-ink flex-1 text-sm font-medium break-words">{column.name}</span>
+						<button
+							type="button"
+							class="btn btn-quiet px-1.5 text-xs"
+							onclick={() =>
+								(dialog = { kind: 'editStep', stepId: column.stepId, name: column.name })}
+						>
+							Edit step
+						</button>
 					</div>
 				{/each}
 
@@ -283,23 +287,15 @@
 						style="grid-column: 1; grid-row: {row.gridRow};"
 					>
 						{#if row.sliceId}
-							<form method="POST" action="?/renameSlice" class="flex gap-1.5">
-								<input type="hidden" name="sliceId" value={row.sliceId} />
-								<input
-									type="text"
-									name="name"
-									value={row.name}
-									aria-label="Rename slice"
-									class="input w-36 font-semibold"
-								/>
-								<button type="submit" class="btn btn-quiet">Save</button>
-							</form>
-							<form method="POST" action="?/deleteSlice">
-								<input type="hidden" name="sliceId" value={row.sliceId} />
-								<button type="submit" class="btn btn-danger-quiet self-start px-1.5 text-xs"
-									>Delete slice</button
-								>
-							</form>
+							<span class="text-ink text-sm font-semibold break-words">{row.name}</span>
+							<button
+								type="button"
+								class="btn btn-quiet self-start px-1.5 text-xs"
+								onclick={() =>
+									(dialog = { kind: 'editSlice', sliceId: row.sliceId!, name: row.name })}
+							>
+								Edit slice
+							</button>
 						{:else}
 							<span
 								class="text-ink-muted text-xs font-semibold tracking-wide whitespace-nowrap uppercase"
@@ -315,28 +311,35 @@
 						style="grid-column: {cell.gridColumn}; grid-row: {cell.gridRow};"
 					>
 						<StoryDndZone
-							items={cell.stories.map((s) => ({ id: s.id, title: s.title }))}
+							items={cell.stories}
 							stepId={cell.stepId}
 							sliceId={cell.sliceId}
 							onMove={handleMove}
+							onEditStory={handleEditStory}
 						/>
-						{#if cell.sliceId === null}
-							<form method="POST" action="?/addStory" class="flex gap-1.5 px-1.5 pb-1">
-								<input type="hidden" name="stepId" value={cell.stepId} />
-								<input
-									type="text"
-									name="title"
-									placeholder="New story"
-									required
-									aria-label="New story title"
-									class="input"
-								/>
-								<button type="submit" class="btn btn-quiet">Add story</button>
-							</form>
-						{/if}
+						<!-- Every cell, not just the unsliced band: adding straight
+						     into a release slice was impossible with the old inline
+						     form, which only existed on the unsliced row. -->
+						<button
+							type="button"
+							class="btn btn-quiet self-start px-1.5 pb-1 text-xs"
+							data-testid="add-story-{cell.stepId}-{cell.sliceId ?? 'unsliced'}"
+							aria-label="Add story to {cellLabel(cell.stepId, cell.sliceId)}"
+							onclick={() =>
+								(dialog = {
+									kind: 'addStory',
+									stepId: cell.stepId,
+									sliceId: cell.sliceId,
+									scopeLabel: cellLabel(cell.stepId, cell.sliceId)
+								})}
+						>
+							+ Add story
+						</button>
 					</div>
 				{/each}
 			</div>
 		</BoardViewport>
 	</div>
 </div>
+
+<BoardDialogs {dialog} onClose={() => (dialog = null)} />

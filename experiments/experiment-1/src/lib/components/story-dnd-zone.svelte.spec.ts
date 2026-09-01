@@ -7,12 +7,13 @@ describe('StoryDndZone', () => {
 	it('renders each item as a story card, in the order given', async () => {
 		render(StoryDndZone, {
 			items: [
-				{ id: 's1', title: 'Search by keyword' },
-				{ id: 's2', title: 'Filter by category' }
+				{ id: 's1', title: 'Search by keyword', description: null },
+				{ id: 's2', title: 'Filter by category', description: null }
 			],
 			stepId: 'step-1',
 			sliceId: null,
-			onMove: () => {}
+			onMove: () => {},
+			onEditStory: () => {}
 		});
 
 		const zone = page.getByTestId('cell-step-1-unsliced');
@@ -30,7 +31,8 @@ describe('StoryDndZone', () => {
 			items: [],
 			stepId: 'step-7',
 			sliceId: 'slice-3',
-			onMove: () => {}
+			onMove: () => {},
+			onEditStory: () => {}
 		});
 
 		await expect.element(page.getByTestId('cell-step-7-slice-3')).toBeInTheDocument();
@@ -41,7 +43,8 @@ describe('StoryDndZone', () => {
 			items: [],
 			stepId: 'step-9',
 			sliceId: null,
-			onMove: () => {}
+			onMove: () => {},
+			onEditStory: () => {}
 		});
 
 		const zone = page.getByTestId('cell-step-9-unsliced');
@@ -57,9 +60,9 @@ describe('StoryDndZone', () => {
  */
 describe('StoryDndZone finalize handling', () => {
 	const items = [
-		{ id: 's1', title: 'First' },
-		{ id: 's2', title: 'Second' },
-		{ id: 's3', title: 'Third' }
+		{ id: 's1', title: 'First', description: null },
+		{ id: 's2', title: 'Second', description: null },
+		{ id: 's3', title: 'Third', description: null }
 	];
 
 	/** Dispatches the event `svelte-dnd-action` fires when a drag settles. */
@@ -74,7 +77,13 @@ describe('StoryDndZone finalize handling', () => {
 	}
 
 	async function renderZone(onMove: (detail: unknown) => void) {
-		render(StoryDndZone, { items, stepId: 'step-1', sliceId: 'slice-1', onMove });
+		render(StoryDndZone, {
+			items,
+			stepId: 'step-1',
+			sliceId: 'slice-1',
+			onMove,
+			onEditStory: () => {}
+		});
 		const zone = page.getByTestId('cell-step-1-slice-1');
 		await expect.element(zone).toBeInTheDocument();
 		return zone.element();
@@ -98,7 +107,7 @@ describe('StoryDndZone finalize handling', () => {
 		const zone = await renderZone(onMove);
 
 		finalize(zone, {
-			items: [{ id: 'sX', title: 'Moved' }, ...items],
+			items: [{ id: 'sX', title: 'Moved', description: null }, ...items],
 			info: { trigger: 'droppedIntoZone', id: 'sX', source: 'pointer' }
 		});
 
@@ -116,7 +125,7 @@ describe('StoryDndZone finalize handling', () => {
 		const zone = await renderZone(onMove);
 
 		finalize(zone, {
-			items: [items[0], { id: 'sX', title: 'Moved' }, items[1], items[2]],
+			items: [items[0], { id: 'sX', title: 'Moved', description: null }, items[1], items[2]],
 			info: { trigger: 'droppedIntoZone', id: 'sX', source: 'pointer' }
 		});
 
@@ -128,7 +137,7 @@ describe('StoryDndZone finalize handling', () => {
 		const zone = await renderZone(onMove);
 
 		finalize(zone, {
-			items: [...items, { id: 'sX', title: 'Moved' }],
+			items: [...items, { id: 'sX', title: 'Moved', description: null }],
 			info: { trigger: 'droppedIntoZone', id: 'sX', source: 'pointer' }
 		});
 
@@ -137,12 +146,18 @@ describe('StoryDndZone finalize handling', () => {
 
 	it('reports a null sliceId when the zone is the unsliced band', async () => {
 		const onMove = vi.fn();
-		render(StoryDndZone, { items, stepId: 'step-2', sliceId: null, onMove });
+		render(StoryDndZone, {
+			items,
+			stepId: 'step-2',
+			sliceId: null,
+			onMove,
+			onEditStory: () => {}
+		});
 		const zone = page.getByTestId('cell-step-2-unsliced');
 		await expect.element(zone).toBeInTheDocument();
 
 		finalize(zone.element(), {
-			items: [...items, { id: 'sX', title: 'Moved' }],
+			items: [...items, { id: 'sX', title: 'Moved', description: null }],
 			info: { trigger: 'droppedIntoZone', id: 'sX', source: 'pointer' }
 		});
 

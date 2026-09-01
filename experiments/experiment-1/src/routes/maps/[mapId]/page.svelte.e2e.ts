@@ -1,4 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
+import {
+	addActivity,
+	addSlice,
+	addStep,
+	addStory,
+	createMap,
+	firstSliceId,
+	firstStepId
+} from './board-helpers';
 
 // End-to-end slice for steps 7-9 (board UI + drag-and-drop): create a map,
 // build a small backbone by hand, drag a story to reorder it within a step,
@@ -57,43 +66,23 @@ async function dragTo(
 }
 
 test('drag story to slice', async ({ page }) => {
-	// --- Build a minimal backbone by hand, via real form POSTs -------------
-	await page.goto('/');
-	const mapName = `E2E board ${Date.now()}`;
-	await page.getByLabel('New map name').fill(mapName);
-	await page.getByRole('button', { name: 'Create map' }).click();
-	await expect(page).toHaveURL(/\/maps\/[^/]+$/);
-
-	await page.getByLabel('New activity').fill('Search');
-	await page.getByRole('button', { name: 'Add activity' }).click();
-	await expect(page.getByRole('heading', { name: mapName })).toBeVisible();
-
-	await page.getByLabel('New step name').fill('Find a product');
-	await page.getByRole('button', { name: 'Add step' }).click();
-	await expect(page.getByLabel('New story title')).toBeVisible();
-
-	await page.getByLabel('New slice').fill('Release 1');
-	await page.getByRole('button', { name: 'Add slice' }).click();
-	await expect(page.getByRole('button', { name: 'Delete slice' })).toBeVisible();
-
-	// Two stories in the unsliced band, in this order: Story A, Story B.
-	await page.getByLabel('New story title').fill('Story A');
-	await page.getByRole('button', { name: 'Add story' }).click();
-	await expect(page.getByTestId(/^story-/).first()).toBeVisible();
-
-	await page.getByLabel('New story title').fill('Story B');
-	await page.getByRole('button', { name: 'Add story' }).click();
-	await expect(page.getByText('Story B')).toBeVisible();
+	// --- Build a minimal backbone by hand, through the board's dialogs -----
+	await createMap(page, `E2E board ${Date.now()}`);
+	await addActivity(page, 'Search');
+	await addStep(page, 'Find a product');
+	await addSlice(page, 'Release 1');
+	await expect(page.getByRole('button', { name: 'Edit slice' })).toBeVisible();
 
 	// --- Resolve the real ids the board rendered ----------------------------
-	const stepId = (await page
-		.locator('[data-testid^="step-"]')
-		.first()
-		.getAttribute('data-testid'))!.replace('step-', '');
-	const sliceId = (await page
-		.locator('[data-testid^="row-label-"]:not([data-testid="row-label-unsliced"])')
-		.first()
-		.getAttribute('data-testid'))!.replace('row-label-', '');
+	// The add-story trigger is per cell, so the ids have to be known before
+	// any story can be added.
+	const stepId = await firstStepId(page);
+	const sliceId = await firstSliceId(page);
+
+	// Two stories in the unsliced band, in this order: Story A, Story B.
+	await addStory(page, stepId, 'unsliced', 'Story A');
+	await addStory(page, stepId, 'unsliced', 'Story B');
+	await expect(page.getByText('Story B')).toBeVisible();
 
 	const unslicedCell = page.getByTestId(`cell-${stepId}-unsliced`);
 	const sliceCell = page.getByTestId(`cell-${stepId}-${sliceId}`);
@@ -127,6 +116,15 @@ test('drag story to slice', async ({ page }) => {
 	await expect(sliceCell.locator('[data-testid^="story-"]')).toHaveText([/Story A/]);
 	await expect(unslicedCell.locator('[data-testid^="story-"]')).toHaveText([/Story B/]);
 
+	// The restored camera (ADR 0010) leaves the board scrolled where it was,
+	// which can put the slice band underneath the sticky activity/step
+	// headers. A pointerdown there lands on the header, not the card, and
+	// `dragTo`'s `scrollIntoViewIfNeeded` cannot help: it scrolls the card to
+	// the nearest edge, which is exactly where the sticky headers sit.
+	// Fitting the board to the window removes the overflow altogether, so the
+	// drag below starts on the card.
+	await page.getByTestId('zoom-fit').click();
+
 	// A failed direct drag action must explain the failure instead of silently
 	// snapping back. Delete Story A behind the rendered page so its next move
 	// exercises the server's stale-client validation path.
@@ -148,26 +146,13 @@ test('drag story to slice', async ({ page }) => {
 // one step via the zoom-controls button, then runs the same choreography as
 // "drag story to slice" and asserts the drop actually lands.
 test('drag story to slice at non-100% zoom', async ({ page }) => {
-	await page.goto('/');
-	const mapName = `E2E zoom board ${Date.now()}`;
-	await page.getByLabel('New map name').fill(mapName);
-	await page.getByRole('button', { name: 'Create map' }).click();
-	await expect(page).toHaveURL(/\/maps\/[^/]+$/);
+	await createMap(page, `E2E zoom board ${Date.now()}`);
+	await addActivity(page, 'Search');
+	await addStep(page, 'Find a product');
+	await addSlice(page, 'Release 1');
 
-	await page.getByLabel('New activity').fill('Search');
-	await page.getByRole('button', { name: 'Add activity' }).click();
-	await expect(page.getByRole('heading', { name: mapName })).toBeVisible();
-
-	await page.getByLabel('New step name').fill('Find a product');
-	await page.getByRole('button', { name: 'Add step' }).click();
-	await expect(page.getByLabel('New story title')).toBeVisible();
-
-	await page.getByLabel('New slice').fill('Release 1');
-	await page.getByRole('button', { name: 'Add slice' }).click();
-	await expect(page.getByRole('button', { name: 'Delete slice' })).toBeVisible();
-
-	await page.getByLabel('New story title').fill('Story A');
-	await page.getByRole('button', { name: 'Add story' }).click();
+	const stepIdForZoom = await firstStepId(page);
+	await addStory(page, stepIdForZoom, 'unsliced', 'Story A');
 	await expect(page.getByTestId(/^story-/).first()).toBeVisible();
 
 	// --- Zoom out one step before dragging -----------------------------------
@@ -181,14 +166,8 @@ test('drag story to slice at non-100% zoom', async ({ page }) => {
 	await page.getByTestId('zoom-out').click();
 	await expect(page.getByTestId('zoom-readout')).toHaveText('75%');
 
-	const stepId = (await page
-		.locator('[data-testid^="step-"]')
-		.first()
-		.getAttribute('data-testid'))!.replace('step-', '');
-	const sliceId = (await page
-		.locator('[data-testid^="row-label-"]:not([data-testid="row-label-unsliced"])')
-		.first()
-		.getAttribute('data-testid'))!.replace('row-label-', '');
+	const stepId = stepIdForZoom;
+	const sliceId = await firstSliceId(page);
 
 	const unslicedCell = page.getByTestId(`cell-${stepId}-unsliced`);
 	const sliceCell = page.getByTestId(`cell-${stepId}-${sliceId}`);

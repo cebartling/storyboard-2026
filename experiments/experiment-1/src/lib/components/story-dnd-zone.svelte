@@ -7,6 +7,7 @@
 	export interface DndStoryItem {
 		id: string;
 		title: string;
+		description: string | null;
 	}
 
 	export interface MoveDetail {
@@ -30,13 +31,16 @@
 		stepId,
 		sliceId,
 		flipDurationMs = 150,
-		onMove
+		onMove,
+		onEditStory
 	}: {
 		items: DndStoryItem[];
 		stepId: string;
 		sliceId: string | null;
 		flipDurationMs?: number;
 		onMove: (detail: MoveDetail) => void;
+		/** Passes the whole item up, so the page need not look it back up. */
+		onEditStory: (item: DndStoryItem) => void;
 	} = $props();
 
 	// A writable derived: `svelte-dnd-action` needs to own the array during
@@ -84,6 +88,6 @@
 	onfinalize={handleFinalize}
 >
 	{#each localItems as item (item.id)}
-		<StoryCard id={item.id} title={item.title} />
+		<StoryCard id={item.id} title={item.title} onEdit={() => onEditStory(item)} />
 	{/each}
 </div>
