@@ -16,9 +16,19 @@ async function dragTo(
 	page: Page,
 	source: {
 		boundingBox(): Promise<{ x: number; y: number; width: number; height: number } | null>;
+		scrollIntoViewIfNeeded(): Promise<void>;
 	},
-	target: { boundingBox(): Promise<{ x: number; y: number; width: number; height: number } | null> }
+	target: {
+		boundingBox(): Promise<{ x: number; y: number; width: number; height: number } | null>;
+		scrollIntoViewIfNeeded(): Promise<void>;
+	}
 ) {
+	// The board now lives inside `BoardViewport`, a bounded-height scroll
+	// container (ADR 0010), so a target is not guaranteed to already be
+	// in view the way it was in the old `overflow-x-auto` panel.
+	await source.scrollIntoViewIfNeeded();
+	await target.scrollIntoViewIfNeeded();
+
 	const sourceBox = await source.boundingBox();
 	const targetBox = await target.boundingBox();
 	if (!sourceBox || !targetBox) throw new Error('missing bounding box');
