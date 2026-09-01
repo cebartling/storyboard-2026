@@ -128,10 +128,12 @@
 
 	$effect(() => {
 		if (!viewportEl) return;
+		// Captured once: reading the `$state` at teardown would remove the
+		// listener from whatever element is bound *then*, leaking this one.
+		const el = viewportEl;
 		function handleWheel(e: WheelEvent) {
 			if (!(e.ctrlKey || e.metaKey)) return;
 			e.preventDefault();
-			if (!viewportEl) return;
 			// Reversing direction mid-gesture discards the residue, so the first
 			// event of the new direction is not cancelled out by the old one.
 			if (wheelAccum !== 0 && Math.sign(e.deltaY) !== Math.sign(wheelAccum)) {
@@ -141,11 +143,11 @@
 			if (Math.abs(wheelAccum) < WHEEL_STEP_THRESHOLD) return;
 			const dir = wheelAccum < 0 ? 1 : -1;
 			wheelAccum = 0;
-			const rect = viewportEl.getBoundingClientRect();
+			const rect = el.getBoundingClientRect();
 			camera.zoomAt(e.clientX - rect.left, e.clientY - rect.top, dir);
 		}
-		viewportEl.addEventListener('wheel', handleWheel, { passive: false });
-		return () => viewportEl?.removeEventListener('wheel', handleWheel);
+		el.addEventListener('wheel', handleWheel, { passive: false });
+		return () => el.removeEventListener('wheel', handleWheel);
 	});
 
 	// --- Background / middle-mouse / space drag panning ----------------------
