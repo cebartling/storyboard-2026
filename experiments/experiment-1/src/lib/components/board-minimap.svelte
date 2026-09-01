@@ -56,10 +56,18 @@
 		camera.panTo(next.scrollX, next.scrollY);
 	}
 
-	// Clicking anywhere on the minimap background (i.e. not the viewport
-	// handle, which stops propagation below) centres the viewport there.
+	// Pressing anywhere on the minimap background (i.e. not the viewport handle,
+	// which stops propagation below) centres the viewport there and then keeps
+	// tracking, so a press-and-drag continues as a drag instead of snapping once.
 	function onBackgroundPointerDown(e: PointerEvent) {
+		if (dragPointerId !== null) return;
 		panToCentre(toLocalPoint(e));
+		const el = e.currentTarget as SVGSVGElement;
+		el.setPointerCapture(e.pointerId);
+		dragPointerId = e.pointerId;
+		// The handle is now centred under the pointer, so the drag offset is
+		// simply half of it — the same state a press on the handle would leave.
+		dragOffset = { x: viewportRect.width / 2, y: viewportRect.height / 2 };
 	}
 
 	let dragOffset: { x: number; y: number } | null = null;
@@ -77,6 +85,9 @@
 
 	function onHandlePointerMove(e: PointerEvent) {
 		if (!dragOffset || e.pointerId !== dragPointerId) return;
+		// The svg carries the same handlers for background drags; stop here so a
+		// handle drag is not also processed on the way up.
+		e.stopPropagation();
 		const point = toLocalPoint(e);
 		panToCentre({
 			x: point.x - dragOffset.x + viewportRect.width / 2,
@@ -86,11 +97,12 @@
 
 	function onHandlePointerUp(e: PointerEvent) {
 		if (e.pointerId !== dragPointerId) return;
+		e.stopPropagation();
 		dragOffset = null;
 		dragPointerId = null;
 		// `pointercancel` releases the capture implicitly, and releasing a pointer
 		// that is no longer captured throws NotFoundError.
-		const el = e.currentTarget as SVGRectElement;
+		const el = e.currentTarget as Element;
 		if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
 	}
 
@@ -125,6 +137,9 @@
 	height={HEIGHT}
 	class="border-line rounded border bg-white/90 shadow-sm"
 	onpointerdown={onBackgroundPointerDown}
+	onpointermove={onHandlePointerMove}
+	onpointerup={onHandlePointerUp}
+	onpointercancel={onHandlePointerUp}
 >
 	{#each model.rows as row, i (row.sliceId ?? `unsliced-${i}`)}
 		<rect

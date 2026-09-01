@@ -130,11 +130,46 @@ describe('BoardMinimap', () => {
 		expect(camera.scrollY).toBe(startScrollY);
 	});
 
+	it('continues tracking when a press on the background becomes a drag', async () => {
+		const camera = cameraWithGeometry();
+		render(BoardMinimap, { camera, model });
+
+		const svg = page.getByTestId('board-minimap').element() as SVGSVGElement;
+		svg.setPointerCapture = () => {};
+		svg.releasePointerCapture = () => {};
+		const box = svg.getBoundingClientRect();
+
+		// Press near the left edge, then drag right: the jump alone would leave
+		// scroll wherever the press landed, so the move has to move it further.
+		svg.dispatchEvent(
+			new PointerEvent('pointerdown', {
+				pointerId: 4,
+				clientX: box.x + 20,
+				clientY: box.y + box.height / 2,
+				bubbles: true
+			})
+		);
+		const afterJump = camera.scrollX;
+
+		svg.dispatchEvent(
+			new PointerEvent('pointermove', {
+				pointerId: 4,
+				clientX: box.x + box.width - 20,
+				clientY: box.y + box.height / 2,
+				bubbles: true
+			})
+		);
+
+		expect(camera.scrollX).toBeGreaterThan(afterJump);
+	});
+
 	it('clicking the minimap background elsewhere centres the viewport there', async () => {
 		const camera = cameraWithGeometry();
 		render(BoardMinimap, { camera, model });
 
 		const svg = page.getByTestId('board-minimap').element() as SVGSVGElement;
+		svg.setPointerCapture = () => {};
+		svg.releasePointerCapture = () => {};
 		const box = svg.getBoundingClientRect();
 
 		svg.dispatchEvent(
