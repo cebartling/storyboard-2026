@@ -1,7 +1,8 @@
 /**
  * A sample user story map for a retail commerce system, big enough to
- * exercise the board at realistic scale (12 activities, 40+ steps, 140+
- * stories across three release slices plus an unsliced backlog band).
+ * exercise the board at realistic scale: 12 activities, 43 steps, and 157
+ * stories across three release slices plus an unsliced backlog band. Those
+ * counts are pinned by this module's test, because the READMEs quote them.
  *
  * The blueprint below is plain data; `buildRetailCommerceMap` turns it into
  * a `StoryMap` using only the pure domain functions, so this module stays

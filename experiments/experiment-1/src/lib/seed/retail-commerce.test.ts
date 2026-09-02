@@ -15,15 +15,19 @@ function storiesForStep(map: StoryMap, stepId: string): Story[] {
 }
 
 describe('retailCommerceBlueprint', () => {
-	it('is a large map: enough activities, steps and stories to exercise the board', () => {
+	// Pinned rather than a "big enough" floor because README.md, CLAUDE.md and
+	// this module's header all quote these counts. If you change the
+	// blueprint, this test is the reminder to change them too.
+	it('has the activity, step, slice and story counts the docs quote', () => {
 		const stepCount = retailCommerceBlueprint.reduce((n, a) => n + a.steps.length, 0);
 		const storyCount = retailCommerceBlueprint.reduce(
 			(n, a) => n + a.steps.reduce((m, s) => m + s.stories.length, 0),
 			0
 		);
-		expect(retailCommerceBlueprint.length).toBeGreaterThanOrEqual(10);
-		expect(stepCount).toBeGreaterThanOrEqual(35);
-		expect(storyCount).toBeGreaterThanOrEqual(120);
+		expect(retailCommerceBlueprint.length).toBe(12);
+		expect(stepCount).toBe(43);
+		expect(retailCommerceSliceNames.length).toBe(3);
+		expect(storyCount).toBe(157);
 	});
 
 	it('names every activity, step and story uniquely enough to identify on the board', () => {
