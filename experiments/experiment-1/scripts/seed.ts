@@ -37,8 +37,11 @@ function databaseUrl(): string {
 	return url;
 }
 
-const url = databaseUrl();
-const client = new Database(path.resolve(root, url));
+// Resolved against the experiment root, and reported that way: a relative
+// DATABASE_URL is otherwise ambiguous in the output, and every message below
+// should name the file actually written rather than the value configured.
+const file = path.resolve(root, databaseUrl());
+const client = new Database(file);
 client.pragma('foreign_keys = ON');
 const db = drizzle(client, { schema });
 
@@ -50,7 +53,7 @@ try {
 		// Same context src/lib/server/db/index.ts attaches: without it a bad
 		// migrations folder or a locked file is a bare Drizzle stack that names
 		// neither the folder nor the database it was opening.
-		throw new Error(`Failed to apply migrations from ${migrationsFolder} to DATABASE_URL=${url}`, {
+		throw new Error(`Failed to apply migrations from ${migrationsFolder} to ${file}`, {
 			cause
 		});
 	}
@@ -60,7 +63,7 @@ try {
 
 	const stepCount = saved.activities.reduce((n, a) => n + a.steps.length, 0);
 	console.log(
-		`Seeded "${saved.name}" into ${url}: ` +
+		`Seeded "${saved.name}" into ${file}: ` +
 			`${saved.activities.length} activities, ${stepCount} steps, ` +
 			`${saved.slices.length} slices, ${saved.stories.length} stories.`
 	);
