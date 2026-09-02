@@ -60,9 +60,12 @@ request-flow trace.
    its current method list, which is provisional. See ADR 0007.
 
 No inbound ports. SvelteKit's `load()` functions and named form actions already are the
-driving adapter — there is exactly one driver (the SvelteKit app itself; no CLI, no second
-UI, no external API consumer), so an inbound port interface would exist only to be
-implemented once, which is ceremony, not architecture. No `Clock` or `Id` port either —
+driving adapter — the app itself is the only driver that carries behaviour (no second UI, no
+external API consumer), so an inbound port interface would exist only to be implemented
+once, which is ceremony, not architecture. `scripts/seed.ts` is a second, deliberately
+trivial driver: it builds the sample map from `src/lib/seed/` with pure domain functions and
+hands it to a repository it constructs itself. It holds no rules, so it does not change that
+judgement. No `Clock` or `Id` port either —
 see ADR 0006 for what was deliberately left out and why.
 
 ## Composition root
@@ -72,6 +75,11 @@ see ADR 0006 for what was deliberately left out and why.
 functions and form actions import from `deps.ts` and pass the resulting objects into
 `src/lib/app/` use-case functions. Nothing outside `deps.ts` imports Drizzle or touches a
 DB client directly — that is the boundary the repository port exists to enforce.
+
+`scripts/seed.ts` is the one exception, and only because it is not part of the app: it runs
+outside SvelteKit (`$env/dynamic/private` does not resolve under `tsx`), so it builds its own
+Drizzle client and repository. Its map-building logic lives in `src/lib/seed/`, which imports
+nothing but `src/lib/domain/` and is unit-tested without a database.
 
 ## Request flow: `moveStory` end to end
 

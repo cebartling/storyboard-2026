@@ -39,9 +39,15 @@ versions before 10 reject this directory's `pnpm-workspace.yaml` with
 | Lint / format                    | `corepack pnpm lint` / `corepack pnpm format`                                              |
 | New migration                    | `corepack pnpm db:generate` (commit `drizzle/`)                                            |
 | Inspect DB                       | `corepack pnpm db:studio`                                                                  |
+| Seed sample data                 | `corepack pnpm db:seed`                                                                    |
 
 Migrations apply automatically at db-module load, so `corepack pnpm dev` and the e2e server
 self-migrate. E2e runs against a throwaway `e2e.db` and never touch `local.db`.
+
+`db:seed` runs `scripts/seed.ts` (under `tsx`, since the script is outside SvelteKit's
+build), which writes the sample retail commerce map from `src/lib/seed/` to `DATABASE_URL`.
+It appends a new map on every run rather than replacing one — nothing in the app depends on
+the seed, so no test or fixture breaks if you delete it.
 
 ## Architecture constraints
 

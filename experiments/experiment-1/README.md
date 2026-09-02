@@ -37,6 +37,11 @@ step — `dev` and the e2e server both self-migrate against a fresh `DATABASE_UR
 | Lint / format    | `corepack pnpm lint` / `corepack pnpm format`                           |
 | New migration    | `corepack pnpm db:generate` (commit `drizzle/`)                         |
 | Inspect DB       | `corepack pnpm db:studio`                                               |
+| Seed sample data | `corepack pnpm db:seed`                                                 |
+
+`db:seed` writes a sample retail commerce story map — 12 activities, 43 steps, 3 release
+slices and 157 stories — into `DATABASE_URL`, and prints the URL to open it at. It adds a
+new map each time it runs; delete the old one from the map list if you do not want both.
 
 ## Reading it
 
