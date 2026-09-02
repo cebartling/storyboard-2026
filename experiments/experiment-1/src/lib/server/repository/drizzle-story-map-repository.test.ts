@@ -16,6 +16,7 @@ import {
 	moveStory
 } from '$lib/domain/story-map';
 import type { Story } from '$lib/domain/story-map';
+import { buildRetailCommerceMap } from '$lib/seed/retail-commerce';
 import * as schema from '../db/schema';
 import { DrizzleStoryMapRepository } from './drizzle-story-map-repository';
 
@@ -215,6 +216,22 @@ describe('DrizzleStoryMapRepository', () => {
 			.all()
 			.filter((a) => a.mapId === map.id);
 		expect(remainingActivities).toHaveLength(0);
+	});
+
+	// The seed map (src/lib/seed/) is the largest aggregate anything in this
+	// project writes — 12 activities, 43 steps, 157 stories over 4 rank
+	// scopes per step. Its builder is unit-tested without a database, so this
+	// is the one place the unique indexes below get to see it: a rank
+	// collision would surface here rather than when someone runs `db:seed`.
+	it('round-trips the retail commerce seed map', async () => {
+		const map = buildRetailCommerceMap(wholeSecondNow());
+
+		const saved = await repository.save(map);
+		const loaded = await repository.load(saved.id);
+
+		expect(loaded).not.toBeNull();
+		expect(loaded!.activities).toEqual(saved.activities);
+		expect(canonicalStoryOrder(loaded!.stories)).toEqual(canonicalStoryOrder(saved.stories));
 	});
 
 	// The rank uniqueness invariant lives in the domain; these assert the
