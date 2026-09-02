@@ -14,9 +14,9 @@ import Database from 'better-sqlite3';
 import { loadEnv } from 'vite';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as schema from '../src/lib/server/db/schema.ts';
-import { DrizzleStoryMapRepository } from '../src/lib/server/repository/drizzle-story-map-repository.ts';
-import { buildRetailCommerceMap } from '../src/lib/seed/retail-commerce.ts';
+import * as schema from '../src/lib/server/db/schema';
+import { DrizzleStoryMapRepository } from '../src/lib/server/repository/drizzle-story-map-repository';
+import { buildRetailCommerceMap } from '../src/lib/seed/retail-commerce';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
