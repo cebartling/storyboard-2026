@@ -41,18 +41,30 @@ const url = databaseUrl();
 const client = new Database(path.resolve(root, url));
 client.pragma('foreign_keys = ON');
 const db = drizzle(client, { schema });
-migrate(db, { migrationsFolder: path.join(root, 'drizzle') });
 
-const repository = new DrizzleStoryMapRepository(db);
-const map = buildRetailCommerceMap();
-const saved = await repository.save(map);
+try {
+	const migrationsFolder = path.join(root, 'drizzle');
+	try {
+		migrate(db, { migrationsFolder });
+	} catch (cause) {
+		// Same context src/lib/server/db/index.ts attaches: without it a bad
+		// migrations folder or a locked file is a bare Drizzle stack that names
+		// neither the folder nor the database it was opening.
+		throw new Error(`Failed to apply migrations from ${migrationsFolder} to DATABASE_URL=${url}`, {
+			cause
+		});
+	}
 
-const stepCount = saved.activities.reduce((n, a) => n + a.steps.length, 0);
-console.log(
-	`Seeded "${saved.name}" into ${url}: ` +
-		`${saved.activities.length} activities, ${stepCount} steps, ` +
-		`${saved.slices.length} slices, ${saved.stories.length} stories.`
-);
-console.log(`Open it at /maps/${saved.id}`);
+	const repository = new DrizzleStoryMapRepository(db);
+	const saved = await repository.save(buildRetailCommerceMap());
 
-client.close();
+	const stepCount = saved.activities.reduce((n, a) => n + a.steps.length, 0);
+	console.log(
+		`Seeded "${saved.name}" into ${url}: ` +
+			`${saved.activities.length} activities, ${stepCount} steps, ` +
+			`${saved.slices.length} slices, ${saved.stories.length} stories.`
+	);
+	console.log(`Open it at /maps/${saved.id}`);
+} finally {
+	client.close();
+}
