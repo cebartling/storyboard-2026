@@ -11,7 +11,7 @@
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import Database from 'better-sqlite3';
-import fs from 'node:fs';
+import { loadEnv } from 'vite';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as schema from '../src/lib/server/db/schema.ts';
@@ -23,17 +23,18 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 function databaseUrl(): string {
 	if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
 
-	// Same fallback the app gets: .env is what `vite dev` loads, and running
-	// the seed against a different file than the dev server would be a
-	// confusing no-op.
-	const envFile = path.join(root, '.env');
-	const match = fs.existsSync(envFile)
-		? /^\s*DATABASE_URL\s*=\s*(.+?)\s*$/m.exec(fs.readFileSync(envFile, 'utf8'))
-		: null;
-	if (!match) {
-		throw new Error(`DATABASE_URL is not set and no DATABASE_URL found in ${envFile}`);
+	// Falls back to .env, which is what `vite dev` loads — seeding a different
+	// file than the dev server reads would be a confusing no-op. Read with
+	// Vite's own loader rather than a regex: quoted values and trailing
+	// comments are legal dotenv, and hand-parsing them wrong yields a database
+	// file named after the quotes.
+	const url = loadEnv('development', root, '').DATABASE_URL;
+	if (!url) {
+		throw new Error(
+			`DATABASE_URL is not set and no DATABASE_URL found in ${path.join(root, '.env')}`
+		);
 	}
-	return match[1];
+	return url;
 }
 
 const url = databaseUrl();
