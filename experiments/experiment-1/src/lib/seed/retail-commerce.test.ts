@@ -105,6 +105,31 @@ describe('buildRetailCommerceMap', () => {
 		}
 	});
 
+	// The builder's only real behaviour: `addStory` appends with a rank scoped
+	// to (stepId, sliceId) (ADR 0005), so each band of a step must come out in
+	// blueprint order. The test above deliberately compares sorted titles —
+	// it is about membership — which would not catch an ordering regression.
+	it('orders stories within each (step, slice) scope in blueprint order', () => {
+		const map = buildRetailCommerceMap();
+		const sliceIdByName = new Map(map.slices.map((s) => [s.name, s.id as string]));
+
+		for (const [activityIndex, activity] of sortByRank(map.activities).entries()) {
+			for (const [stepIndex, step] of sortByRank(activity.steps).entries()) {
+				const expected = retailCommerceBlueprint[activityIndex].steps[stepIndex].stories;
+
+				for (const sliceName of [null, ...retailCommerceSliceNames]) {
+					const sliceId = sliceName === null ? null : sliceIdByName.get(sliceName)!;
+					const band = sortByRank(
+						map.stories.filter((s) => s.stepId === step.id && s.sliceId === sliceId)
+					);
+					expect(band.map((s) => s.title)).toEqual(
+						expected.filter((s) => s.slice === sliceName).map((s) => s.title)
+					);
+				}
+			}
+		}
+	});
+
 	it('gives every entity a distinct id', () => {
 		const map = buildRetailCommerceMap();
 		const ids = [
