@@ -151,9 +151,10 @@ test('adds a story into a slice band and edits its description', async ({ page }
 	await createMap(page, `E2E story editor ${Date.now()}`);
 	await addActivity(page, 'Search');
 	await addStep(page, 'Find a product');
-	// Three slices, and the story goes in the first: that band sits in the
-	// upper half of the board, clear of the minimap and zoom-control overlays
-	// pinned to the bottom of the panel.
+	// Three slices so the board has a backbone worth editing against. The
+	// story used to go in the first band specifically to stay clear of the
+	// bottom-corner overlays; the viewport now reserves room to scroll past
+	// them (F5), so the choice of band no longer matters.
 	await addSlice(page, 'Release 1');
 	await addSlice(page, 'Release 2');
 	await addSlice(page, 'Release 3');
@@ -471,4 +472,39 @@ test('deleting an activity and a step leaves the board working', async ({ page }
 	// The viewport is the region the deletion happened in and is already
 	// focusable, so that is where it lands (finding F3).
 	await expect(page.getByTestId('board-viewport')).toBeFocused();
+});
+
+// F5: the minimap and zoom controls are `absolute bottom-4` inside the panel,
+// so board content underneath them cannot be reached by pointer however visible
+// it looks. Confirmed for the unsliced row label — its name and edit control sit
+// directly under the minimap — though not, as the review guessed, for the first
+// column's unsliced cell. The e2e suite aimed its drags at a slice band to avoid
+// the region entirely, which is why nothing here ever failed.
+test('the unsliced row label can be scrolled clear of the overlays', async ({ page }) => {
+	// Pinned: whether content reaches the overlays depends on how much of the
+	// panel the board fills, so a viewport-size change would otherwise decide
+	// silently whether this test exercises anything.
+	await page.setViewportSize({ width: 1000, height: 600 });
+	await createMap(page, `E2E overlay ${Date.now()}`);
+	await addActivity(page, 'Search');
+	await addStep(page, 'Find a product');
+	const stepId = await firstStepId(page);
+	await addStory(page, stepId, 'unsliced', 'Bottom of the board');
+
+	const viewport = page.getByTestId('board-viewport');
+	await viewport.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+	await page.waitForTimeout(100);
+
+	// Scrolled fully down, nothing the user needs should still be pinned under
+	// an overlay — there has to be enough room below the last row for it to
+	// clear them.
+	const occluded = await page.evaluate(() => {
+		const label = document.querySelector('[data-testid="row-label-unsliced"]');
+		if (!label) return 'no label';
+		const box = label.getBoundingClientRect();
+		const top = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+		return top?.closest('[data-testid="board-minimap"]') ? 'under the minimap' : 'reachable';
+	});
+
+	expect(occluded).toBe('reachable');
 });
