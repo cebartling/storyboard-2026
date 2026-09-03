@@ -2,8 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { rankAtEnd, rankBetween } from './rank';
 
 describe('rankBetween', () => {
-	it('generates a rank at the start of an empty scope', () => {
-		expect(rankBetween(null, null)).toBeTypeOf('string');
+	// `toBeTypeOf('string')` passed for any implementation that did not throw.
+	// What matters about the first rank is that both directions stay open: the
+	// scheme has to be able to insert before and after it forever.
+	it('generates a rank at the start of an empty scope that can still be extended both ways', () => {
+		const first = rankBetween(null, null);
+
+		expect(first).not.toBe('');
+		expect(rankBetween(null, first) < first).toBe(true);
+		expect(rankBetween(first, null) > first).toBe(true);
 	});
 
 	it('generates a rank before the first existing rank', () => {
@@ -48,7 +55,25 @@ describe('rankAtEnd', () => {
 		expect(ranks.every((r) => end > r)).toBe(true);
 	});
 
-	it('returns a rank for an empty list', () => {
-		expect(rankAtEnd([])).toBeTypeOf('string');
+	it('returns a rank for an empty list that behaves like a first rank', () => {
+		const only = rankAtEnd([]);
+
+		expect(only).toBe(rankBetween(null, null));
+		expect(rankAtEnd([only]) > only).toBe(true);
+	});
+
+	// The whole scheme rests on lexicographic comparison, and keys are not
+	// fixed width — `rankAtEnd` reduces over an unsorted list, so a naive
+	// "last element" or a length-sensitive comparison would pass the sorted
+	// cases above and fail here.
+	it('sorts after the true maximum of shuffled, mixed-length keys', () => {
+		// Deliberately not sorted, and the maximum ('a1') is not last: a naive
+		// "take the last element" reduces to 'Zz' and would return a rank below
+		// half the list.
+		const ranks = ['a0', 'a1', 'a0V', 'Zz'];
+
+		const end = rankAtEnd(ranks);
+
+		expect(ranks.every((r) => end > r)).toBe(true);
 	});
 });

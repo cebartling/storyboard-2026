@@ -533,6 +533,23 @@ describe('invariant enforcement smoke test', () => {
 			map = addStory(map, s.step.id, `Sliced ${i}`, { sliceId: slice.slice.id }).map;
 		}
 
+		// Appending always mints a fresh key, so a test that only adds proves
+		// nothing about uniqueness — it passed while `moveStory` was deriving
+		// duplicate ranks (finding D1). These are the operations that can
+		// actually collide: reordering within a scope, and moving between
+		// scopes, each with a one-sided neighbour.
+		const unsliced = () =>
+			sortByRank(map.stories.filter((x) => x.stepId === s.step.id && x.sliceId === null));
+		const sliced = () =>
+			sortByRank(map.stories.filter((x) => x.stepId === s.step.id && x.sliceId === slice.slice.id));
+
+		// To the head of its own scope, then the tail, then into the slice.
+		map = moveStory(map, unsliced()[4].id, s.step.id, null, null, unsliced()[0].id);
+		map = moveStory(map, unsliced()[0].id, s.step.id, null, unsliced().at(-1)!.id, null);
+		map = moveStory(map, unsliced()[0].id, s.step.id, slice.slice.id, null, sliced()[0].id);
+		// And back out of it, into the middle of the unsliced band.
+		map = moveStory(map, sliced().at(-1)!.id, s.step.id, null, unsliced()[1].id, unsliced()[2].id);
+
 		const byScope = new Map<string, Set<string>>();
 		for (const story of map.stories) {
 			const key = `${story.stepId}:${story.sliceId}`;
