@@ -11,9 +11,11 @@
 // `board-minimap.svelte` from the camera's measured sizes, not from this
 // model.
 //
-// The input is a *structural* type (only the fields this module reads) so
-// that `src/lib/` never imports from a route module (`board-view-model.ts`
-// lives under `src/routes/`) — see CLAUDE.md's layering note.
+// The input is a *structural* type naming only the fields this module reads.
+// It was originally that way to keep `src/lib/` from importing a route module;
+// `board-view-model.ts` now lives in `src/lib/board/`, so that reason is gone
+// and the narrowness is the reason on its own — a minimap that named the whole
+// `BoardViewModel` would be recompiled by every field added to it.
 // ---------------------------------------------------------------------------
 
 export interface MinimapBoardInput {

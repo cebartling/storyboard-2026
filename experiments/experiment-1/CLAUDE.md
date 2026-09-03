@@ -56,14 +56,17 @@ the seed, so no test or fixture breaks if you delete it.
   reason the domain is testable without a database.
 - Routes call `src/lib/app/` use cases, which call the ports in `src/lib/domain/ports.ts`.
   Routes do not talk to the repository directly.
+- `src/lib/` never imports from `src/routes/`. `board-view-model.ts` lives in
+  `src/lib/board/` for that reason: it is pure and DB-free, and `src/lib/canvas/`'s tests
+  read it as well as the route does.
 - Ordering uses **fractional ranks** (TEXT), never integer positions. The client never
   computes a rank — it sends neighbour ids and the server derives the rank. See ADR 0005.
 - Drag-and-drop is isolated behind `src/lib/components/story-dnd-zone.svelte` so
   `svelte-dnd-action` can be swapped without touching the board.
 - The board's pan/zoom canvas (ADR 0010) lives in `src/lib/canvas/`: `camera-math.ts` (pure
   math, no DOM types), `camera.svelte.ts` (the `Camera` rune object), `minimap-model.ts`
-  (flattens board grid geometry for the minimap — takes a structural input type so it
-  never imports the route's `board-view-model.ts`), and `camera-storage.ts` (the
+  (flattens board grid geometry for the minimap — takes a structural input type rather
+  than the whole `BoardViewModel`), and `camera-storage.ts` (the
   `localStorage` persistence, read/written only inside `$effect`). Like `src/lib/domain/`,
   `camera-math.ts` stays DOM-free and unit-testable, but it is presentation state for one
   route, not a domain invariant, so it lives outside `src/lib/domain/` and ADR 0006's
@@ -81,7 +84,7 @@ the seed, so no test or fixture breaks if you delete it.
   `.field-label`, `.error`) live in `src/app.css`; everything else is utilities in the
   markup. Components have no `<style>` blocks — add utilities or extend `src/app.css`
   instead. The board's `grid-column`/`grid-row` inline styles stay inline: they are data
-  from `board-view-model.ts`, not design. Icons come from `@lucide/svelte` (ADR 0012),
+  from `src/lib/board/board-view-model.ts`, not design. Icons come from `@lucide/svelte` (ADR 0012),
   imported one at a time (`@lucide/svelte/icons/pencil`) and sized with a `size-*` class —
   never typed in as Unicode glyphs, and never labelled themselves: the `aria-label` stays
   on the button. An icon-only button also takes

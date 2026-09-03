@@ -12,6 +12,7 @@ StoryMap {
   id: string
   name: string
   createdAt: Date
+  version: number             // optimistic concurrency; see below
 }
 
 Activity {                    // backbone, narrative order
@@ -59,6 +60,21 @@ Enforced in domain code (`src/lib/domain/`), not left to the database to catch:
   (un-slicing), matching pulling a strip of tape off a physical wall.
 - Moving a `Step` to a different `Activity` carries its `Story`s with it; their `sliceId`
   values are untouched (slice membership is orthogonal to which activity owns the step).
+
+## Concurrency
+
+`StoryMap.version` is a single counter for the whole aggregate. `StoryMapRepository.save()`
+writes only if the row's version still matches the one that was loaded, and throws
+`ConflictError` otherwise, which `run-action.ts` turns into a 409 telling the user to
+reload. This is what stops a lost update: two people editing the same map cannot silently
+overwrite each other.
+
+Because the counter covers the whole map rather than an entity, **two editors who touch
+entirely different cards still conflict** — the second one is rejected and their edit is
+lost. That is measured rather than assumed
+(`drizzle-story-map-repository.test.ts`, "rejects a second editor who changed a different
+story than the first"), and it is the constraint that makes real-time collaboration a
+re-modelling job rather than an addition. See the amendment to ADR 0004.
 
 ## Ordering model
 

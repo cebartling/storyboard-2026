@@ -39,8 +39,18 @@ a single driver:
 - **`Clock` / `Id` ports.** Wrapping `Date.now()` and ID generation behind port interfaces
   is a pattern for when tests need to control time or produce deterministic IDs across
   many call sites in a large codebase. At this scale, domain unit tests that need a fixed
-  clock or ID can pass a value directly into the function under test — no port needed to
+  clock can pass a value directly into the function under test — no port needed to
   achieve the same determinism.
+
+  **Amendment, 2026-09-02** (finding A8 of `../review-2026-09-02.md`): that is true of the
+  clock, which `createStoryMap` takes as a parameter, but it was never true of ids.
+  `newId()` is called _inside_ `createStoryMap`, `addActivity`, `addStep`, `addSlice` and
+  `addStory`, so a test cannot supply one. The consequence is small and worth stating
+  rather than fixing: domain tests match returned entities structurally, or capture the id
+  from the result, instead of asserting against an id they chose. Adding an `Id` port — or
+  optional `id` parameters — to buy exact-equality assertions would be paying for
+  determinism the tests do not actually need.
+
 - **A DI container.** The composition root (`src/lib/server/deps.ts`) is a plain module
   that constructs and exports the two concrete adapters. A container (reflection-based
   wiring, lifecycle management, scopes) solves problems — many dependencies, request-scoped

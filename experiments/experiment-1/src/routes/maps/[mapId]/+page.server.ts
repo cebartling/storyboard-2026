@@ -20,7 +20,7 @@ import {
 import type { ActivityId, MapId, SliceId, StepId, StoryId } from '$lib/domain/ids';
 import { InvariantError } from '$lib/domain/errors';
 
-import { buildBoardViewModel } from './board-view-model';
+import { buildBoardViewModel } from '$lib/board/board-view-model';
 import { runAction } from './run-action';
 
 export const load: PageServerLoad = async ({ params }) => {
