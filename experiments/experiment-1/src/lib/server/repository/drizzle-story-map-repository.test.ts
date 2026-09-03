@@ -370,14 +370,14 @@ describe('DrizzleStoryMapRepository', () => {
 				.select()
 				.from(schema.steps)
 				.all()
-				.filter((st) => stepIds.includes(st.id))
+				.filter((st) => (stepIds as string[]).includes(st.id))
 		).toHaveLength(0);
 		expect(
 			db
 				.select()
 				.from(schema.stories)
 				.all()
-				.filter((story) => stepIds.includes(story.stepId))
+				.filter((story) => (stepIds as string[]).includes(story.stepId))
 		).toHaveLength(0);
 	});
 
