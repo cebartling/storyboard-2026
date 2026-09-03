@@ -117,9 +117,12 @@
 	// row 1's rendered height rather than hard-coded, so it settles directly
 	// beneath row 1 instead of overlapping it; both together give the band the
 	// content rows have to stay clear of when something is scrolled into view.
-	let activityHeaderEls: (HTMLDivElement | undefined)[] = $state([]);
+	// `bind:this` writes `null` on teardown, and a keyed-each removal leaves
+	// that slot behind, so the element type has to admit it — `undefined` alone
+	// let a `null` reach `observer.observe()` and crash the effect below.
+	let activityHeaderEls: (HTMLDivElement | null | undefined)[] = $state([]);
 	let activityHeaderHeight = $state(0);
-	let stepHeaderEls: (HTMLDivElement | undefined)[] = $state([]);
+	let stepHeaderEls: (HTMLDivElement | null | undefined)[] = $state([]);
 	let stepHeaderHeight = $state(0);
 
 	/**
@@ -128,11 +131,11 @@
 	 * component effect.
 	 */
 	function trackMaxHeight(
-		getEls: () => (HTMLDivElement | undefined)[],
+		getEls: () => (HTMLDivElement | null | undefined)[],
 		set: (height: number) => void
 	) {
 		$effect(() => {
-			const els = getEls().filter((el): el is HTMLDivElement => el !== undefined);
+			const els = getEls().filter((el): el is HTMLDivElement => el != null);
 			if (els.length === 0) {
 				set(0);
 				return;
