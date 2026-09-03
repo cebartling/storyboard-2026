@@ -201,6 +201,49 @@ describe('DrizzleStoryMapRepository', () => {
 		expect((await repository.load(map.id))!.name).toBe('Saved by first request');
 	});
 
+	// A1 of documentation/review-2026-09-02.md, as an experiment rather than an
+	// argument. ADR 0004 defers the aggregate question as "is whole-map save
+	// fast enough?" — a throughput question. This is the contention question,
+	// and it is the one that decides whether collaboration is reachable from
+	// this shape: two editors, two *different* stories, no overlap of intent.
+	//
+	// It passes today, which is the finding. The version is per map, so the
+	// second writer is rejected even though nothing they touched was changed by
+	// the first. Editing is therefore single-writer by construction, not by
+	// accident of implementation.
+	it('rejects a second editor who changed a different story than the first', async () => {
+		const map = buildSampleMap();
+		await repository.save(map);
+
+		const alice = (await repository.load(map.id))!;
+		const bob = (await repository.load(map.id))!;
+
+		const [first, second] = alice.stories;
+		expect(first.id).not.toBe(second.id);
+
+		await repository.save({
+			...alice,
+			stories: alice.stories.map((s) =>
+				s.id === first.id ? { ...s, title: 'Renamed by Alice' } : s
+			)
+		});
+
+		await expect(
+			repository.save({
+				...bob,
+				stories: bob.stories.map((s) =>
+					s.id === second.id ? { ...s, title: 'Renamed by Bob' } : s
+				)
+			})
+		).rejects.toThrow(/changed since it was loaded/);
+
+		// Bob's edit is lost entirely: he has to reload and retype it, even
+		// though the two edits could not have conflicted.
+		const after = (await repository.load(map.id))!;
+		expect(after.stories.find((s) => s.id === first.id)!.title).toBe('Renamed by Alice');
+		expect(after.stories.find((s) => s.id === second.id)!.title).toBe(second.title);
+	});
+
 	it('delete() removes the map and cascades to its children', async () => {
 		const map = buildSampleMap();
 		await repository.save(map);

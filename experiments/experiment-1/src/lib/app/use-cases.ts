@@ -12,7 +12,7 @@
  */
 
 import type { ActivityId, MapId, SliceId, StepId, StoryId } from '$lib/domain/ids';
-import type { StoryMapRepository } from '$lib/domain/ports';
+import type { AiAssistant, StoryMapRepository, StorySuggestion } from '$lib/domain/ports';
 import { InvariantError } from '$lib/domain/errors';
 import * as domain from '$lib/domain/story-map';
 import {
@@ -246,4 +246,37 @@ export async function moveStory(
 	const map = await loadOrThrow(repository, mapId);
 	const updated = domain.moveStory(map, storyId, toStepId, toSliceId, beforeId, afterId);
 	await repository.save(updated);
+}
+
+// ---------------------------------------------------------------------------
+// AI
+// ---------------------------------------------------------------------------
+
+/**
+ * Asks the `AiAssistant` port for candidate stories on a step, given what the
+ * step already has. This is the port's first consumer: ADR 0007 claimed the app
+ * was "wired against the port today" when nothing called it, so the contract —
+ * a domain snapshot in, structured suggestions out — was asserted rather than
+ * demonstrated (finding A4 of documentation/review-2026-09-02.md).
+ *
+ * Read-only by design. Suggestions are returned for the caller to apply or
+ * discard through the ordinary `addStory` path; writing them here would both
+ * bump the version under a concurrent editor and take the accept/reject
+ * decision away from the user.
+ */
+export async function suggestStoriesForStep(
+	repository: StoryMapRepository,
+	aiAssistant: AiAssistant,
+	mapId: MapId,
+	stepId: StepId
+): Promise<StorySuggestion[]> {
+	const map = await loadOrThrow(repository, mapId);
+	const step = domain.findStep(map, stepId);
+	const activity = domain.findActivity(map, step.activityId);
+
+	return aiAssistant.suggestStoriesForStep({
+		stepName: step.name,
+		activityName: activity.name,
+		existingStoryTitles: map.stories.filter((s) => s.stepId === stepId).map((s) => s.title)
+	});
 }

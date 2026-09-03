@@ -32,3 +32,26 @@ whole-map `save()` is fast enough in practice, versus per-operation repository m
 that write only the changed rows. The plan is to start coarse and only revisit if drag
 latency is actually felt during use — this is not a decision made now, it's a decision
 explicitly postponed until there's a real performance signal to act on.
+
+## Amendment, 2026-09-02: the deferred question was the wrong one
+
+The open question above is framed as throughput — _is whole-map `save()` fast enough?_ A
+review asked the contention question instead, and it was measured rather than argued
+(`drizzle-story-map-repository.test.ts`, "rejects a second editor who changed a different
+story than the first"):
+
+**Two editors who touch entirely different stories still conflict.** `maps.version` is one
+counter for the whole aggregate, so the second writer is rejected and their edit is lost
+even though nothing they changed was touched by the first. Editing is single-writer by
+construction, not by accident of implementation.
+
+That is the correct behaviour for this design — it is what prevents a lost update, and the
+409 it produces is honest. The point of recording it is the cost of changing it later:
+every domain function returns a whole new `StoryMap` with no delta, command, or event, so
+there is nothing to broadcast, diff, or merge. Real-time collaboration would mean
+reshaping the domain's return types, the repository port, and the client's
+`invalidateAll()` sync loop _together_, not adding a layer beside them.
+
+No decision is reversed here. What changes is that the aggregate boundary is now known to
+be a **collaboration** constraint rather than only a performance one, and the throughput
+question remains open and unmeasured.
