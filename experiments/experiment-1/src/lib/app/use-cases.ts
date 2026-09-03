@@ -3,8 +3,10 @@
  * (`src/routes/`) and the domain core + outbound ports. See
  * documentation/architecture.md's layer diagram and `moveStory` trace.
  *
- * Each function here validates its input, calls into `src/lib/domain/`, and
- * calls the ports it needs — it holds no business rules of its own. The
+ * Each function here calls into `src/lib/domain/` and the ports it needs — it
+ * holds no business rules of its own. Name validation used to live here (and
+ * again in the route), which contradicted that sentence and let the seed
+ * builder past it; it is now in the domain where the other invariants are. The
  * board-editing use cases (add/rename/delete activities, steps, stories,
  * slices; move/reorder/slice a story) all follow the same shape: load the
  * aggregate, call the pure domain function, save, return whatever the
@@ -35,12 +37,7 @@ export async function listMaps(repository: StoryMapRepository): Promise<MapSumma
 }
 
 export async function createMap(repository: StoryMapRepository, name: string): Promise<StoryMap> {
-	const trimmed = name.trim();
-	if (trimmed.length === 0) {
-		throw new InvariantError('Map name must not be empty');
-	}
-	const map = createStoryMap(trimmed);
-	return repository.save(map);
+	return repository.save(createStoryMap(name));
 }
 
 export async function loadMap(repository: StoryMapRepository, id: MapId): Promise<StoryMap | null> {
@@ -55,14 +52,6 @@ async function loadOrThrow(repository: StoryMapRepository, id: MapId): Promise<S
 	return map;
 }
 
-function requireNonEmpty(value: string, label: string): string {
-	const trimmed = value.trim();
-	if (trimmed.length === 0) {
-		throw new InvariantError(`${label} must not be empty`);
-	}
-	return trimmed;
-}
-
 // ---------------------------------------------------------------------------
 // Add
 // ---------------------------------------------------------------------------
@@ -73,10 +62,7 @@ export async function addActivity(
 	name: string
 ): Promise<Activity> {
 	const map = await loadOrThrow(repository, mapId);
-	const { map: updated, activity } = domain.addActivity(
-		map,
-		requireNonEmpty(name, 'Activity name')
-	);
+	const { map: updated, activity } = domain.addActivity(map, name);
 	await repository.save(updated);
 	return activity;
 }
@@ -88,11 +74,7 @@ export async function addStep(
 	name: string
 ): Promise<Step> {
 	const map = await loadOrThrow(repository, mapId);
-	const { map: updated, step } = domain.addStep(
-		map,
-		activityId,
-		requireNonEmpty(name, 'Step name')
-	);
+	const { map: updated, step } = domain.addStep(map, activityId, name);
 	await repository.save(updated);
 	return step;
 }
@@ -103,7 +85,7 @@ export async function createSlice(
 	name: string
 ): Promise<Slice> {
 	const map = await loadOrThrow(repository, mapId);
-	const { map: updated, slice } = domain.addSlice(map, requireNonEmpty(name, 'Slice name'));
+	const { map: updated, slice } = domain.addSlice(map, name);
 	await repository.save(updated);
 	return slice;
 }
@@ -116,12 +98,7 @@ export async function addStory(
 	options: { description?: string | null; sliceId?: SliceId | null } = {}
 ): Promise<Story> {
 	const map = await loadOrThrow(repository, mapId);
-	const { map: updated, story } = domain.addStory(
-		map,
-		stepId,
-		requireNonEmpty(title, 'Story title'),
-		options
-	);
+	const { map: updated, story } = domain.addStory(map, stepId, title, options);
 	await repository.save(updated);
 	return story;
 }
@@ -137,7 +114,7 @@ export async function renameActivity(
 	name: string
 ): Promise<void> {
 	const map = await loadOrThrow(repository, mapId);
-	const updated = domain.renameActivity(map, activityId, requireNonEmpty(name, 'Activity name'));
+	const updated = domain.renameActivity(map, activityId, name);
 	await repository.save(updated);
 }
 
@@ -148,7 +125,7 @@ export async function renameStep(
 	name: string
 ): Promise<void> {
 	const map = await loadOrThrow(repository, mapId);
-	const updated = domain.renameStep(map, stepId, requireNonEmpty(name, 'Step name'));
+	const updated = domain.renameStep(map, stepId, name);
 	await repository.save(updated);
 }
 
@@ -159,7 +136,7 @@ export async function renameSlice(
 	name: string
 ): Promise<void> {
 	const map = await loadOrThrow(repository, mapId);
-	const updated = domain.renameSlice(map, sliceId, requireNonEmpty(name, 'Slice name'));
+	const updated = domain.renameSlice(map, sliceId, name);
 	await repository.save(updated);
 }
 
@@ -171,9 +148,7 @@ export async function editStory(
 ): Promise<void> {
 	const map = await loadOrThrow(repository, mapId);
 	const trimmedChanges =
-		changes.title !== undefined
-			? { ...changes, title: requireNonEmpty(changes.title, 'Story title') }
-			: changes;
+		changes.title !== undefined ? { ...changes, title: changes.title } : changes;
 	const updated = domain.editStory(map, storyId, trimmedChanges);
 	await repository.save(updated);
 }

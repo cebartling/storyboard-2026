@@ -68,7 +68,7 @@ export type NeighbourId = string | null | undefined;
 export function createStoryMap(name: string, createdAt: Date = new Date()): StoryMap {
 	return {
 		id: newId<MapId>(),
-		name,
+		name: requireName(name, 'Map name'),
 		createdAt,
 		version: 0,
 		activities: [],
@@ -206,7 +206,7 @@ export function addActivity(map: StoryMap, name: string): { map: StoryMap; activ
 	const activity: Activity = {
 		id: newId<ActivityId>(),
 		mapId: map.id,
-		name,
+		name: requireName(name, 'Activity name'),
 		rank: rankAtEnd(activityRanks(map)),
 		steps: []
 	};
@@ -222,7 +222,7 @@ export function addStep(
 	const step: Step = {
 		id: newId<StepId>(),
 		activityId,
-		name,
+		name: requireName(name, 'Step name'),
 		rank: rankAtEnd(stepRanks(activity))
 	};
 	return {
@@ -240,7 +240,7 @@ export function addSlice(map: StoryMap, name: string): { map: StoryMap; slice: S
 	const slice: Slice = {
 		id: newId<SliceId>(),
 		mapId: map.id,
-		name,
+		name: requireName(name, 'Slice name'),
 		rank: rankAtEnd(sliceRanks(map))
 	};
 	return { map: { ...map, slices: [...map.slices, slice] }, slice };
@@ -259,12 +259,26 @@ export function addStory(
 	const story: Story = {
 		id: newId<StoryId>(),
 		stepId,
-		title,
+		title: requireName(title, 'Story title'),
 		description: options.description ?? null,
 		sliceId,
 		rank: rankAtEnd(storyRanksInScope(map, stepId, sliceId))
 	};
 	return { map: { ...map, stories: [...map.stories, story] }, story };
+}
+
+/**
+ * Every entity on a board is identified to the user by its name, so a blank one
+ * is not a degenerate case to tolerate — it is a card nobody can read. Trimming
+ * here rather than at the edge also means two names cannot differ only by
+ * padding. Descriptions are exempt: they are genuinely optional.
+ */
+function requireName(value: string, label: string): string {
+	const trimmed = value.trim();
+	if (trimmed.length === 0) {
+		throw new InvariantError(`${label} must not be empty`);
+	}
+	return trimmed;
 }
 
 function assertSliceBelongsToMap(map: StoryMap, sliceId: SliceId): void {
@@ -279,26 +293,32 @@ function assertSliceBelongsToMap(map: StoryMap, sliceId: SliceId): void {
 
 export function renameActivity(map: StoryMap, activityId: ActivityId, name: string): StoryMap {
 	findActivity(map, activityId);
+	const trimmed = requireName(name, 'Activity name');
 	return {
 		...map,
-		activities: map.activities.map((a) => (a.id === activityId ? { ...a, name } : a))
+		activities: map.activities.map((a) => (a.id === activityId ? { ...a, name: trimmed } : a))
 	};
 }
 
 export function renameStep(map: StoryMap, stepId: StepId, name: string): StoryMap {
 	findStep(map, stepId);
+	const trimmed = requireName(name, 'Step name');
 	return {
 		...map,
 		activities: map.activities.map((a) => ({
 			...a,
-			steps: a.steps.map((s) => (s.id === stepId ? { ...s, name } : s))
+			steps: a.steps.map((s) => (s.id === stepId ? { ...s, name: trimmed } : s))
 		}))
 	};
 }
 
 export function renameSlice(map: StoryMap, sliceId: SliceId, name: string): StoryMap {
 	findSlice(map, sliceId);
-	return { ...map, slices: map.slices.map((s) => (s.id === sliceId ? { ...s, name } : s)) };
+	const trimmed = requireName(name, 'Slice name');
+	return {
+		...map,
+		slices: map.slices.map((s) => (s.id === sliceId ? { ...s, name: trimmed } : s))
+	};
 }
 
 export function editStory(
@@ -307,6 +327,7 @@ export function editStory(
 	changes: { title?: string; description?: string | null }
 ): StoryMap {
 	findStory(map, storyId);
+	const title = changes.title === undefined ? undefined : requireName(changes.title, 'Story title');
 	return {
 		...map,
 		stories: map.stories.map((s) =>
@@ -317,7 +338,7 @@ export function editStory(
 						// value is `undefined`, so `{ title: undefined }` would blank a
 						// required field. `description` needs the `!== undefined` form
 						// because `null` is a legal value that must still clear it.
-						title: changes.title ?? s.title,
+						title: title ?? s.title,
 						description: changes.description !== undefined ? changes.description : s.description
 					}
 				: s
