@@ -39,6 +39,28 @@
 		)
 	);
 
+	/**
+	 * Everything outside the viewport, as one evenodd path: the full minimap
+	 * with the viewport rect as a second subpath punching a hole in it. Dimming
+	 * the surroundings rather than tinting the viewport keeps the "you are here"
+	 * area showing its true cell colours.
+	 */
+	const scrimPath = $derived(
+		`M 0 0 H ${WIDTH} V ${HEIGHT} H 0 Z ` +
+			`M ${viewportRect.x} ${viewportRect.y} h ${viewportRect.width} v ${viewportRect.height} h ${-viewportRect.width} Z`
+	);
+
+	/**
+	 * Density ramp for a populated cell. Buckets rather than a continuous scale:
+	 * a minimap this small only has to answer "busy or not", and buckets keep
+	 * the steps distinguishable at 180x120.
+	 */
+	function cellOpacity(storyCount: number): number {
+		if (storyCount >= 4) return 0.85;
+		if (storyCount >= 2) return 0.55;
+		return 0.28;
+	}
+
 	/** Converts a pointer event's client coordinates into the SVG's own `viewBox` units. */
 	function toLocalPoint(e: PointerEvent): { x: number; y: number } {
 		if (!svgEl) return { x: 0, y: 0 };
@@ -135,16 +157,31 @@
 	viewBox="0 0 {WIDTH} {HEIGHT}"
 	width={WIDTH}
 	height={HEIGHT}
-	class="border-line rounded border bg-white/90 shadow-sm"
+	class="border-line bg-canvas rounded border shadow-sm"
 	onpointerdown={onBackgroundPointerDown}
 	onpointermove={onHandlePointerMove}
 	onpointerup={onHandlePointerUp}
 	onpointercancel={onHandlePointerUp}
 >
+	{#each model.cells as cell (`${cell.col}-${cell.row}`)}
+		<rect
+			data-testid="minimap-cell"
+			aria-hidden="true"
+			data-story-count={cell.storyCount}
+			x={cell.col * cellWidth}
+			y={cell.row * cellHeight}
+			width={cellWidth}
+			height={cellHeight}
+			fill={cell.storyCount > 0 ? 'var(--color-brand)' : 'var(--color-surface)'}
+			fill-opacity={cell.storyCount > 0 ? cellOpacity(cell.storyCount) : 1}
+		/>
+	{/each}
+
 	{#each model.rows as row, i (row.sliceId ?? `unsliced-${i}`)}
 		<rect
 			data-testid="minimap-row"
 			aria-hidden="true"
+			pointer-events="none"
 			x="0"
 			y={i * cellHeight}
 			width={WIDTH}
@@ -155,18 +192,15 @@
 		/>
 	{/each}
 
-	{#each model.cells as cell (`${cell.col}-${cell.row}`)}
-		<rect
-			data-testid="minimap-cell"
-			aria-hidden="true"
-			data-story-count={cell.storyCount}
-			x={cell.col * cellWidth}
-			y={cell.row * cellHeight}
-			width={cellWidth}
-			height={cellHeight}
-			fill={cell.storyCount > 0 ? 'var(--color-accent-soft)' : 'var(--color-brand-soft)'}
-		/>
-	{/each}
+	<path
+		data-testid="minimap-scrim"
+		aria-hidden="true"
+		d={scrimPath}
+		fill-rule="evenodd"
+		fill="var(--color-ink)"
+		fill-opacity="0.18"
+		pointer-events="none"
+	/>
 
 	<!--
 		`group`, not `img`: an `img` has presentational children, which would drop
@@ -180,6 +214,25 @@
 		roles, so it flags the tabindex and the listeners; both are deliberate and
 		are what makes the handle reachable at all.
 	-->
+	<!--
+		A wider light stroke drawn underneath the brand one, so the frame stays
+		readable whether it sits over the palest empty cell or the darkest
+		populated one.
+	-->
+	<rect
+		data-testid="minimap-viewport-halo"
+		aria-hidden="true"
+		x={viewportRect.x}
+		y={viewportRect.y}
+		width={viewportRect.width}
+		height={viewportRect.height}
+		rx="2"
+		fill="none"
+		stroke="var(--color-canvas)"
+		stroke-width="3.5"
+		pointer-events="none"
+	/>
+
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 	<rect
 		data-testid="minimap-viewport"
@@ -190,11 +243,12 @@
 		y={viewportRect.y}
 		width={viewportRect.width}
 		height={viewportRect.height}
-		fill="var(--color-brand-soft)"
-		fill-opacity="0.5"
-		stroke="var(--color-accent-soft)"
+		rx="2"
+		fill="none"
+		pointer-events="all"
+		stroke="var(--color-brand)"
 		stroke-width="1.5"
-		class="cursor-move"
+		class="cursor-move outline-none focus-visible:stroke-accent focus-visible:[stroke-width:2.5]"
 		onpointerdown={onHandlePointerDown}
 		onpointermove={onHandlePointerMove}
 		onpointerup={onHandlePointerUp}

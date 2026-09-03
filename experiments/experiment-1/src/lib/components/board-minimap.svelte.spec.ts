@@ -40,6 +40,71 @@ describe('BoardMinimap', () => {
 		expect(withStories).toHaveLength(2);
 	});
 
+	it('paints a density ramp so busier cells read darker', async () => {
+		const camera = cameraWithGeometry();
+		const dense: MinimapModel = {
+			columns: 4,
+			rows: [{ sliceId: 'slice-1', name: 'Release 1' }],
+			cells: [
+				{ col: 0, row: 0, storyCount: 0 },
+				{ col: 1, row: 0, storyCount: 1 },
+				{ col: 2, row: 0, storyCount: 3 },
+				{ col: 3, row: 0, storyCount: 5 }
+			]
+		};
+		render(BoardMinimap, { camera, model: dense });
+
+		const cells = page.getByTestId('minimap-cell').elements() as unknown as SVGRectElement[];
+		const byCount = new Map(cells.map((c) => [c.getAttribute('data-story-count'), c]));
+
+		// An empty cell is ground, not a faint tint of the content colour.
+		expect(byCount.get('0')?.getAttribute('fill')).toBe('var(--color-surface)');
+
+		const opacityOf = (count: string) =>
+			Number(byCount.get(count)?.getAttribute('fill-opacity') ?? '0');
+		expect(byCount.get('1')?.getAttribute('fill')).toBe('var(--color-brand)');
+		expect(opacityOf('1')).toBeGreaterThan(0);
+		expect(opacityOf('3')).toBeGreaterThan(opacityOf('1'));
+		expect(opacityOf('5')).toBeGreaterThan(opacityOf('3'));
+	});
+
+	it('dims the board outside the viewport without swallowing pointer events', async () => {
+		const camera = cameraWithGeometry();
+		render(BoardMinimap, { camera, model });
+
+		const scrim = page.getByTestId('minimap-scrim').element() as SVGPathElement;
+		expect(scrim.getAttribute('aria-hidden')).toBe('true');
+		// The scrim covers the whole minimap, so it must not intercept the
+		// press-and-drag that `onBackgroundPointerDown` implements.
+		expect(getComputedStyle(scrim).pointerEvents).toBe('none');
+		// The hole is the viewport rect itself, punched out with evenodd.
+		expect(scrim.getAttribute('fill-rule')).toBe('evenodd');
+
+		const handle = page.getByTestId('minimap-viewport').element() as SVGRectElement;
+		const d = scrim.getAttribute('d') ?? '';
+		expect(d).toContain(`M ${handle.getAttribute('x')} ${handle.getAttribute('y')}`);
+	});
+
+	it('frames the viewport in a saturated border with a contrasting halo', async () => {
+		const camera = cameraWithGeometry();
+		render(BoardMinimap, { camera, model });
+
+		const handle = page.getByTestId('minimap-viewport').element() as SVGRectElement;
+		expect(handle.getAttribute('stroke')).toBe('var(--color-brand)');
+		expect(handle.getAttribute('fill')).toBe('none');
+
+		// A wider light stroke behind the brand one keeps the frame legible over
+		// both the pale empty cells and the darkest populated ones.
+		const halo = page.getByTestId('minimap-viewport-halo').element() as SVGRectElement;
+		expect(halo.getAttribute('aria-hidden')).toBe('true');
+		expect(getComputedStyle(halo).pointerEvents).toBe('none');
+		expect(Number(halo.getAttribute('stroke-width'))).toBeGreaterThan(
+			Number(handle.getAttribute('stroke-width'))
+		);
+		expect(halo.getAttribute('x')).toBe(handle.getAttribute('x'));
+		expect(halo.getAttribute('width')).toBe(handle.getAttribute('width'));
+	});
+
 	it('keeps the focusable handle in the accessibility tree', async () => {
 		const camera = cameraWithGeometry();
 		render(BoardMinimap, { camera, model });
