@@ -36,6 +36,18 @@ in regardless of which methods change is the contract style, which exists to kee
 integration from becoming "pass the user's raw text to a prompt and paste the response
 back" — a pattern that would bypass the domain model's invariants entirely and couple the
 UI to whatever a particular model happens to return. The `NullAiAssistant` implementation
-means the rest of the app (use cases, routes) can be wired against the port today and
-never need to change when a real implementation replaces the null one later — only
-`deps.ts` changes.
+means the rest of the app can be wired against the port today and never need to change
+when a real implementation replaces the null one later — only `deps.ts` changes.
+
+**Amendment, 2026-09-02.** That last sentence originally said use cases and routes _were_
+wired against the port. They were not: nothing referenced `aiAssistant` outside `deps.ts`,
+so the contract was a doc comment with no consumer, type, or test holding it to anything —
+which is the entire justification for defining the port before a feature needs it (finding
+A4 of `../review-2026-09-02.md`).
+
+There is now one consumer: `suggestStoriesForStep` in `src/lib/app/use-cases.ts`, with a
+recording double in `use-cases.test.ts` that asserts the snapshot handed across the seam.
+The use case is read-only — suggestions come back for the caller to apply through the
+ordinary `addStory` path — so the port cannot bump the aggregate version behind a
+concurrent editor. **No route calls it yet**, deliberately: the seam is what was worth
+proving, and a UI for it would be scoping the AI feature this ADR says is not scoped.
