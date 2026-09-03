@@ -18,3 +18,10 @@ Then the decision record:
 - **[adr/](./adr/)** — the numbered ADRs (0001–0013) behind the choices above. 0006 is the
   direct written answer to "would hexagonal architecture be helpful here?" and is worth
   reading even if you skip the others.
+
+Point-in-time reviews (snapshots, not living documents — read them for open questions, not
+for how the code works today):
+
+- **[review-2026-09-02.md](./review-2026-09-02.md)** — triage of an adversarial review at
+  commit `d0c77a0`. Two reproduced defects, and the open question of whether the single-aggregate
+  save survives more than one editor.
