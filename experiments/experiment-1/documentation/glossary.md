@@ -42,6 +42,13 @@ current step, and dragging it across a slice line changes priority order _and_ c
 which release it belongs to. These are handled as two different operations even though
 both happen via drag-and-drop — see `documentation/domain-model.md` for the mechanics.
 
+> **What the board actually exposes today.** Only the story-level drags are wired up. The
+> domain has `moveActivity`, `moveStep`, and `moveSlice` — so reordering the backbone and
+> moving a step between activities are implemented and tested — but nothing in the UI calls
+> them yet, and there is no drag affordance on activity, step, or slice headers. The
+> paragraph above describes the technique; this note is the gap between it and the
+> experiment (finding A2 of `review-2026-09-02.md`).
+
 ## Backbone and walking skeleton
 
 - **Backbone** — the row of activities (and, beneath each, its steps) that forms the

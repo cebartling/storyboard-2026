@@ -400,6 +400,84 @@ export function deleteStory(map: StoryMap, storyId: StoryId): StoryMap {
  * reassignment plus a re-rank, written together (see domain-model.md's
  * worked example). `toSliceId` must be `null` or a Slice belonging to the
  * same map. */
+/**
+ * Reorders an activity within the map. The map is the whole rank scope, so
+ * unlike `moveStep` there is nowhere else to move to.
+ */
+export function moveActivity(
+	map: StoryMap,
+	activityId: ActivityId,
+	beforeId: NeighbourId,
+	afterId: NeighbourId
+): StoryMap {
+	findActivity(map, activityId);
+
+	const siblings = map.activities
+		.filter((a) => a.id !== activityId)
+		.map((a) => ({ id: a.id, rank: a.rank }));
+	const rank = resolveRank(siblings, beforeId, afterId, `activities of map ${map.id}`);
+
+	return {
+		...map,
+		activities: map.activities.map((a) => (a.id === activityId ? { ...a, rank } : a))
+	};
+}
+
+/**
+ * Moves a step within its activity, or to a different one. Stories reference
+ * their step by id and carry no activity of their own, so they follow the step
+ * without being touched here — the same reason `deleteStep` has to remove them
+ * explicitly.
+ */
+export function moveStep(
+	map: StoryMap,
+	stepId: StepId,
+	toActivityId: ActivityId,
+	beforeId: NeighbourId,
+	afterId: NeighbourId
+): StoryMap {
+	const step = findStep(map, stepId);
+	const toActivity = findActivity(map, toActivityId);
+
+	const siblings = toActivity.steps
+		.filter((s) => s.id !== stepId)
+		.map((s) => ({ id: s.id, rank: s.rank }));
+	const rank = resolveRank(siblings, beforeId, afterId, `steps of activity ${toActivityId}`);
+
+	const moved: Step = { ...step, activityId: toActivityId, rank };
+	return {
+		...map,
+		activities: map.activities.map((a) => {
+			const withoutStep = a.steps.filter((s) => s.id !== stepId);
+			return {
+				...a,
+				steps: a.id === toActivityId ? [...withoutStep, moved] : withoutStep
+			};
+		})
+	};
+}
+
+/** Reorders a slice within the map, changing the board's release bands top to
+ *  bottom. Stories reference slices by id, so their membership is untouched. */
+export function moveSlice(
+	map: StoryMap,
+	sliceId: SliceId,
+	beforeId: NeighbourId,
+	afterId: NeighbourId
+): StoryMap {
+	findSlice(map, sliceId);
+
+	const siblings = map.slices
+		.filter((s) => s.id !== sliceId)
+		.map((s) => ({ id: s.id, rank: s.rank }));
+	const rank = resolveRank(siblings, beforeId, afterId, `slices of map ${map.id}`);
+
+	return {
+		...map,
+		slices: map.slices.map((s) => (s.id === sliceId ? { ...s, rank } : s))
+	};
+}
+
 export function moveStory(
 	map: StoryMap,
 	storyId: StoryId,

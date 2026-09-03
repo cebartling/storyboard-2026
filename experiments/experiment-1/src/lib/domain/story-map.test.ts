@@ -11,7 +11,11 @@ import {
 	deleteStep,
 	deleteStory,
 	editStory,
+	findActivity,
 	findStory,
+	moveActivity,
+	moveSlice,
+	moveStep,
 	moveStory,
 	renameActivity,
 	renameSlice,
@@ -368,6 +372,95 @@ describe('moveStory', () => {
 		expect(() =>
 			moveStory(story.map, story.story.id, stepId, null, 'not-a-real-id' as never, null)
 		).toThrow(/is not a member of the target scope/);
+	});
+});
+
+describe('moveActivity / moveStep / moveSlice', () => {
+	function mapWithBackbone() {
+		let map = createStoryMap('Test map');
+		const a1 = addActivity(map, 'Browse');
+		map = a1.map;
+		const a2 = addActivity(map, 'Checkout');
+		map = a2.map;
+		const a3 = addActivity(map, 'Support');
+		map = a3.map;
+		return { map, a1: a1.activity, a2: a2.activity, a3: a3.activity };
+	}
+
+	it('reorders an activity within the map', () => {
+		const { map, a1, a2, a3 } = mapWithBackbone();
+
+		// Move Support between Browse and Checkout.
+		const moved = moveActivity(map, a3.id, a1.id, a2.id);
+
+		expect(sortByRank(moved.activities).map((a) => a.name)).toEqual([
+			'Browse',
+			'Support',
+			'Checkout'
+		]);
+	});
+
+	it('rejects an activity drop whose neighbours are stale', () => {
+		const { map, a1, a3 } = mapWithBackbone();
+
+		// Checkout sits after Browse, so "after Browse, before nothing" is not
+		// a real gap — the same staleness moveStory rejects.
+		expect(() => moveActivity(map, a3.id, a1.id, null)).toThrow(ConflictError);
+	});
+
+	it('reorders a step within its activity', () => {
+		const backbone = mapWithBackbone();
+		let map = backbone.map;
+		const s1 = addStep(map, backbone.a1.id, 'Search');
+		map = s1.map;
+		const s2 = addStep(map, backbone.a1.id, 'Filter');
+		map = s2.map;
+		const s3 = addStep(map, backbone.a1.id, 'Compare');
+		map = s3.map;
+
+		map = moveStep(map, s3.step.id, backbone.a1.id, s1.step.id, s2.step.id);
+
+		const steps = sortByRank(findActivity(map, backbone.a1.id).steps);
+		expect(steps.map((s) => s.name)).toEqual(['Search', 'Compare', 'Filter']);
+	});
+
+	// domain-model.md documents this move and nothing implemented it. The
+	// stories hanging off the step have to come with it: they reference it by
+	// `stepId`, so they move by staying put, and that is worth pinning.
+	it('moves a step to a different activity, carrying its stories', () => {
+		const backbone = mapWithBackbone();
+		let map = backbone.map;
+		const step = addStep(map, backbone.a1.id, 'Search');
+		map = step.map;
+		const story = addStory(map, step.step.id, 'Keyword search');
+		map = story.map;
+
+		map = moveStep(map, step.step.id, backbone.a2.id, null, null);
+
+		expect(findActivity(map, backbone.a1.id).steps).toHaveLength(0);
+		const moved = findActivity(map, backbone.a2.id).steps;
+		expect(moved.map((s) => s.name)).toEqual(['Search']);
+		expect(moved[0].activityId).toBe(backbone.a2.id);
+		expect(findStory(map, story.story.id).stepId).toBe(step.step.id);
+	});
+
+	it('reorders a slice within the map', () => {
+		const backbone = mapWithBackbone();
+		let map = backbone.map;
+		const r1 = addSlice(map, 'Release 1');
+		map = r1.map;
+		const r2 = addSlice(map, 'Release 2');
+		map = r2.map;
+		const r3 = addSlice(map, 'Release 3');
+		map = r3.map;
+
+		map = moveSlice(map, r3.slice.id, r1.slice.id, r2.slice.id);
+
+		expect(sortByRank(map.slices).map((s) => s.name)).toEqual([
+			'Release 1',
+			'Release 3',
+			'Release 2'
+		]);
 	});
 });
 
