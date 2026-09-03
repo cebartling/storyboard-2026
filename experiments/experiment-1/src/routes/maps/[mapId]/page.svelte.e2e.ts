@@ -18,7 +18,7 @@ import {
 //
 // `svelte-dnd-action` is pointer-event based, not native HTML5 drag-and-drop
 // — Playwright's built-in `dragTo` does not trigger it. The working
-// choreography (proven in src/routes/spike/page.svelte.e2e.ts) is manual
+// choreography is manual
 // mouse events: mouse.down() on the source, several mouse.move(..., {steps})
 // waypoints toward the target with small pauses, then mouse.up(). A single
 // long move does not work.

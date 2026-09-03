@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { toMinimapModel } from './minimap-model';
-import { buildBoardViewModel } from '../../routes/maps/[mapId]/board-view-model';
+import { buildBoardViewModel } from '$lib/board/board-view-model';
 import { addActivity, addSlice, addStep, addStory, createStoryMap } from '$lib/domain/story-map';
 import type { StoryMap } from '$lib/domain/story-map';
 

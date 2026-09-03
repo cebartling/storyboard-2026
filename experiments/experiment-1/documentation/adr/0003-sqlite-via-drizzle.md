@@ -11,6 +11,12 @@ exercised by a person or by Playwright. It needs real persistence to make drag-a
 reordering and slicing meaningful across reloads, but doesn't need a client-server
 database, connection pooling, or concurrent-write handling.
 
+**Amendment, 2026-09-02** (finding A7 of `../review-2026-09-02.md`): the last item is no
+longer true. The aggregate carries a `version` column and `save()` is a compare-and-set
+against it, so a lost update is refused rather than silently applied — see
+`documentation/domain-model.md`'s concurrency section. What SQLite still saves us is the
+_infrastructure_ around that (no server, no pool), not the need for the rule itself.
+
 `node:sqlite` exists in Node 24, but drizzle-orm 0.45's exports map ships no driver for
 it (verified directly against the package at scaffold time) — so `better-sqlite3` is the
 driver, not the newer built-in.

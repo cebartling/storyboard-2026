@@ -48,7 +48,7 @@
 	} = $props();
 
 	// A writable derived: `svelte-dnd-action` needs to own the array during
-	// consider/finalize (see the proven pattern in src/routes/spike), and the
+	// consider/finalize, and the
 	// server remains the source of truth — assigning here only overrides
 	// until `items` itself changes again (e.g. after `invalidateAll()` reruns
 	// `load()` with the server-authoritative order, which then wins).

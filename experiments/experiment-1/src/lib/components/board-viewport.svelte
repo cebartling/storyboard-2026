@@ -24,10 +24,12 @@
 	let spaceHeld = $state(false);
 	let isPanning = $state(false);
 
-	// Elements a background/space drag must never hijack: story cards (dnd),
-	// buttons/links, and every inline form control on the board.
-	const INTERACTIVE_SELECTOR =
-		'[data-testid^="story-"], button, a, input, textarea, select, form, [contenteditable]';
+	// Elements a background/space drag must never hijack. The board itself is
+	// read-only since ADR 0011 — every edit happens in a dialog, which is a
+	// sibling of this component and never inside it — so the only interactive
+	// things here are story cards (dnd) and buttons/links. The form controls
+	// this used to list could not match once the inline forms were removed.
+	const INTERACTIVE_SELECTOR = '[data-testid^="story-"], button, a';
 
 	function isInteractiveTarget(target: EventTarget | null): boolean {
 		return target instanceof Element && target.closest(INTERACTIVE_SELECTOR) !== null;

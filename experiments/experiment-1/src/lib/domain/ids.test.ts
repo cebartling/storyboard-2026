@@ -24,7 +24,11 @@ describe('newId', () => {
 		expect(ids.size).toBe(1000);
 	});
 
-	it('is time-ordered: ids generated later sort later', async () => {
+	// The 5ms sleep is the guarantee, not an accident of timing: ordering holds
+	// across milliseconds, and there is no sub-millisecond counter, so two ids
+	// minted in the same tick are ordered randomly. Naming that here stops the
+	// sleep from looking like flakiness someone should tidy away.
+	it('is time-ordered across milliseconds: ids generated later sort later', async () => {
 		const first = newId<MapId>();
 		await new Promise((resolve) => setTimeout(resolve, 5));
 		const second = newId<MapId>();

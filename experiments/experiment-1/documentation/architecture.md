@@ -132,9 +132,12 @@ free, and `svelte-dnd-action`'s drop detection and drag mirror are viewport-spac
 of this state and math lives in `src/lib/canvas/`, outside `src/lib/domain/`: it is presentation
 state for one route, not a story-mapping domain invariant, so ADR 0006's pure-core boundary does
 not apply to it, but the math (`camera-math.ts`) is still plain, DOM-free TypeScript, unit-tested
-the same way the domain layer is. `minimap-model.ts` similarly takes a structural subset of
-`BoardViewModel`'s shape rather than importing the route module, so `src/lib/` still never depends
-on `src/routes/`. Camera state persists per map in `localStorage`
+the same way the domain layer is. `minimap-model.ts` takes a structural subset of
+`BoardViewModel`'s shape rather than the whole type, so a field added to the view model does not
+recompile the minimap. `board-view-model.ts` itself lives in `src/lib/board/`: it is pure,
+DB-free, and read from `src/lib/canvas/`'s tests as well as from the route, which is what told us
+it was in the wrong place — `src/lib/` never depends on `src/routes/`, and now nothing pretends
+otherwise. Camera state persists per map in `localStorage`
 (`camera-storage.ts`, key `storyboard:camera:v1:${mapId}`), read only inside `$effect` so it never
 runs during SSR.
 
