@@ -40,6 +40,20 @@ export async function createMap(repository: StoryMapRepository, name: string): P
 	return repository.save(createStoryMap(name));
 }
 
+/**
+ * Deletes a whole map. Deliberately not a `loadOrThrow` + domain call like the
+ * others: there is no aggregate left to hold an invariant, and no version to
+ * check — the repository's cascade is the operation.
+ *
+ * Idempotent on purpose. The only caller is the map list, built from ids it has
+ * just rendered, so a missing map means someone deleted it first rather than a
+ * malformed request; failing would report an error for a state the caller
+ * wanted anyway.
+ */
+export async function deleteMap(repository: StoryMapRepository, mapId: MapId): Promise<void> {
+	await repository.delete(mapId);
+}
+
 export async function loadMap(repository: StoryMapRepository, id: MapId): Promise<StoryMap | null> {
 	return repository.load(id);
 }
