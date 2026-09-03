@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import BoardDialogs, {
@@ -13,7 +14,7 @@
 	} from '$lib/components/story-dnd-zone.svelte';
 	import ZoomControls from '$lib/components/zoom-controls.svelte';
 	import { createCamera } from '$lib/canvas/camera.svelte';
-	import { loadCameraState, saveCameraState } from '$lib/canvas/camera-storage';
+	import { loadCameraState, saveCameraState, type CameraState } from '$lib/canvas/camera-storage';
 	import { toMinimapModel } from '$lib/canvas/minimap-model';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Plus from '@lucide/svelte/icons/plus';
@@ -96,18 +97,50 @@
 		hydratedMapId = mapId;
 	});
 
+	let boardViewport: ReturnType<typeof BoardViewport> | undefined = $state();
+
 	let saveTimer: ReturnType<typeof setTimeout> | undefined;
+	/** The most recent camera state and the map it belongs to, kept outside the
+	 *  effect so the teardown below can still write it. Plain, not `$state`:
+	 *  nothing renders from it. */
+	let pendingSave: { mapId: string; state: CameraState } | undefined;
+
+	function flushCameraSave() {
+		if (!pendingSave) return;
+		const storage = tryGetLocalStorage();
+		if (storage) saveCameraState(storage, pendingSave.mapId, pendingSave.state);
+		pendingSave = undefined;
+	}
+
 	$effect(() => {
 		const mapId = data.board.id;
 		const state = { zoom: camera.zoom, scrollX: camera.scrollX, scrollY: camera.scrollY };
 		if (hydratedMapId !== mapId) return;
 
+		pendingSave = { mapId, state };
 		clearTimeout(saveTimer);
-		saveTimer = setTimeout(() => {
-			const storage = tryGetLocalStorage();
-			if (storage) saveCameraState(storage, mapId, state);
-		}, 250);
+		saveTimer = setTimeout(flushCameraSave, 250);
 		return () => clearTimeout(saveTimer);
+	});
+
+	// Two ways the page can go, and the debounce loses the last move in both:
+	// its cleanup cancels the pending timer on destroy just as it does on a
+	// rerun, where cancelling is the whole point. This effect reads nothing
+	// reactive, so it runs once and its cleanup fires only on destroy —
+	// covering client-side navigation away from the board. `pagehide` covers
+	// the rest (reload, tab close, back/forward cache), where no Svelte
+	// teardown runs at all; it is the one the spec recommends over
+	// `beforeunload` because it also fires on mobile Safari.
+	$effect(() => {
+		const onPageHide = () => {
+			clearTimeout(saveTimer);
+			flushCameraSave();
+		};
+		window.addEventListener('pagehide', onPageHide);
+		return () => {
+			window.removeEventListener('pagehide', onPageHide);
+			onPageHide();
+		};
 	});
 
 	// Row 1 (activity headers) and row 2 (step headers) are both `sticky
@@ -253,7 +286,7 @@
 		<div class="pointer-events-auto absolute bottom-4 left-4 z-40">
 			<BoardMinimap {camera} model={minimapModel} />
 		</div>
-		<BoardViewport {camera}>
+		<BoardViewport bind:this={boardViewport} {camera}>
 			<div
 				class="bg-line grid min-w-max gap-px"
 				data-testid="board"
@@ -396,6 +429,7 @@
 							Add story
 						</button>
 						<StoryDndZone
+							zoneLabel={cellLabel(cell.stepId, cell.sliceId)}
 							items={cell.stories}
 							stepId={cell.stepId}
 							sliceId={cell.sliceId}
@@ -411,6 +445,19 @@
 
 <BoardDialogs
 	{dialog}
-	onClose={() => (dialog = null)}
+	onClose={async (outcome) => {
+		dialog = null;
+		// A delete removes the trigger the dialog would have restored focus to,
+		// so focus falls to <body>. The viewport is the region the deletion
+		// happened in and is already keyboard-focusable, so it is both a
+		// truthful place to land and one where arrow keys still scroll the
+		// board (finding F3).
+		// After the flush, not before: closing a native <dialog> restores focus
+		// to whatever opened it, so focusing first would just be overwritten.
+		if (outcome?.deleted) {
+			await tick();
+			boardViewport?.focusViewport();
+		}
+	}}
 	onLateFailure={(message) => (boardError = message)}
 />

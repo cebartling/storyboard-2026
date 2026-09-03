@@ -23,10 +23,21 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 	constructor(private readonly db: BetterSQLite3Database<typeof schema>) {}
 
 	async load(id: MapId): Promise<StoryMap | null> {
-		const mapRow = this.db.select().from(schema.maps).where(eq(schema.maps.id, id)).get();
+		// One transaction for five reads. In-process this is already safe —
+		// better-sqlite3 is synchronous, so nothing interleaves — but the seed
+		// script and the e2e server are documented concurrent writers on the same
+		// file, and a commit landing between the activity and story reads would
+		// otherwise hand back a torn aggregate: stories referencing steps that
+		// are not in `activities`. Cheap here, and it makes the guarantee the
+		// caller already assumes actually true.
+		return this.db.transaction((tx) => this.loadWithin(tx, id));
+	}
+
+	private loadWithin(db: BetterSQLite3Database<typeof schema>, id: MapId): StoryMap | null {
+		const mapRow = db.select().from(schema.maps).where(eq(schema.maps.id, id)).get();
 		if (!mapRow) return null;
 
-		const activityRows = this.db
+		const activityRows = db
 			.select()
 			.from(schema.activities)
 			.where(eq(schema.activities.mapId, id))
@@ -34,18 +45,14 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 		const activityIds = activityRows.map((a) => a.id);
 
 		const stepRows = activityIds.length
-			? this.db
-					.select()
-					.from(schema.steps)
-					.where(inArray(schema.steps.activityId, activityIds))
-					.all()
+			? db.select().from(schema.steps).where(inArray(schema.steps.activityId, activityIds)).all()
 			: [];
 		const stepIds = stepRows.map((s) => s.id);
 
-		const sliceRows = this.db.select().from(schema.slices).where(eq(schema.slices.mapId, id)).all();
+		const sliceRows = db.select().from(schema.slices).where(eq(schema.slices.mapId, id)).all();
 
 		const storyRows = stepIds.length
-			? this.db.select().from(schema.stories).where(inArray(schema.stories.stepId, stepIds)).all()
+			? db.select().from(schema.stories).where(inArray(schema.stories.stepId, stepIds)).all()
 			: [];
 
 		const stepsByActivity = new Map<string, Step[]>();

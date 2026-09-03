@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ConflictError } from './errors';
+import { ConflictError, InvariantError } from './errors';
 import {
 	addActivity,
 	addSlice,
@@ -372,6 +372,58 @@ describe('moveStory', () => {
 		expect(() =>
 			moveStory(story.map, story.story.id, stepId, null, 'not-a-real-id' as never, null)
 		).toThrow(/is not a member of the target scope/);
+	});
+});
+
+describe('name validation', () => {
+	// The only rule about names lived in the app layer, and again in the route,
+	// while the domain accepted anything — so the seed builder and any future
+	// caller that reaches the domain directly (applying an AiAssistant
+	// suggestion, say) could persist a blank. CLAUDE.md and use-cases.ts both
+	// said invariants live here; now they do.
+	it('rejects empty and whitespace-only names on every creating function', () => {
+		const initial = mapWithOneStep();
+		const { map, activityId, stepId } = initial;
+
+		expect(() => createStoryMap('   ')).toThrow(InvariantError);
+		expect(() => addActivity(map, '')).toThrow(InvariantError);
+		expect(() => addStep(map, activityId, '  ')).toThrow(InvariantError);
+		expect(() => addSlice(map, '\t')).toThrow(InvariantError);
+		expect(() => addStory(map, stepId, '')).toThrow(InvariantError);
+	});
+
+	it('rejects blanking a name through rename or edit', () => {
+		const initial = mapWithOneStep();
+		let map = initial.map;
+		const slice = addSlice(map, 'Release 1');
+		map = slice.map;
+		const story = addStory(map, initial.stepId, 'Keyword search');
+		map = story.map;
+
+		expect(() => renameActivity(map, initial.activityId, ' ')).toThrow(InvariantError);
+		expect(() => renameStep(map, initial.stepId, '')).toThrow(InvariantError);
+		expect(() => renameSlice(map, slice.slice.id, '')).toThrow(InvariantError);
+		// `''` is not nullish, so `changes.title ?? s.title` let it through.
+		expect(() => editStory(map, story.story.id, { title: '' })).toThrow(InvariantError);
+	});
+
+	it('stores names trimmed, so padding cannot make two names look different', () => {
+		const initial = mapWithOneStep();
+		const added = addActivity(initial.map, '  Browse  ');
+
+		expect(added.activity.name).toBe('Browse');
+	});
+
+	// A description is genuinely optional, unlike every name above.
+	it('leaves an empty description alone', () => {
+		const initial = mapWithOneStep();
+		let map = initial.map;
+		const story = addStory(map, initial.stepId, 'Keyword search', { description: 'text' });
+		map = story.map;
+
+		map = editStory(map, story.story.id, { description: '' });
+
+		expect(findStory(map, story.story.id).description).toBe('');
 	});
 });
 

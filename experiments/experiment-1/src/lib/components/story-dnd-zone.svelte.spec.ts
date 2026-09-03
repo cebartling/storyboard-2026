@@ -6,6 +6,7 @@ import StoryDndZone from './story-dnd-zone.svelte';
 describe('StoryDndZone', () => {
 	it('renders each item as a story card, in the order given', async () => {
 		render(StoryDndZone, {
+			zoneLabel: 'Test cell',
 			items: [
 				{ id: 's1', title: 'Search by keyword', description: null },
 				{ id: 's2', title: 'Filter by category', description: null }
@@ -28,6 +29,7 @@ describe('StoryDndZone', () => {
 
 	it('scopes its data-testid to the (step, slice) cell it renders', async () => {
 		render(StoryDndZone, {
+			zoneLabel: 'Test cell',
 			items: [],
 			stepId: 'step-7',
 			sliceId: 'slice-3',
@@ -40,6 +42,7 @@ describe('StoryDndZone', () => {
 
 	it('renders an empty cell with no cards when given no items', async () => {
 		render(StoryDndZone, {
+			zoneLabel: 'Test cell',
 			items: [],
 			stepId: 'step-9',
 			sliceId: null,
@@ -78,6 +81,7 @@ describe('StoryDndZone finalize handling', () => {
 
 	async function renderZone(onMove: (detail: unknown) => void) {
 		render(StoryDndZone, {
+			zoneLabel: 'Test cell',
 			items,
 			stepId: 'step-1',
 			sliceId: 'slice-1',
@@ -147,6 +151,7 @@ describe('StoryDndZone finalize handling', () => {
 	it('reports a null sliceId when the zone is the unsliced band', async () => {
 		const onMove = vi.fn();
 		render(StoryDndZone, {
+			zoneLabel: 'Test cell',
 			items,
 			stepId: 'step-2',
 			sliceId: null,
@@ -174,5 +179,26 @@ describe('StoryDndZone finalize handling', () => {
 		});
 
 		expect(onMove).not.toHaveBeenCalled();
+	});
+
+	// svelte-dnd-action builds every keyboard-drag announcement from
+	// `aria-label` on the zone and on the dragged item — "started dragging {item}
+	// in {zone}", "moved to position N of M". With neither labelled, a screen
+	// reader user hears those sentences with the nouns missing.
+	it('labels the zone and its cards so keyboard-drag announcements name them', async () => {
+		render(StoryDndZone, {
+			items: [{ id: 's1', title: 'Keyword search', description: null }],
+			stepId: 'step-1',
+			sliceId: null,
+			zoneLabel: 'Search products, unsliced',
+			onMove: () => {},
+			onEditStory: () => {}
+		});
+
+		const zone = page.getByTestId('cell-step-1-unsliced').element();
+		expect(zone.getAttribute('aria-label')).toBe('Search products, unsliced');
+
+		const card = page.getByTestId('story-s1').element();
+		expect(card.getAttribute('aria-label')).toBe('Keyword search');
 	});
 });

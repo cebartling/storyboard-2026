@@ -54,7 +54,12 @@ export const slices = sqliteTable(
 );
 
 // Story — belongs to a Step, optionally to a Slice. sliceId null = unsliced band.
-// Deleting a slice sets sliceId to null (un-slices) rather than deleting the story.
+// Deleting a slice un-slices its stories rather than deleting them, but that is
+// `deleteSlice`'s job in the domain, not the FK's: un-slicing has to re-rank
+// each story into the unsliced scope, and a bare ON DELETE SET NULL would reuse
+// the sliced-scope rank and trip the partial unique index below (every scope
+// starts at 'a0'). It is left as NO ACTION so a raw `DELETE FROM maps` still
+// cascades cleanly — deferred to statement end, after the stories are gone.
 // rank is scoped to (stepId, sliceId).
 export const stories = sqliteTable(
 	'stories',
@@ -65,7 +70,7 @@ export const stories = sqliteTable(
 			.references(() => steps.id, { onDelete: 'cascade' }),
 		title: text('title').notNull(),
 		description: text('description'),
-		sliceId: text('slice_id').references(() => slices.id, { onDelete: 'set null' }),
+		sliceId: text('slice_id').references(() => slices.id),
 		rank: text('rank').notNull()
 	},
 	(table) => [

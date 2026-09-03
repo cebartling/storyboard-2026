@@ -53,7 +53,10 @@
 		onLateFailure
 	}: {
 		dialog: BoardDialog | null;
-		onClose: () => void;
+		/** `deleted` when the submission removed the thing the dialog was
+		 *  editing, so the caller can put focus somewhere that still exists —
+		 *  the trigger that opened the dialog is gone by then. */
+		onClose: (outcome?: { deleted: boolean }) => void;
 		/**
 		 * A failure that arrived after the dialog was already closed. There is
 		 * nowhere in here to render it, so the board shows it instead.
@@ -87,6 +90,9 @@
 		// request is in flight, and a message shown in a closed dialog is a
 		// message nobody reads.
 		const submittedFor = dialog;
+		// The form's own action, so this stays true if a delete moves to a
+		// different dialog kind later. Every delete action is named `delete*`.
+		const isDelete = (formElement.getAttribute('action') ?? '').startsWith('?/delete');
 
 		function report(message: string) {
 			submitting = false;
@@ -132,8 +138,10 @@
 			}
 
 			// Closing after the refetch, so focus returns to a trigger that is
-			// already sitting on up-to-date content.
-			onClose();
+			// already sitting on up-to-date content — except after a delete,
+			// where that trigger no longer exists and the caller has to place
+			// focus instead.
+			onClose({ deleted: isDelete });
 			submitting = false;
 		};
 	};

@@ -10,6 +10,16 @@
 	let { camera, children }: { camera: Camera; children: Snippet } = $props();
 
 	let viewportEl: HTMLDivElement | undefined = $state();
+
+	/**
+	 * Moves keyboard focus to the scroll region. Exported so a caller can put
+	 * focus somewhere truthful after removing whatever had it — a delete takes
+	 * its own trigger with it (finding F3) — without reaching for the element
+	 * this component owns.
+	 */
+	export function focusViewport() {
+		viewportEl?.focus();
+	}
 	let worldEl: HTMLDivElement | undefined = $state();
 	let spaceHeld = $state(false);
 	let isPanning = $state(false);
@@ -318,4 +328,16 @@
 	>
 		{@render children()}
 	</div>
+	<!--
+		Room to scroll the last row clear of the overlays the board route pins to
+		the panel's bottom corners (the minimap and zoom controls, ADR 0010).
+		Without it, content under them cannot be reached by pointer however
+		visible it looks, and on a board that barely overflows there is nothing
+		to scroll it out from under (finding F5).
+
+		Outside the zoomed world on purpose: `zoom` scales padding with it, so a
+		reservation made inside would shrink exactly when the overlays — which
+		are a fixed size — take up proportionally more of the view.
+	-->
+	<div aria-hidden="true" class="h-36 shrink-0"></div>
 </div>

@@ -55,8 +55,9 @@ test('pan and zoom persist across reload', async ({ page }) => {
 	const scrollLeftBeforeReload = await viewport.evaluate((el) => el.scrollLeft);
 	const scrollTopBeforeReload = await viewport.evaluate((el) => el.scrollTop);
 
-	// The save is debounced ~250ms; give it time to land before reloading.
-	await page.waitForTimeout(500);
+	// No wait for the ~250ms debounce: the page flushes a pending save when it
+	// goes away, so a reload this soon after a pan has to persist it. Waiting
+	// here would hide a regression in that flush (finding F10).
 
 	await page.reload();
 
