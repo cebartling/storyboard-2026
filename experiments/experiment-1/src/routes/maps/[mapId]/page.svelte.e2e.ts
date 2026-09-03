@@ -464,4 +464,11 @@ test('deleting an activity and a step leaves the board working', async ({ page }
 	// what a thrown effect would have stopped.
 	await expect(page.getByRole('button', { name: 'Add step' })).toBeVisible();
 	expect(pageErrors.map((e) => e.message)).toEqual([]);
+
+	// A dialog restores focus to the trigger that opened it, but a delete
+	// removes that trigger before it closes — so focus fell to <body>, dumping
+	// a keyboard user at the top of a board where every cell is a tab stop.
+	// The viewport is the region the deletion happened in and is already
+	// focusable, so that is where it lands (finding F3).
+	await expect(page.getByTestId('board-viewport')).toBeFocused();
 });

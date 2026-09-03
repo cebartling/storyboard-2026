@@ -10,6 +10,16 @@
 	let { camera, children }: { camera: Camera; children: Snippet } = $props();
 
 	let viewportEl: HTMLDivElement | undefined = $state();
+
+	/**
+	 * Moves keyboard focus to the scroll region. Exported so a caller can put
+	 * focus somewhere truthful after removing whatever had it — a delete takes
+	 * its own trigger with it (finding F3) — without reaching for the element
+	 * this component owns.
+	 */
+	export function focusViewport() {
+		viewportEl?.focus();
+	}
 	let worldEl: HTMLDivElement | undefined = $state();
 	let spaceHeld = $state(false);
 	let isPanning = $state(false);
