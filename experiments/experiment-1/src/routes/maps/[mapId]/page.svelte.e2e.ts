@@ -508,3 +508,74 @@ test('the unsliced row label can be scrolled clear of the overlays', async ({ pa
 
 	expect(occluded).toBe('reachable');
 });
+
+// F6: the failure case above deletes the story first, so the card is gone after
+// `invalidateAll()` whether or not the board resynced — a zone that kept the
+// optimistic order would have passed it identically. Here the story survives
+// the rejection, so the only way the assertion holds is if the server's order
+// wins back.
+test('a rejected drag returns the card to where it came from', async ({ page }) => {
+	await createMap(page, `E2E snapback ${Date.now()}`);
+	await addActivity(page, 'Search');
+	await addStep(page, 'Find a product');
+	const stepId = await firstStepId(page);
+	await addStory(page, stepId, 'unsliced', 'Story A');
+	await addStory(page, stepId, 'unsliced', 'Story B');
+
+	const cell = page.getByTestId(`cell-${stepId}-unsliced`);
+	await expect(cell.locator('[data-testid^="story-"]')).toHaveText([/Story A/, /Story B/]);
+
+	// Fail the move server-side while both cards still exist.
+	await page.route('**/*?/moveStory*', (route) =>
+		route.fulfill({
+			status: 400,
+			contentType: 'application/json',
+			body: JSON.stringify({ type: 'failure', status: 400, data: '{"error":1}', nodes: [] })
+		})
+	);
+
+	await dragTo(
+		page,
+		cell.locator('[data-testid^="story-"]', { hasText: 'Story A' }),
+		cell.locator('[data-testid^="story-"]', { hasText: 'Story B' })
+	);
+
+	await page.unroute('**/*?/moveStory*');
+	await expect(cell.locator('[data-testid^="story-"]')).toHaveText([/Story A/, /Story B/]);
+});
+
+// F7's remaining half: activities and steps are covered above, slices and
+// stories were not. ADR 0011 says the dialog *is* the confirmation step, which
+// nothing verified for any of the four.
+test('deleting a slice keeps its stories, and deleting a story removes it', async ({ page }) => {
+	const pageErrors: Error[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error));
+
+	await createMap(page, `E2E delete leaf ${Date.now()}`);
+	await addActivity(page, 'Search');
+	await addStep(page, 'Find a product');
+	await addSlice(page, 'Release 1');
+	const stepId = await firstStepId(page);
+	const sliceId = await firstSliceId(page);
+	await addStory(page, stepId, sliceId, 'Keyword search');
+
+	// Deleting a slice un-slices its stories rather than deleting them — the
+	// domain rule that made the FK's ON DELETE SET NULL unusable (D2).
+	await page.getByRole('button', { name: 'Edit slice' }).click();
+	await dialog(page).getByRole('button', { name: 'Delete slice' }).click();
+	await expect(dialog(page)).toBeHidden();
+	await expect(page.getByTestId(`row-label-${sliceId}`)).toHaveCount(0);
+	const unsliced = page.getByTestId(`cell-${stepId}-unsliced`);
+	await expect(unsliced.locator('[data-testid^="story-"]')).toHaveText([/Keyword search/]);
+
+	await unsliced.getByRole('button', { name: /^Edit story/ }).click();
+	await dialog(page).getByRole('button', { name: 'Delete story' }).click();
+	await expect(dialog(page)).toBeHidden();
+	await expect(unsliced.locator('[data-testid^="story-"]')).toHaveCount(0);
+
+	await page.reload();
+	await expect(
+		page.getByTestId(`cell-${stepId}-unsliced`).locator('[data-testid^="story-"]')
+	).toHaveCount(0);
+	expect(pageErrors.map((e) => e.message)).toEqual([]);
+});

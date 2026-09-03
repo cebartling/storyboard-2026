@@ -73,3 +73,47 @@ test('pan and zoom persist across reload', async ({ page }) => {
 	expect(Math.abs(scrollLeftAfterReload - scrollLeftBeforeReload)).toBeLessThan(5);
 	expect(Math.abs(scrollTopAfterReload - scrollTopBeforeReload)).toBeLessThan(5);
 });
+
+// F11: `camera-storage.test.ts` proves `loadCameraState` returns null for
+// garbage and `camera.svelte.test.ts` proves `restoreZoom` clamps, but the
+// wiring between them — corrupt entry falls through to `fit()`, an
+// out-of-range one is clamped, and the save effect does not overwrite a stored
+// state with 1/0/0 before hydration — was only ever exercised on the happy
+// path. A regression that saved before hydrating would have passed.
+for (const [name, stored, expected] of [
+	['unparseable', '{not json', 'fit'],
+	['out of range', JSON.stringify({ zoom: 99, scrollX: 1e9, scrollY: -5 }), '200%']
+] as [string, string, string][]) {
+	test(`a ${name} stored camera does not strand the board`, async ({ page }) => {
+		await createMap(page, `E2E camera restore ${Date.now()}`);
+		await addActivity(page, 'Search');
+		await addStep(page, 'Find a product');
+
+		const mapId = new URL(page.url()).pathname.split('/').pop()!;
+		const key = `storyboard:camera:v1:${mapId}`;
+
+		// Planted with an init script rather than `evaluate` + `reload`: the page
+		// flushes its camera on `pagehide` (F10), so a reload would overwrite the
+		// planted value with the live one before the new document ever read it.
+		// This runs at document start of the navigation below instead.
+		await page.addInitScript(([k, v]) => localStorage.setItem(k, v), [key, stored] as [
+			string,
+			string
+		]);
+		await page.goto(`/maps/${mapId}`);
+
+		const readout = page.getByTestId('zoom-readout');
+		if (expected === '200%') {
+			// Clamped to the maximum, not rejected outright.
+			await expect(readout).toHaveText('200%');
+		} else {
+			// Whatever `fit()` produced — the point is that it is a live value
+			// and the board is usable, not a specific number.
+			await expect(readout).not.toHaveText('');
+		}
+
+		// And the stored entry is not clobbered with pre-hydration defaults.
+		const after = await page.evaluate((k) => localStorage.getItem(k), key);
+		expect(after).not.toBe(JSON.stringify({ zoom: 1, scrollX: 0, scrollY: 0 }));
+	});
+}

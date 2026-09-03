@@ -290,6 +290,55 @@ describe('DrizzleStoryMapRepository', () => {
 		expect(remaining('activities', 'map_id', [map.id])).toBe(0);
 	});
 
+	// The header calls save() atomic and the version check a lost-update guard;
+	// neither property was tested. This is the path D1 used to reach: a domain
+	// bug produces a duplicate rank, the unique index rejects the insert
+	// mid-rewrite, and everything already deleted in that transaction has to
+	// come back.
+	it('rolls the whole save back when a child insert fails', async () => {
+		const map = buildSampleMap();
+		const saved = await repository.save(map);
+		const before = (await repository.load(map.id))!;
+
+		// Two stories in the *same* (step, slice) scope — ranks are scoped, so a
+		// duplicate across two steps would not collide at all.
+		const stepId = before.activities[0].steps[0].id;
+		const withSecond = addStory(before, stepId, 'Second in scope');
+		const [first, second] = withSecond.map.stories.filter(
+			(story) => story.stepId === stepId && story.sliceId === null
+		);
+		const collides = {
+			...withSecond.map,
+			name: 'Should not survive',
+			stories: withSecond.map.stories.map((story) =>
+				story.id === second.id ? { ...story, rank: first.rank } : story
+			)
+		};
+
+		await expect(repository.save(collides)).rejects.toThrow(/UNIQUE constraint failed/);
+
+		const after = (await repository.load(map.id))!;
+		expect(after.version).toBe(saved.version);
+		expect(after.name).toBe(before.name);
+		expect(canonicalStoryOrder(after.stories)).toEqual(canonicalStoryOrder(before.stories));
+		expect(after.activities).toHaveLength(before.activities.length);
+	});
+
+	// save()'s other branch: `changes === 0` means either a stale version or a
+	// map that is gone, and it distinguishes them inside the transaction so the
+	// caller gets a message that says which.
+	it('reports a deleted map differently from a stale one', async () => {
+		const map = buildSampleMap();
+		await repository.save(map);
+		const loaded = (await repository.load(map.id))!;
+
+		await repository.delete(map.id);
+
+		await expect(repository.save({ ...loaded, name: 'Writing to a ghost' })).rejects.toThrow(
+			/no longer exists/
+		);
+	});
+
 	it('delete() removes the map and cascades to its children', async () => {
 		const map = buildSampleMap();
 		await repository.save(map);
@@ -299,12 +348,37 @@ describe('DrizzleStoryMapRepository', () => {
 		const loaded = await repository.load(map.id);
 		expect(loaded).toBeNull();
 
-		const remainingActivities = db
-			.select()
-			.from(schema.activities)
-			.all()
-			.filter((a) => a.mapId === map.id);
-		expect(remainingActivities).toHaveLength(0);
+		// Activities alone would pass even if stories were orphaned under a
+		// deleted step, which is the regression worth catching.
+		const stepIds = map.activities.flatMap((a) => a.steps.map((step) => step.id));
+		expect(
+			db
+				.select()
+				.from(schema.activities)
+				.all()
+				.filter((a) => a.mapId === map.id)
+		).toHaveLength(0);
+		expect(
+			db
+				.select()
+				.from(schema.slices)
+				.all()
+				.filter((sl) => sl.mapId === map.id)
+		).toHaveLength(0);
+		expect(
+			db
+				.select()
+				.from(schema.steps)
+				.all()
+				.filter((st) => (stepIds as string[]).includes(st.id))
+		).toHaveLength(0);
+		expect(
+			db
+				.select()
+				.from(schema.stories)
+				.all()
+				.filter((story) => (stepIds as string[]).includes(story.stepId))
+		).toHaveLength(0);
 	});
 
 	// The seed map (src/lib/seed/) is the largest aggregate anything in this

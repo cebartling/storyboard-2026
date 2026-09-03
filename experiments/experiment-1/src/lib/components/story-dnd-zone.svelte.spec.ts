@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { tick } from 'svelte';
 import { page } from 'vitest/browser';
 import StoryDndZone from './story-dnd-zone.svelte';
 
@@ -77,6 +78,12 @@ describe('StoryDndZone finalize handling', () => {
 		}
 	) {
 		zone.dispatchEvent(new CustomEvent('finalize', { detail }));
+	}
+
+	function renderedIds(): string[] {
+		return [...document.querySelectorAll('[data-testid^="story-"]')].map((el) =>
+			el.getAttribute('data-testid')!.replace('story-', '')
+		);
 	}
 
 	async function renderZone(onMove: (detail: unknown) => void) {
@@ -200,5 +207,39 @@ describe('StoryDndZone finalize handling', () => {
 
 		const card = page.getByTestId('story-s1').element();
 		expect(card.getAttribute('aria-label')).toBe('Keyword search');
+	});
+
+	// The writable-derived `localItems` is the one non-obvious Svelte 5 semantic
+	// in the drag path: the library owns the array during a drag, then the
+	// server's order has to win again once `items` changes. Nothing exercised
+	// that second half — the spec never changed the prop after a finalize — so a
+	// resync that silently stopped working would have looked fine here and shown
+	// up only as a card stuck in the wrong place after a rejected move.
+	it('lets a changed items prop override the order left by a drag', async () => {
+		const { rerender } = render(StoryDndZone, {
+			zoneLabel: 'Test cell',
+			items,
+			stepId: 'step-1',
+			sliceId: 'slice-1',
+			onMove: () => {},
+			onEditStory: () => {}
+		});
+		const zone = page.getByTestId('cell-step-1-slice-1').element();
+
+		const reordered = [items[2], items[0], items[1]];
+		zone.dispatchEvent(
+			new CustomEvent('finalize', {
+				detail: {
+					items: reordered,
+					info: { trigger: 'droppedIntoZone', id: 's3', source: 'pointer' }
+				}
+			})
+		);
+		await tick();
+		expect(renderedIds()).toEqual(reordered.map((i) => i.id));
+
+		// The server rejected the move, so `load()` sends the original order back.
+		await rerender({ items });
+		expect(renderedIds()).toEqual(items.map((i) => i.id));
 	});
 });
