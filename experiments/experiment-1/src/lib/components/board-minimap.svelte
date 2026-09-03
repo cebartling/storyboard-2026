@@ -198,7 +198,7 @@
 		d={scrimPath}
 		fill-rule="evenodd"
 		fill="var(--color-ink)"
-		fill-opacity="0.18"
+		fill-opacity="0.35"
 		pointer-events="none"
 	/>
 
