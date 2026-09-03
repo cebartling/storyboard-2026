@@ -42,14 +42,18 @@ describe('BoardMinimap', () => {
 
 	it('paints a density ramp so busier cells read darker', async () => {
 		const camera = cameraWithGeometry();
+		// Counts straddle both bucket boundaries (1 | 2-3 | 4+), so a ramp that
+		// stepped at the wrong count would fail rather than slip through.
 		const dense: MinimapModel = {
-			columns: 4,
+			columns: 6,
 			rows: [{ sliceId: 'slice-1', name: 'Release 1' }],
 			cells: [
 				{ col: 0, row: 0, storyCount: 0 },
 				{ col: 1, row: 0, storyCount: 1 },
-				{ col: 2, row: 0, storyCount: 3 },
-				{ col: 3, row: 0, storyCount: 5 }
+				{ col: 2, row: 0, storyCount: 2 },
+				{ col: 3, row: 0, storyCount: 3 },
+				{ col: 4, row: 0, storyCount: 4 },
+				{ col: 5, row: 0, storyCount: 5 }
 			]
 		};
 		render(BoardMinimap, { camera, model: dense });
@@ -64,8 +68,11 @@ describe('BoardMinimap', () => {
 			Number(byCount.get(count)?.getAttribute('fill-opacity') ?? '0');
 		expect(byCount.get('1')?.getAttribute('fill')).toBe('var(--color-brand)');
 		expect(opacityOf('1')).toBeGreaterThan(0);
-		expect(opacityOf('3')).toBeGreaterThan(opacityOf('1'));
-		expect(opacityOf('5')).toBeGreaterThan(opacityOf('3'));
+		expect(opacityOf('2')).toBeGreaterThan(opacityOf('1'));
+		expect(opacityOf('4')).toBeGreaterThan(opacityOf('2'));
+		// Within a bucket the shade holds steady; the steps are 2 and 4.
+		expect(opacityOf('3')).toBe(opacityOf('2'));
+		expect(opacityOf('5')).toBe(opacityOf('4'));
 	});
 
 	it('holds the overlay back until the camera has been measured', async () => {
@@ -83,6 +90,9 @@ describe('BoardMinimap', () => {
 
 	it('dims the board outside the viewport without swallowing pointer events', async () => {
 		const camera = cameraWithGeometry();
+		// Pan off the origin first: at scroll 0 the viewport rect sits at (0, 0),
+		// so a hole hard-coded to the origin would pass the geometry check below.
+		camera.panTo(600, 300);
 		render(BoardMinimap, { camera, model });
 
 		const scrim = page.getByTestId('minimap-scrim').element() as SVGPathElement;
@@ -93,9 +103,24 @@ describe('BoardMinimap', () => {
 		// The hole is the viewport rect itself, punched out with evenodd.
 		expect(scrim.getAttribute('fill-rule')).toBe('evenodd');
 
+		// Hit-test the painted path rather than comparing the `d` string against
+		// the same numbers that built it, which would assert nothing: the hole has
+		// to fall where the viewport actually is.
 		const handle = page.getByTestId('minimap-viewport').element() as SVGRectElement;
-		const d = scrim.getAttribute('d') ?? '';
-		expect(d).toContain(`M ${handle.getAttribute('x')} ${handle.getAttribute('y')}`);
+		const x = Number(handle.getAttribute('x'));
+		const y = Number(handle.getAttribute('y'));
+		const width = Number(handle.getAttribute('width'));
+		const height = Number(handle.getAttribute('height'));
+		const svg = page.getByTestId('board-minimap').element() as SVGSVGElement;
+		const at = (px: number, py: number) => {
+			const point = svg.createSVGPoint();
+			point.x = px;
+			point.y = py;
+			return scrim.isPointInFill(point);
+		};
+
+		expect(at(x + width / 2, y + height / 2)).toBe(false);
+		expect(at(x + width + 5, y + height / 2)).toBe(true);
 	});
 
 	it('frames the viewport in a saturated border with a contrasting halo', async () => {
@@ -105,6 +130,11 @@ describe('BoardMinimap', () => {
 		const handle = page.getByTestId('minimap-viewport').element() as SVGRectElement;
 		expect(handle.getAttribute('stroke')).toBe('var(--color-brand)');
 		expect(handle.getAttribute('fill')).toBe('none');
+		// `fill="none"` leaves an unpainted interior, so only `pointer-events`
+		// keeps the handle draggable across its whole area rather than along its
+		// stroke alone. The drag tests below dispatch straight at the element and
+		// so bypass hit-testing entirely; this is what guards it.
+		expect(handle.getAttribute('pointer-events')).toBe('all');
 
 		// A wider light stroke behind the brand one keeps the frame legible over
 		// both the pale empty cells and the darkest populated ones.
