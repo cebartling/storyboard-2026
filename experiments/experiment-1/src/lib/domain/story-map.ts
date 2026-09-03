@@ -13,7 +13,7 @@
 import type { ActivityId, MapId, SliceId, StepId, StoryId } from './ids';
 import { newId } from './ids';
 import { rankAtEnd, rankBetween, type Rank } from './rank';
-import { InvariantError } from './errors';
+import { ConflictError, InvariantError } from './errors';
 
 export interface Activity {
 	id: ActivityId;
@@ -152,7 +152,37 @@ function resolveRank<TId>(
 		}
 		return rankAtEnd([]);
 	}
+	assertNeighboursBracketAGap(scopeItems, prev, next, scopeLabel);
 	return rankBetween(prev, next);
+}
+
+/**
+ * A drop's neighbours name a gap in the target scope. If a sibling sits inside
+ * that gap, the caller's view of the scope is stale — something was inserted
+ * after it loaded — and the rank derived from those neighbours is not the
+ * position the user chose. Worse, it is usually a *duplicate*: appended ranks
+ * are consecutive, and `generateKeyBetween(prev, null)` returns exactly what
+ * the next appended sibling already holds, so the save would fail on the unique
+ * index as an opaque 500 instead of a conflict the client can act on.
+ *
+ * `ConflictError`, not `InvariantError`: nothing is wrong with the request in
+ * itself, the caller is simply working from an out-of-date board, which is what
+ * a 409 tells them.
+ */
+function assertNeighboursBracketAGap<TId>(
+	scopeItems: { id: TId; rank: Rank }[],
+	prev: Rank | null,
+	next: Rank | null,
+	scopeLabel: string
+): void {
+	const intruder = scopeItems.find(
+		(item) => (prev === null || item.rank > prev) && (next === null || item.rank < next)
+	);
+	if (intruder) {
+		throw new ConflictError(
+			`the drop target in ${scopeLabel} has changed since it was loaded; reload and try again`
+		);
+	}
 }
 
 function requireInScope<TId>(
