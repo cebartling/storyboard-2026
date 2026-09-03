@@ -396,6 +396,7 @@
 							Add story
 						</button>
 						<StoryDndZone
+							zoneLabel={cellLabel(cell.stepId, cell.sliceId)}
 							items={cell.stories}
 							stepId={cell.stepId}
 							sliceId={cell.sliceId}

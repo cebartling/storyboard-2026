@@ -18,6 +18,7 @@
 <div
 	class="group border-accent/50 bg-accent-soft text-ink flex cursor-grab items-start justify-between gap-2 rounded-md border px-2.5 py-2 text-sm shadow-xs transition hover:shadow-md active:cursor-grabbing"
 	data-testid="story-{id}"
+	aria-label={title}
 >
 	<span class="flex-1 leading-snug break-words">{title}</span>
 	<!-- A button, not a whole-card click: `svelte-dnd-action` owns the card

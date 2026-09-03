@@ -30,6 +30,7 @@
 		items,
 		stepId,
 		sliceId,
+		zoneLabel,
 		flipDurationMs = 150,
 		onMove,
 		onEditStory
@@ -37,6 +38,9 @@
 		items: DndStoryItem[];
 		stepId: string;
 		sliceId: string | null;
+		/** Names the cell for `svelte-dnd-action`'s keyboard-drag announcements,
+		 *  which read it off the zone's `aria-label`. */
+		zoneLabel: string;
 		flipDurationMs?: number;
 		onMove: (detail: MoveDetail) => void;
 		/** Passes the whole item up, so the page need not look it back up. */
@@ -83,6 +87,7 @@
 		? 'border-line/70'
 		: 'border-transparent'}"
 	data-testid="cell-{stepId}-{sliceId ?? 'unsliced'}"
+	aria-label={zoneLabel}
 	use:dndzone={{ items: localItems, flipDurationMs }}
 	onconsider={handleConsider}
 	onfinalize={handleFinalize}
