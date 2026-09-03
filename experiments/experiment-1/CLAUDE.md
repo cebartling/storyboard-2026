@@ -110,6 +110,9 @@ waits → `mouse.up()`, then a settle before asserting. See the e2e spec beside
 
 ## Not built (deliberately)
 
-Real-time collaboration, authentication, and AI calls. The `AiAssistant` port exists with a
+Real-time collaboration, authentication, and AI calls. Collaboration is **in scope for the
+product** and simply not built yet (ADR 0014) — which matters, because the single-aggregate
+shape means two editors on different cards already conflict. Read ADR 0014 before adding a
+domain mutation, so the conversion cost is not grown unknowingly. The `AiAssistant` port exists with a
 null implementation so AI plugs in without rework — its contract style (domain snapshots
 in, structured suggestions out) is the commitment; its method list is provisional.

@@ -74,7 +74,8 @@ entirely different cards still conflict** — the second one is rejected and the
 lost. That is measured rather than assumed
 (`drizzle-story-map-repository.test.ts`, "rejects a second editor who changed a different
 story than the first"), and it is the constraint that makes real-time collaboration a
-re-modelling job rather than an addition. See the amendment to ADR 0004.
+re-modelling job rather than an addition. See the amendment to ADR 0004, and ADR 0014 for the
+decision that collaboration is in scope and this shape is therefore temporary.
 
 ## Ordering model
 

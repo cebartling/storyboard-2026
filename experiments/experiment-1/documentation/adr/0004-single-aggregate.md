@@ -55,3 +55,8 @@ reshaping the domain's return types, the repository port, and the client's
 No decision is reversed here. What changes is that the aggregate boundary is now known to
 be a **collaboration** constraint rather than only a performance one, and the throughput
 question remains open and unmeasured.
+
+**Superseded in part by [ADR 0014](./0014-collaboration-is-in-scope.md), 2026-09-03.**
+Collaboration is now in scope, so the single-aggregate shape is known-temporary rather than
+settled. The throughput question above is still open and still unmeasured; it is simply no
+longer the one that decides the aggregate boundary.
