@@ -199,3 +199,36 @@ describe('mutating use cases', () => {
 		expect(story.description).toBe('Accepts partial words');
 	});
 });
+
+describe('deleteMap', () => {
+	async function seededMap() {
+		let map = createStoryMap('Retail');
+		const activity = addActivity(map, 'Browse');
+		map = activity.map;
+		const step = addStep(map, activity.activity.id, 'Search products');
+		map = step.map;
+		map = addStory(map, step.step.id, 'Keyword search').map;
+		return { repository: new InMemoryStoryMapRepository([map]), mapId: map.id };
+	}
+
+	it('removes the map so it can no longer be loaded or listed', async () => {
+		const { repository, mapId } = await seededMap();
+
+		await useCases.deleteMap(repository, mapId);
+
+		expect(await repository.load(mapId)).toBeNull();
+		expect(await repository.listSummaries()).toEqual([]);
+	});
+
+	// Deleting is the one destructive action reachable from the map list, and
+	// the list is built from ids the page just rendered — so a missing map means
+	// someone else deleted it first, not a malformed request. Succeeding
+	// silently is the right answer: the caller wanted it gone and it is gone.
+	it('is idempotent, so a double submit is not an error', async () => {
+		const { repository, mapId } = await seededMap();
+
+		await useCases.deleteMap(repository, mapId);
+
+		await expect(useCases.deleteMap(repository, mapId)).resolves.toBeUndefined();
+	});
+});

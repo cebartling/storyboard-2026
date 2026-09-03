@@ -66,8 +66,10 @@ the seed, so no test or fixture breaks if you delete it.
 - The board's pan/zoom canvas (ADR 0010) lives in `src/lib/canvas/`: `camera-math.ts` (pure
   math, no DOM types), `camera.svelte.ts` (the `Camera` rune object), `minimap-model.ts`
   (flattens board grid geometry for the minimap — takes a structural input type rather
-  than the whole `BoardViewModel`), and `camera-storage.ts` (the
-  `localStorage` persistence, read/written only inside `$effect`). Like `src/lib/domain/`,
+  than the whole `BoardViewModel`), `camera-storage.ts` (the
+  `localStorage` serialisation), and `camera-persistence.svelte.ts` (the effects that wire
+  the two together — restore on arrival, debounced save, flush on the way out; read and
+  written only inside `$effect`). Like `src/lib/domain/`,
   `camera-math.ts` stays DOM-free and unit-testable, but it is presentation state for one
   route, not a domain invariant, so it lives outside `src/lib/domain/` and ADR 0006's
   pure-core boundary does not apply to it. `src/lib/components/board-viewport.svelte`,
