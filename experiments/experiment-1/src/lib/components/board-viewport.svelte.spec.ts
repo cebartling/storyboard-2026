@@ -229,9 +229,24 @@ describe('BoardViewport', () => {
 		});
 		viewportEl.dispatchEvent(down);
 
-		// preventDefault is the guard that actually stops the selection starting;
+		// The press itself is left alone so a selection can start from it
+		// (F13); the guard applies from the first move past the pan threshold.
+		expect(down.defaultPrevented).toBe(false);
+
+		const move = new PointerEvent('pointermove', {
+			pointerId: 9,
+			button: 0,
+			buttons: 1,
+			clientX: 260,
+			clientY: 300,
+			bubbles: true,
+			cancelable: true
+		});
+		viewportEl.dispatchEvent(move);
+
+		// preventDefault is the guard that actually stops the selection growing;
 		// the class is a backstop and only lands on the next flush.
-		expect(down.defaultPrevented).toBe(true);
+		expect(move.defaultPrevented).toBe(true);
 		await tick();
 		expect(viewportEl.className).toContain('select-none');
 		// preventDefault drops the default focus, so panning must restore it or
@@ -405,5 +420,56 @@ describe('BoardViewport', () => {
 		// it, which is the regression this exists to catch. What matters is that
 		// the world is what the pointer would actually hit.
 		expect(topmost?.closest('[data-testid="board-world"]')).not.toBeNull();
+	});
+
+	// F13: panning suppressed the default on every non-interactive left press,
+	// which also suppresses the selection that press would have started — so
+	// activity, step and slice names could not be selected or copied at all.
+	// A press is only a pan once it has moved, so nothing needs suppressing
+	// until then.
+	it('leaves a stationary left press selectable, and still suppresses selection once panning', async () => {
+		const camera = createCamera();
+		render(BoardViewport, { camera, children: worldSnippet });
+
+		const viewportEl = page.getByTestId('board-viewport').element() as HTMLElement;
+		viewportEl.style.width = '400px';
+		viewportEl.style.height = '400px';
+		viewportEl.style.overflow = 'auto';
+		viewportEl.setPointerCapture = () => {};
+		viewportEl.releasePointerCapture = () => {};
+
+		const press = (type: string, x: number, y: number) => {
+			const e = new PointerEvent(type, {
+				pointerId: 1,
+				button: 0,
+				buttons: 1,
+				clientX: x,
+				clientY: y,
+				bubbles: true,
+				cancelable: true
+			});
+			viewportEl.dispatchEvent(e);
+			return e;
+		};
+
+		// A plain press on a label: the browser has to be allowed to start a
+		// selection from it.
+		const down = press('pointerdown', 100, 100);
+		expect(down.defaultPrevented).toBe(false);
+
+		// A nudge inside the threshold is still a press, not a drag. Nudged
+		// leftward so a threshold that failed to hold would actually move the
+		// scroll — nudging right would clamp at 0 and hide the difference.
+		const nudge = press('pointermove', 98, 99);
+		expect(viewportEl.scrollLeft).toBe(0);
+		expect(nudge.defaultPrevented).toBe(false);
+
+		// Past the threshold it becomes a pan, and from then on the selection
+		// must not come along with it. Dragging left scrolls right, which is the
+		// direction with somewhere to go from a scroll position of 0.
+		press('pointermove', 60, 100);
+		expect(viewportEl.scrollLeft).toBeGreaterThan(0);
+		const during = press('pointermove', 40, 100);
+		expect(during.defaultPrevented).toBe(true);
 	});
 });

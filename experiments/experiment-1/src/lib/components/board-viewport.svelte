@@ -167,12 +167,23 @@
 	});
 
 	// --- Background / middle-mouse / space drag panning ----------------------
+
+	/**
+	 * How far a plain left press has to move before it counts as a pan rather
+	 * than a click or the start of a text selection. Small enough that a
+	 * deliberate drag feels immediate, large enough to survive the wobble of
+	 * pressing a mouse button.
+	 */
+	const PAN_THRESHOLD_PX = 4;
+
 	let panState: {
 		pointerId: number;
 		startClientX: number;
 		startClientY: number;
 		startScrollX: number;
 		startScrollY: number;
+		/** False while a plain left press might still turn out to be a click. */
+		armed: boolean;
 	} | null = null;
 
 	function onPointerDown(e: PointerEvent) {
@@ -184,9 +195,13 @@
 			e.preventDefault();
 		} else if (isLeft) {
 			if (!spaceHeld && isInteractiveTarget(e.target)) return; // never steal dnd/forms/buttons
-			// Otherwise the pan drags a native text selection along with it,
-			// leaving the labels it crossed highlighted.
-			e.preventDefault();
+			// Deliberately no `preventDefault()` here. Suppressing the default on
+			// the press also suppresses the text selection it would have started,
+			// which made every activity, step and slice name unselectable — a
+			// name is a thing people copy into a ticket. A press only becomes a
+			// pan once it has moved past PAN_THRESHOLD_PX (below), and the
+			// suppression happens there instead, by which point there is a drag
+			// worth suppressing.
 		} else {
 			return;
 		}
@@ -196,20 +211,42 @@
 		// selection, and this container needs focus for keyboard panning.
 		viewportEl.focus({ preventScroll: true });
 		viewportEl.setPointerCapture(e.pointerId);
-		isPanning = true;
+		// A middle-button or space-held press is unambiguous — there is no
+		// selection to protect and no other reading of the gesture — so it pans
+		// immediately. A plain left press has to wait and see.
+		const armed = isMiddle || spaceHeld;
+		isPanning = armed;
 		panState = {
 			pointerId: e.pointerId,
 			startClientX: e.clientX,
 			startClientY: e.clientY,
 			startScrollX: viewportEl.scrollLeft,
-			startScrollY: viewportEl.scrollTop
+			startScrollY: viewportEl.scrollTop,
+			armed
 		};
 	}
 
 	function onPointerMove(e: PointerEvent) {
 		if (!panState || panState.pointerId !== e.pointerId || !viewportEl) return;
-		viewportEl.scrollLeft = panState.startScrollX - (e.clientX - panState.startClientX);
-		viewportEl.scrollTop = panState.startScrollY - (e.clientY - panState.startClientY);
+
+		const dx = e.clientX - panState.startClientX;
+		const dy = e.clientY - panState.startClientY;
+
+		if (!panState.armed) {
+			// Still could be a click or the start of a selection. Only past the
+			// threshold is it certainly a drag.
+			if (Math.abs(dx) < PAN_THRESHOLD_PX && Math.abs(dy) < PAN_THRESHOLD_PX) return;
+			panState.armed = true;
+			isPanning = true;
+			// Drop whatever selection the press began before the threshold was
+			// crossed, so the pan does not leave a stray highlight behind.
+			document.getSelection()?.removeAllRanges();
+		}
+
+		// Now it is a pan: keep the selection out of it for the rest of the drag.
+		e.preventDefault();
+		viewportEl.scrollLeft = panState.startScrollX - dx;
+		viewportEl.scrollTop = panState.startScrollY - dy;
 	}
 
 	function endPan(e: PointerEvent) {
