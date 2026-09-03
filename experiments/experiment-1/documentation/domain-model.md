@@ -77,6 +77,12 @@ story than the first"), and it is the constraint that makes real-time collaborat
 re-modelling job rather than an addition. See the amendment to ADR 0004, and ADR 0014 for the
 decision that collaboration is in scope and this shape is therefore temporary.
 
+**This describes the repository, not what a user experiences.** The client is never given a
+version, and every request loads and saves within itself, so the compare-and-set window is
+one request rather than one editing session — two people editing the same board overwrite
+each other silently rather than conflicting. ADR 0015 §3 is the fix; until it lands, treat
+the rule above as protecting against interleaved _requests_, not against a stale editor.
+
 ## Ordering model
 
 Two independent axes, both implemented the same way (fractional ranks) but scoped

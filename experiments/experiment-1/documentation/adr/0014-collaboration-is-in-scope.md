@@ -2,7 +2,12 @@
 
 ## Status
 
-Accepted, 2026-09-03
+Accepted, 2026-09-03. **Superseded by [ADR 0015](./0015-collaboration-model.md),
+2026-09-03**, which is the collaboration design this ADR asked for. Two of the claims below
+did not survive that design and are corrected there: the conflict behaviour described in
+Context is real at the repository but never reached over HTTP (cross-user editing is
+silently last-write-wins), and the migration estimate in "What has to change" is too large —
+three domain functions, not fourteen. Kept unamended as the record of the decision.
 
 ## Context
 
