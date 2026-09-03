@@ -14,7 +14,7 @@
 	} from '$lib/components/story-dnd-zone.svelte';
 	import ZoomControls from '$lib/components/zoom-controls.svelte';
 	import { createCamera } from '$lib/canvas/camera.svelte';
-	import { loadCameraState, saveCameraState, type CameraState } from '$lib/canvas/camera-storage';
+	import { persistCamera } from '$lib/canvas/camera-persistence.svelte';
 	import { toMinimapModel } from '$lib/canvas/minimap-model';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Plus from '@lucide/svelte/icons/plus';
@@ -50,98 +50,12 @@
 	const minimapModel = $derived(toMinimapModel(data.board));
 
 	// --- Camera persistence (ADR 0010) ---------------------------------------
-	//
-	// Reads/writes go through `localStorage` only inside `$effect`, which never
-	// runs during SSR, so there is no server/client mismatch to guard against.
-	// `hydratedMapId` gates both effects below: the hydrate effect runs once
-	// per map id (once the board's natural size is known, so `fit()` has real
-	// numbers to work with), and the save effect stays silent until hydration
-	// for the *current* map has completed, so it never clobbers a saved state
-	// with the pre-restore zoom/scroll of 1/0/0.
-	let hydratedMapId = $state<string | null>(null);
-
-	/** `localStorage` can throw merely on access in some locked-down browsers. */
-	function tryGetLocalStorage(): Storage | null {
-		try {
-			return localStorage;
-		} catch {
-			return null;
-		}
-	}
-
-	$effect(() => {
-		const mapId = data.board.id;
-		// Both sizes are reported by independent ResizeObservers in
-		// BoardViewport and can settle a tick apart; waiting for both avoids
-		// computing `fit()` against a viewport that has not been measured yet
-		// (which would divide by ~0 and land on the minimum zoom step).
-		const sizeReady =
-			camera.worldWidth > 0 &&
-			camera.worldHeight > 0 &&
-			camera.viewWidth > 0 &&
-			camera.viewHeight > 0;
-		if (!sizeReady || hydratedMapId === mapId) return;
-
-		const storage = tryGetLocalStorage();
-		const saved = storage ? loadCameraState(storage, mapId) : null;
-		if (saved) {
-			// Apply zoom first; the scroll extents the world element reports
-			// only reflect the new `zoom` after the browser reflows it, so the
-			// matching scroll is applied a frame later (also re-clamped there,
-			// in case the board has shrunk since this was saved).
-			camera.restoreZoom(saved.zoom);
-			requestAnimationFrame(() => camera.panTo(saved.scrollX, saved.scrollY));
-		} else {
-			camera.fit();
-		}
-		hydratedMapId = mapId;
-	});
+	// Restore, debounced save, and flush-on-exit live in
+	// `src/lib/canvas/camera-persistence.svelte.ts`: canvas infrastructure with
+	// three non-obvious ordering rules, not page wiring (finding A11).
+	persistCamera(camera, () => data.board.id);
 
 	let boardViewport: ReturnType<typeof BoardViewport> | undefined = $state();
-
-	let saveTimer: ReturnType<typeof setTimeout> | undefined;
-	/** The most recent camera state and the map it belongs to, kept outside the
-	 *  effect so the teardown below can still write it. Plain, not `$state`:
-	 *  nothing renders from it. */
-	let pendingSave: { mapId: string; state: CameraState } | undefined;
-
-	function flushCameraSave() {
-		if (!pendingSave) return;
-		const storage = tryGetLocalStorage();
-		if (storage) saveCameraState(storage, pendingSave.mapId, pendingSave.state);
-		pendingSave = undefined;
-	}
-
-	$effect(() => {
-		const mapId = data.board.id;
-		const state = { zoom: camera.zoom, scrollX: camera.scrollX, scrollY: camera.scrollY };
-		if (hydratedMapId !== mapId) return;
-
-		pendingSave = { mapId, state };
-		clearTimeout(saveTimer);
-		saveTimer = setTimeout(flushCameraSave, 250);
-		return () => clearTimeout(saveTimer);
-	});
-
-	// Two ways the page can go, and the debounce loses the last move in both:
-	// its cleanup cancels the pending timer on destroy just as it does on a
-	// rerun, where cancelling is the whole point. This effect reads nothing
-	// reactive, so it runs once and its cleanup fires only on destroy —
-	// covering client-side navigation away from the board. `pagehide` covers
-	// the rest (reload, tab close, back/forward cache), where no Svelte
-	// teardown runs at all; it is the one the spec recommends over
-	// `beforeunload` because it also fires on mobile Safari.
-	$effect(() => {
-		const onPageHide = () => {
-			clearTimeout(saveTimer);
-			flushCameraSave();
-		};
-		window.addEventListener('pagehide', onPageHide);
-		return () => {
-			window.removeEventListener('pagehide', onPageHide);
-			onPageHide();
-		};
-	});
 
 	// Row 1 (activity headers) and row 2 (step headers) are both `sticky
 	// top-*` so column context survives vertical scrolling, but their heights
