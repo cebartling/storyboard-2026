@@ -40,6 +40,14 @@
 	);
 
 	/**
+	 * A camera starts unmeasured (every dimension 0), and this component renders
+	 * before BoardViewport's measuring effect runs — and during SSR. The viewport
+	 * rect is empty until then, which would give the scrim a zero-area hole and
+	 * paint the whole minimap as a dark slab, so the overlay waits.
+	 */
+	const hasViewport = $derived(viewportRect.width > 0 && viewportRect.height > 0);
+
+	/**
 	 * Everything outside the viewport, as one evenodd path: the full minimap
 	 * with the viewport rect as a second subpath punching a hole in it. Dimming
 	 * the surroundings rather than tinting the viewport keeps the "you are here"
@@ -192,67 +200,69 @@
 		/>
 	{/each}
 
-	<path
-		data-testid="minimap-scrim"
-		aria-hidden="true"
-		d={scrimPath}
-		fill-rule="evenodd"
-		fill="var(--color-ink)"
-		fill-opacity="0.35"
-		pointer-events="none"
-	/>
+	{#if hasViewport}
+		<path
+			data-testid="minimap-scrim"
+			aria-hidden="true"
+			d={scrimPath}
+			fill-rule="evenodd"
+			fill="var(--color-ink)"
+			fill-opacity="0.35"
+			pointer-events="none"
+		/>
 
-	<!--
-		`group`, not `img`: an `img` has presentational children, which would drop
-		this focusable handle out of the accessibility tree entirely. The handle is
-		`application` rather than `button` because it is a 2D pan surface driven by
-		the arrow keys — the role has to put a screen reader into focus mode so
-		those keys reach `onHandleKeyDown`, and `button` would promise an
-		Enter/Space activation that does not exist here.
+		<!--
+			`group`, not `img`: an `img` has presentational children, which would drop
+			this focusable handle out of the accessibility tree entirely. The handle is
+			`application` rather than `button` because it is a 2D pan surface driven by
+			the arrow keys — the role has to put a screen reader into focus mode so
+			those keys reach `onHandleKeyDown`, and `button` would promise an
+			Enter/Space activation that does not exist here.
 
-		Svelte's a11y checker does not count `application` among its interactive
-		roles, so it flags the tabindex and the listeners; both are deliberate and
-		are what makes the handle reachable at all.
-	-->
-	<!--
-		A wider light stroke drawn underneath the brand one, so the frame stays
-		readable whether it sits over the palest empty cell or the darkest
-		populated one.
-	-->
-	<rect
-		data-testid="minimap-viewport-halo"
-		aria-hidden="true"
-		x={viewportRect.x}
-		y={viewportRect.y}
-		width={viewportRect.width}
-		height={viewportRect.height}
-		rx="2"
-		fill="none"
-		stroke="var(--color-canvas)"
-		stroke-width="3.5"
-		pointer-events="none"
-	/>
+			Svelte's a11y checker does not count `application` among its interactive
+			roles, so it flags the tabindex and the listeners; both are deliberate and
+			are what makes the handle reachable at all.
+		-->
+		<!--
+			A wider light stroke drawn underneath the brand one, so the frame stays
+			readable whether it sits over the palest empty cell or the darkest
+			populated one.
+		-->
+		<rect
+			data-testid="minimap-viewport-halo"
+			aria-hidden="true"
+			x={viewportRect.x}
+			y={viewportRect.y}
+			width={viewportRect.width}
+			height={viewportRect.height}
+			rx="2"
+			fill="none"
+			stroke="var(--color-canvas)"
+			stroke-width="3.5"
+			pointer-events="none"
+		/>
 
-	<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
-	<rect
-		data-testid="minimap-viewport"
-		role="application"
-		aria-label="Visible area of the board; drag or use arrow keys to pan"
-		tabindex="0"
-		x={viewportRect.x}
-		y={viewportRect.y}
-		width={viewportRect.width}
-		height={viewportRect.height}
-		rx="2"
-		fill="none"
-		pointer-events="all"
-		stroke="var(--color-brand)"
-		stroke-width="1.5"
-		class="cursor-move focus-visible:[stroke-width:2.5]"
-		onpointerdown={onHandlePointerDown}
-		onpointermove={onHandlePointerMove}
-		onpointerup={onHandlePointerUp}
-		onpointercancel={onHandlePointerUp}
-		onkeydown={onHandleKeyDown}
-	/>
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+		<rect
+			data-testid="minimap-viewport"
+			role="application"
+			aria-label="Visible area of the board; drag or use arrow keys to pan"
+			tabindex="0"
+			x={viewportRect.x}
+			y={viewportRect.y}
+			width={viewportRect.width}
+			height={viewportRect.height}
+			rx="2"
+			fill="none"
+			pointer-events="all"
+			stroke="var(--color-brand)"
+			stroke-width="1.5"
+			class="cursor-move focus-visible:[stroke-width:2.5]"
+			onpointerdown={onHandlePointerDown}
+			onpointermove={onHandlePointerMove}
+			onpointerup={onHandlePointerUp}
+			onpointercancel={onHandlePointerUp}
+			onkeydown={onHandleKeyDown}
+		/>
+	{/if}
 </svg>

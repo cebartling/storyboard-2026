@@ -68,6 +68,19 @@ describe('BoardMinimap', () => {
 		expect(opacityOf('5')).toBeGreaterThan(opacityOf('3'));
 	});
 
+	it('holds the overlay back until the camera has been measured', async () => {
+		// A camera starts every dimension at 0, and the minimap renders before
+		// BoardViewport's measuring effect runs (and during SSR). The viewport
+		// rect is empty then, so the scrim's hole would have no area and would
+		// paint the whole minimap as a dark slab.
+		render(BoardMinimap, { camera: createCamera(), model });
+
+		expect(page.getByTestId('minimap-scrim').elements()).toHaveLength(0);
+		expect(page.getByTestId('minimap-viewport').elements()).toHaveLength(0);
+		// The grid itself still draws, so the minimap reads as an overview.
+		expect(page.getByTestId('minimap-cell').elements()).toHaveLength(model.cells.length);
+	});
+
 	it('dims the board outside the viewport without swallowing pointer events', async () => {
 		const camera = cameraWithGeometry();
 		render(BoardMinimap, { camera, model });
