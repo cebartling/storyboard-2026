@@ -382,4 +382,28 @@ describe('BoardViewport', () => {
 
 		expect(camera.zoom).toBe(zoomed);
 	});
+
+	// Every test above dispatches at an element it selected, which decides the
+	// event target by construction and so cannot see hit-testing at all. That
+	// is fine for handler logic, but it means a z-order or overlay regression —
+	// something invisible sitting over the board — would leave all of them
+	// green. This one asks the document what is actually at a coordinate
+	// (finding F9).
+	it('finds the world, not an overlay, at a point on the board background', async () => {
+		const camera = createCamera();
+		render(BoardViewport, { camera, children: worldSnippet });
+
+		const viewportEl = page.getByTestId('board-viewport').element() as HTMLElement;
+		viewportEl.style.width = '400px';
+		viewportEl.style.height = '400px';
+
+		const box = viewportEl.getBoundingClientRect();
+		const topmost = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+
+		// `elementFromPoint`, not the whole stack: asking whether the world is
+		// *somewhere* in the stack would still pass with something painted over
+		// it, which is the regression this exists to catch. What matters is that
+		// the world is what the pointer would actually hit.
+		expect(topmost?.closest('[data-testid="board-world"]')).not.toBeNull();
+	});
 });
