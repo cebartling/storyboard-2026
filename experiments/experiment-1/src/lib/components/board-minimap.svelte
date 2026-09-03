@@ -248,7 +248,7 @@
 		pointer-events="all"
 		stroke="var(--color-brand)"
 		stroke-width="1.5"
-		class="cursor-move outline-none focus-visible:stroke-accent focus-visible:[stroke-width:2.5]"
+		class="cursor-move focus-visible:[stroke-width:2.5]"
 		onpointerdown={onHandlePointerDown}
 		onpointermove={onHandlePointerMove}
 		onpointerup={onHandlePointerUp}
