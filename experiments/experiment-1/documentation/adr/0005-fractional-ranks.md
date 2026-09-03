@@ -44,7 +44,14 @@ concatenating slice bands in slice order, not just reading one rank column.
 
 ## Consequences
 
-Single-row writes for drags — the payoff this decision exists for. Costs: rank values are
+Single-row writes for drags — the payoff this decision exists for, though only in the
+domain so far: a drag changes exactly one story's rank and renumbers no siblings, which is
+the property this scheme buys. It is _not_ yet realised at the write path. ADR 0004's
+whole-map `save()` deletes and reinserts every child row, so a drag is an N-row write
+regardless of rank scheme, and it stays that way until the per-operation repository
+question in ADR 0004 is settled. The two ADRs read as contradicting each other on this
+point; they do not, but the distinction was implicit and is now stated (finding A3 of
+`../review-2026-09-02.md`). Costs: rank values are
 opaque strings, not meaningful to read directly in the database; and there is a
 theoretical key-growth problem under pathological repeated insertion at the same point
 (e.g. always dropping between the same two neighbours many times), which is a known

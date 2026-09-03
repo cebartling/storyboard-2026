@@ -58,3 +58,11 @@ the use-case layer in `src/lib/app/` would need an inbound port interface retrof
 today's direct calls from routes into use-case functions would need to go through it
 instead. That is treated as an acceptable, explicitly deferred cost — building it now, for
 a driver that doesn't exist, would be speculative.
+
+One deferred cost is worth naming precisely, because it is easy to assume it is cheaper
+than it is (finding A10 of `../review-2026-09-02.md`). **Authentication is a port-signature
+change, not a middleware layer.** `StoryMapRepository.listSummaries()` takes no scope and
+returns every map, `load(id)` has no caller identity, `App.Locals` is empty, and `maps` has
+no owner column. Adding auth therefore means a caller/scope argument on the repository
+port, an owner column, and a change at every action — not a hook in front of the existing
+ones.
