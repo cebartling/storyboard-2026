@@ -244,6 +244,52 @@ describe('DrizzleStoryMapRepository', () => {
 		expect(after.stories.find((s) => s.id === second.id)!.title).toBe(second.title);
 	});
 
+	// D2: the schema declared ON DELETE SET NULL for stories.slice_id, and any
+	// statement that fired it failed — un-slicing that way reuses the story's
+	// sliced-scope rank in the unsliced scope, where the partial unique index
+	// rejects it (every scope starts at 'a0'). A raw `DELETE FROM maps` was
+	// therefore impossible, which is a poor property for a schema to have.
+	//
+	// With the action dropped, the two deletes now behave differently, and both
+	// are what we want. Note SQLite checks NO ACTION immediately rather than at
+	// statement end, so this is not the "cascades cleanly in both cases" the
+	// review predicted.
+	it('allows a raw DELETE of a map, and refuses one of a slice that still has stories', async () => {
+		const map = buildSampleMap();
+		await repository.save(map);
+		const slice = map.slices[0];
+
+		// Refused, and that is the point: un-slicing is `deleteSlice`'s job in
+		// the domain because each story has to be re-ranked into the unsliced
+		// scope. The FK now says so loudly instead of letting a raw statement
+		// produce a story at a rank that collides.
+		expect(() => client.prepare('DELETE FROM slices WHERE id = ?').run(slice.id)).toThrow(
+			/FOREIGN KEY constraint failed/
+		);
+
+		// Cascades all the way down, which it could not do before.
+		expect(() => client.prepare('DELETE FROM maps WHERE id = ?').run(map.id)).not.toThrow();
+		expect(await repository.load(map.id)).toBeNull();
+		// Scoped to this map's own rows: the harness shares one temp database
+		// across the file, so other tests' maps are legitimately still there.
+		const remaining = (table: string, column: string, ids: string[]) =>
+			ids.length === 0
+				? 0
+				: (
+						client
+							.prepare(
+								`SELECT count(*) as n FROM ${table} WHERE ${column} IN (${ids.map(() => '?').join(',')})`
+							)
+							.get(...ids) as { n: number }
+					).n;
+
+		const stepIds = map.activities.flatMap((a) => a.steps.map((step) => step.id));
+		expect(remaining('stories', 'step_id', stepIds)).toBe(0);
+		expect(remaining('steps', 'id', stepIds)).toBe(0);
+		expect(remaining('slices', 'map_id', [map.id])).toBe(0);
+		expect(remaining('activities', 'map_id', [map.id])).toBe(0);
+	});
+
 	it('delete() removes the map and cascades to its children', async () => {
 		const map = buildSampleMap();
 		await repository.save(map);
