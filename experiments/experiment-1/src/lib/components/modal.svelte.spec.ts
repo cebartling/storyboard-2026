@@ -141,10 +141,40 @@ describe('Modal', () => {
 		body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 		expect(onClose).not.toHaveBeenCalled();
 
+		// Explicit coordinates clear of the box: the backdrop is the region
+		// outside it, and relying on a default of (0, 0) would only pass while
+		// the dialog happens to be centred.
 		const dialog = dialogEl();
-		dialog.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-		dialog.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+		const box = dialog.getBoundingClientRect();
+		const outside = { clientX: box.right + 20, clientY: box.bottom + 20 };
+		dialog.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, ...outside }));
+		dialog.dispatchEvent(new MouseEvent('click', { bubbles: true, ...outside }));
 		expect(onClose).toHaveBeenCalledOnce();
+	});
+
+	// The test above makes `e.target === dialogEl` true by construction, so it
+	// pins the branch but not the layout claim underneath it: that the dialog's
+	// own hit area is only ever the backdrop. It is not — the box has padding,
+	// and a press there also reports the dialog as the target. Driving real
+	// coordinates is the only way to tell the two apart.
+	it('does not close on a press inside its own padding', async () => {
+		const onClose = vi.fn();
+		renderModal(true, onClose);
+		await tick();
+
+		const dialog = dialogEl();
+		const box = dialog.getBoundingClientRect();
+		// A few pixels inside the top-left corner: the dialog's padding ring,
+		// which is visually part of the panel but is not any child's box.
+		const x = box.left + 4;
+		const y = box.top + 4;
+		expect(document.elementFromPoint(x, y)).toBe(dialog);
+
+		for (const type of ['mousedown', 'click'] as const) {
+			dialog.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: x, clientY: y }));
+		}
+
+		expect(onClose).not.toHaveBeenCalled();
 	});
 
 	// Same reason as the board's other icon buttons: an SVG the stylesheet can

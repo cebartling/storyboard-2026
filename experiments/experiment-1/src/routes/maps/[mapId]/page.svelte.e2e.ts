@@ -5,6 +5,7 @@ import {
 	addStep,
 	addStory,
 	createMap,
+	dialog,
 	firstSliceId,
 	firstStepId
 } from './board-helpers';
@@ -429,4 +430,38 @@ test('a tooltip does not outlive the control it describes', async ({ page }) => 
 	// it, and a focused icon button showing its own label is the behaviour
 	// this action is supposed to have — so this pins both halves at once.
 	await expect(page.locator('[data-tooltip]:visible')).toHaveText('Edit step');
+});
+
+// Deleting was the one dialog flow with no coverage at any level: the specs
+// assert the right hidden id is present and deliberately never submit, and
+// nothing here clicked a Delete button. That gap hid a crash — `bind:this`
+// writes `null` into its array slot on teardown, so removing a keyed header
+// left a `null` the sticky-header effect then measured.
+test('deleting an activity and a step leaves the board working', async ({ page }) => {
+	const pageErrors: Error[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error));
+
+	await createMap(page, `E2E delete ${Date.now()}`);
+	await addActivity(page, 'Search');
+	await addStep(page, 'Find a product');
+	await addActivity(page, 'Checkout');
+	// Activity headers are keyed by id, so scope by the one containing the name.
+	const checkout = page.locator('[data-testid^="activity-"]', { hasText: 'Checkout' });
+	await addStep(page, 'Pay', checkout);
+
+	await checkout.getByRole('button', { name: 'Edit activity' }).click();
+	await dialog(page).getByRole('button', { name: 'Delete activity' }).click();
+	await expect(dialog(page)).toBeHidden();
+	await expect(page.locator('[data-testid^="activity-"]', { hasText: 'Checkout' })).toHaveCount(0);
+
+	// The surviving activity's step is what the effect re-measures afterwards.
+	await page.getByRole('button', { name: 'Edit step' }).click();
+	await dialog(page).getByRole('button', { name: 'Delete step' }).click();
+	await expect(dialog(page)).toBeHidden();
+	await expect(page.getByText('Find a product')).toHaveCount(0);
+
+	// The board still renders and the sticky offset still updates, which is
+	// what a thrown effect would have stopped.
+	await expect(page.getByRole('button', { name: 'Add step' })).toBeVisible();
+	expect(pageErrors.map((e) => e.message)).toEqual([]);
 });

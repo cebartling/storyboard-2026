@@ -61,18 +61,29 @@
 	});
 
 	// Backdrop click. The backdrop's hit area belongs to the <dialog> box
-	// itself; all content lives in a child wrapper, so `e.target === dialogEl`
-	// means "outside the content". Tracking mousedown as well as click stops a
+	// itself, so `e.target === dialogEl` is necessary — but not sufficient: the
+	// box has padding of its own, and a press there reports the dialog as the
+	// target too. Closing on that would discard whatever the user had typed, so
+	// the point is also tested against the box, which the backdrop is by
+	// definition outside of. Tracking mousedown as well as click stops a
 	// text-selection drag that happens to end over the backdrop from closing
 	// the modal.
 	let pressedBackdrop = false;
 
+	function isOnBackdrop(e: MouseEvent): boolean {
+		if (e.target !== dialogEl || !dialogEl) return false;
+		const box = dialogEl.getBoundingClientRect();
+		return (
+			e.clientX < box.left || e.clientX > box.right || e.clientY < box.top || e.clientY > box.bottom
+		);
+	}
+
 	function onMouseDown(e: MouseEvent) {
-		pressedBackdrop = e.target === dialogEl;
+		pressedBackdrop = isOnBackdrop(e);
 	}
 
 	function onClick(e: MouseEvent) {
-		if (pressedBackdrop && e.target === dialogEl) onClose();
+		if (pressedBackdrop && isOnBackdrop(e)) onClose();
 		pressedBackdrop = false;
 	}
 </script>

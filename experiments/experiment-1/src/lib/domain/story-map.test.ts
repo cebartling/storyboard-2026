@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ConflictError } from './errors';
 import {
 	addActivity,
 	addSlice,
@@ -246,6 +247,52 @@ describe('moveStory', () => {
 
 		const moved = findStory(map, storyResult.story.id);
 		expect(moved.stepId).toBe(step2.step.id);
+	});
+
+	// A drop's neighbours describe a gap. If they do not actually bracket a gap,
+	// the client's view of the scope is stale — someone else has inserted since
+	// it loaded — and `generateKeyBetween` will hand back a rank a sibling
+	// already holds, because appended ranks are consecutive by construction.
+	it('rejects a drop whose neighbours are stale rather than deriving a duplicate rank', () => {
+		const initial = mapWithOneStep();
+		let map = initial.map;
+		const { stepId } = initial;
+		const a = addStory(map, stepId, 'A');
+		map = a.map;
+		const b = addStory(map, stepId, 'B');
+		map = b.map;
+		const step2 = addStep(map, initial.activityId, 'Step 2');
+		map = step2.map;
+		const x = addStory(map, step2.step.id, 'X');
+		map = x.map;
+
+		// The client saw only A, so it asks to drop after A with nothing beyond.
+		// B is beyond, and B's rank is exactly what "after A, before nothing"
+		// derives.
+		expect(() => moveStory(map, x.story.id, stepId, null, a.story.id, null)).toThrow(ConflictError);
+	});
+
+	it('rejects a drop between two non-adjacent neighbours', () => {
+		const initial = mapWithOneStep();
+		let map = initial.map;
+		const { stepId } = initial;
+		const a = addStory(map, stepId, 'A');
+		map = a.map;
+		const b = addStory(map, stepId, 'B');
+		map = b.map;
+		const c = addStory(map, stepId, 'C');
+		map = c.map;
+		const step2 = addStep(map, initial.activityId, 'Step 2');
+		map = step2.map;
+		const x = addStory(map, step2.step.id, 'X');
+		map = x.map;
+
+		// B sits between A and C, so this gap does not exist.
+		expect(() => moveStory(map, x.story.id, stepId, null, a.story.id, c.story.id)).toThrow(
+			ConflictError
+		);
+		// The story that was actually there is untouched.
+		expect(findStory(map, b.story.id).rank).toBe(b.story.rank);
 	});
 
 	it('reorders a story within the same (step, slice) scope, matching the a0/a1/a2 worked example', () => {
