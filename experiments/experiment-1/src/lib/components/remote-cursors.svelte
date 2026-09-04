@@ -17,9 +17,13 @@
 {#each cursors as cursor (cursor.clientId)}
 	<!-- By person, not by tab, so this matches their avatar in the header. -->
 	{@const colour = participantColour(cursor.userId)}
+	<!-- `pointer-events` is inline rather than a utility class because it is a
+	     correctness property, not styling: a cursor sits on top of the board, and
+	     if it ever took pointer events it would swallow drags near another
+	     person's pointer. That must not depend on a stylesheet being present. -->
 	<div
-		class="pointer-events-none absolute z-20 flex items-start gap-1"
-		style="left: {cursor.x}px; top: {cursor.y}px;"
+		class="absolute z-20 flex items-start gap-1"
+		style="left: {cursor.x}px; top: {cursor.y}px; pointer-events: none;"
 		data-testid="remote-cursor-{cursor.clientId}"
 		aria-hidden="true"
 	>

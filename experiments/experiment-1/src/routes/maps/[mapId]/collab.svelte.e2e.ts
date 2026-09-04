@@ -183,3 +183,53 @@ test("another editor's presence is visible on the board", async ({ page, newUser
 // into a backed-off reconnect and asserts it resumes from its last position,
 // and `src/lib/server/collab/map-hub.test.ts` covers replay past `lastSeq` and
 // the resync a client too far behind receives.
+
+test("another editor's pointer appears, in the same colour as their avatar", async ({
+	page,
+	newUser,
+	browser
+}) => {
+	// The claim the demo narrates out loud, which nothing checked until now: it
+	// moved a pointer and captioned "that is Bob's pointer, in his colour" with
+	// no assertion behind it, so a board where cursors had stopped rendering
+	// would have demoed exactly the same.
+	await createMap(page, `Collab ${Date.now()}`);
+	await addActivity(page, 'Browse');
+	const url = page.url();
+	const { page: other, email } = await newUser(browser);
+	await shareWith(page, email);
+	await other.goto(url);
+	await bothConnected(page, other);
+
+	// The other editor moves their pointer across their own board.
+	const board = other.getByTestId('board');
+	const box = (await board.boundingBox())!;
+	for (let i = 0; i <= 10; i += 1) {
+		await other.mouse.move(box.x + 60 + i * 40, box.y + 100 + i * 12);
+		await other.waitForTimeout(100);
+	}
+
+	const cursor = page.locator('[data-testid^="remote-cursor-"]');
+	await expect(cursor).toHaveCount(1);
+	await expect(cursor).toContainText('Second');
+
+	// Same hue as their avatar in the header — one person, one colour, whether
+	// you are looking at the top of the screen or the middle of the board.
+	const iconClass = (await cursor.locator('svg').first().getAttribute('class')) ?? '';
+	const avatarClass =
+		(await page
+			.getByTestId('presence')
+			.getByLabel(/^Second/)
+			.getAttribute('class')) ?? '';
+	const hue = (classes: string, prefix: string) =>
+		classes
+			.split(/\s+/)
+			.find((c) => c.startsWith(prefix))
+			?.slice(prefix.length);
+	expect(hue(iconClass, 'text-')).toBeTruthy();
+	expect(hue(iconClass, 'text-')).toBe(hue(avatarClass, 'bg-'));
+
+	// And nobody sees their own pointer echoed back at them — it would fight the
+	// real one.
+	await expect(other.locator('[data-testid^="remote-cursor-"]')).toHaveCount(0);
+});
