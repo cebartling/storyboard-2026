@@ -58,15 +58,23 @@
 							<span class="text-ink-muted group-hover:text-brand text-sm" aria-hidden="true">→</span
 							>
 						</a>
-						<button
-							type="button"
-							class="btn btn-icon btn-danger-quiet"
-							aria-label="Delete {map.name}"
-							use:tooltip={'Delete map'}
-							onclick={() => (pendingDelete = { id: map.id, name: map.name })}
-						>
-							<Trash2 class="size-3.5" />
-						</button>
+						{#if map.role === 'owner'}
+							<button
+								type="button"
+								class="btn btn-icon btn-danger-quiet"
+								aria-label="Delete {map.name}"
+								use:tooltip={'Delete map'}
+								onclick={() => (pendingDelete = { id: map.id, name: map.name })}
+							>
+								<Trash2 class="size-3.5" />
+							</button>
+						{:else}
+							<!-- Editors can change everything on the board and delete nothing
+							     of the map itself. The control is absent rather than disabled:
+							     a disabled button invites a click and explains nothing. The
+							     server refuses it regardless (ADR 0016). -->
+							<span class="text-ink-muted text-xs" data-testid="shared-badge">Shared with you</span>
+						{/if}
 					</div>
 				</li>
 			{/each}

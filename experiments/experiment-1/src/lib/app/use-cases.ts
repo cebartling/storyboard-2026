@@ -13,9 +13,18 @@
  * caller needs.
  */
 
-import type { ActivityId, MapId, SliceId, StepId, StoryId } from '$lib/domain/ids';
-import type { AiAssistant, StoryMapRepository, StorySuggestion } from '$lib/domain/ports';
-import { InvariantError } from '$lib/domain/errors';
+import type { ActivityId, MapId, SliceId, StepId, StoryId, UserId } from '$lib/domain/ids';
+import type {
+	AiAssistant,
+	Caller,
+	MapAccess,
+	MapSummary,
+	Role,
+	StoryMapRepository,
+	StorySuggestion
+} from '$lib/domain/ports';
+import { ConflictError, InvariantError } from '$lib/domain/errors';
+import { KeyedLock } from './keyed-lock';
 import * as domain from '$lib/domain/story-map';
 import {
 	createStoryMap,
@@ -26,18 +35,23 @@ import {
 	type StoryMap
 } from '$lib/domain/story-map';
 
-export interface MapSummary {
-	id: MapId;
-	name: string;
-	createdAt: Date;
+export type { MapSummary };
+
+export async function listMaps(
+	repository: StoryMapRepository,
+	caller: Caller
+): Promise<MapSummary[]> {
+	return repository.listSummaries(caller);
 }
 
-export async function listMaps(repository: StoryMapRepository): Promise<MapSummary[]> {
-	return repository.listSummaries();
-}
-
-export async function createMap(repository: StoryMapRepository, name: string): Promise<StoryMap> {
-	return repository.save(createStoryMap(name));
+export async function createMap(
+	repository: StoryMapRepository,
+	caller: Caller,
+	name: string
+): Promise<StoryMap> {
+	// The caller becomes the map's owner, inside the repository's own
+	// transaction — see `StoryMapRepository.save` (ADR 0016).
+	return repository.save(caller, createStoryMap(name));
 }
 
 /**
@@ -50,20 +64,111 @@ export async function createMap(repository: StoryMapRepository, name: string): P
  * malformed request; failing would report an error for a state the caller
  * wanted anyway.
  */
-export async function deleteMap(repository: StoryMapRepository, mapId: MapId): Promise<void> {
-	await repository.delete(mapId);
+export async function deleteMap(
+	repository: StoryMapRepository,
+	caller: Caller,
+	mapId: MapId
+): Promise<void> {
+	await repository.delete(caller, mapId);
 }
 
-export async function loadMap(repository: StoryMapRepository, id: MapId): Promise<StoryMap | null> {
-	return repository.load(id);
+/** Returns the map *and* the caller's role, which the board needs to decide
+ *  whether to offer owner-only controls. */
+export async function loadMap(
+	repository: StoryMapRepository,
+	caller: Caller,
+	id: MapId
+): Promise<MapAccess | null> {
+	return repository.load(caller, id);
 }
 
-async function loadOrThrow(repository: StoryMapRepository, id: MapId): Promise<StoryMap> {
-	const map = await repository.load(id);
-	if (!map) {
+/**
+ * The caller's role on a map, without loading it. For authorising an action that
+ * does not need the board — the cursor endpoint, which runs at pointer rate.
+ */
+export async function roleOf(
+	repository: StoryMapRepository,
+	caller: Caller,
+	mapId: MapId
+): Promise<Role | null> {
+	return repository.roleOf(caller, mapId);
+}
+
+/** Shares a map with another account as an editor. Owner-only; the repository
+ *  enforces that. */
+export async function shareMap(
+	repository: StoryMapRepository,
+	caller: Caller,
+	mapId: MapId,
+	userId: UserId
+): Promise<void> {
+	await repository.addMember(caller, mapId, userId, 'editor');
+}
+
+async function loadOrThrow(
+	repository: StoryMapRepository,
+	caller: Caller,
+	id: MapId,
+	expectedVersion?: number
+): Promise<StoryMap> {
+	const access = await repository.load(caller, id);
+	// Null covers both "no such map" and "not yours" — the repository does not
+	// distinguish them, so neither can this (ADR 0016).
+	if (!access) {
 		throw new InvariantError(`No story map with id ${id}`);
 	}
+	const map = access.map;
+	// The compare-and-set in `save()` only spans one request, which is not the
+	// window that matters: a user holds an open editor for far longer than that.
+	// Comparing the version the client was *given* against what is stored now is
+	// what turns a stale editor into a 409 instead of a silent overwrite
+	// (ADR 0015 §3). Checked before the domain function runs, so nothing is
+	// computed against state we already know is stale.
+	if (expectedVersion !== undefined && map.version !== expectedVersion) {
+		throw new ConflictError(
+			`Story map ${id} changed since it was loaded (expected version ${expectedVersion}, current version ${map.version})`
+		);
+	}
 	return map;
+}
+
+/**
+ * Serialises writes to one map (ADR 0015 §2). Module-level rather than injected:
+ * it holds no configuration and has no second implementation, so a `Deps` entry
+ * would be the DI-container creep ADR 0006 declined. The keys are map ids, so
+ * separate tests never contend with each other.
+ *
+ * Sound only because the deployment is a single Node process — see `KeyedLock`.
+ */
+const mapWriteLock = new KeyedLock<MapId>();
+
+/**
+ * The shape every board mutation has: load the aggregate, apply one pure domain
+ * function, save. Wrapping the whole of it — not just the save — is the point.
+ *
+ * Note what the lock does and does not buy, because ADR 0015 §2 overstates it
+ * slightly. It says the second of two concurrent inserts "sees the first's
+ * rank"; once §3's version round-trip is in place that cannot happen, because
+ * the second writer is holding the version its editor opened at and is rejected
+ * before it reaches the domain at all. What the lock actually guarantees is
+ * that no two writers ever compute ranks against the same state — which matters
+ * because `rank.ts` is deterministic with no actor entropy, so identical state
+ * yields byte-identical keys — and that a retry always runs against committed
+ * state rather than contending at the SQLite level.
+ */
+async function mutate<T>(
+	repository: StoryMapRepository,
+	caller: Caller,
+	mapId: MapId,
+	expectedVersion: number,
+	apply: (map: StoryMap) => { map: StoryMap; result: T }
+): Promise<T> {
+	return mapWriteLock.run(mapId, async () => {
+		const map = await loadOrThrow(repository, caller, mapId, expectedVersion);
+		const { map: updated, result } = apply(map);
+		await repository.save(caller, updated);
+		return result;
+	});
 }
 
 // ---------------------------------------------------------------------------
@@ -72,49 +177,57 @@ async function loadOrThrow(repository: StoryMapRepository, id: MapId): Promise<S
 
 export async function addActivity(
 	repository: StoryMapRepository,
+	caller: Caller,
 	mapId: MapId,
+	expectedVersion: number,
 	name: string
 ): Promise<Activity> {
-	const map = await loadOrThrow(repository, mapId);
-	const { map: updated, activity } = domain.addActivity(map, name);
-	await repository.save(updated);
-	return activity;
+	return mutate(repository, caller, mapId, expectedVersion, (map) => {
+		const { map: updated, activity } = domain.addActivity(map, name);
+		return { map: updated, result: activity };
+	});
 }
 
 export async function addStep(
 	repository: StoryMapRepository,
+	caller: Caller,
 	mapId: MapId,
+	expectedVersion: number,
 	activityId: ActivityId,
 	name: string
 ): Promise<Step> {
-	const map = await loadOrThrow(repository, mapId);
-	const { map: updated, step } = domain.addStep(map, activityId, name);
-	await repository.save(updated);
-	return step;
+	return mutate(repository, caller, mapId, expectedVersion, (map) => {
+		const { map: updated, step } = domain.addStep(map, activityId, name);
+		return { map: updated, result: step };
+	});
 }
 
 export async function createSlice(
 	repository: StoryMapRepository,
+	caller: Caller,
 	mapId: MapId,
+	expectedVersion: number,
 	name: string
 ): Promise<Slice> {
-	const map = await loadOrThrow(repository, mapId);
-	const { map: updated, slice } = domain.addSlice(map, name);
-	await repository.save(updated);
-	return slice;
+	return mutate(repository, caller, mapId, expectedVersion, (map) => {
+		const { map: updated, slice } = domain.addSlice(map, name);
+		return { map: updated, result: slice };
+	});
 }
 
 export async function addStory(
 	repository: StoryMapRepository,
+	caller: Caller,
 	mapId: MapId,
+	expectedVersion: number,
 	stepId: StepId,
 	title: string,
 	options: { description?: string | null; sliceId?: SliceId | null } = {}
 ): Promise<Story> {
-	const map = await loadOrThrow(repository, mapId);
-	const { map: updated, story } = domain.addStory(map, stepId, title, options);
-	await repository.save(updated);
-	return story;
+	return mutate(repository, caller, mapId, expectedVersion, (map) => {
+		const { map: updated, story } = domain.addStory(map, stepId, title, options);
+		return { map: updated, result: story };
+	});
 }
 
 // ---------------------------------------------------------------------------
@@ -123,48 +236,60 @@ export async function addStory(
 
 export async function renameActivity(
 	repository: StoryMapRepository,
+	caller: Caller,
 	mapId: MapId,
+	expectedVersion: number,
 	activityId: ActivityId,
 	name: string
 ): Promise<void> {
-	const map = await loadOrThrow(repository, mapId);
-	const updated = domain.renameActivity(map, activityId, name);
-	await repository.save(updated);
+	await mutate(repository, caller, mapId, expectedVersion, (map) => ({
+		map: domain.renameActivity(map, activityId, name),
+		result: undefined
+	}));
 }
 
 export async function renameStep(
 	repository: StoryMapRepository,
+	caller: Caller,
 	mapId: MapId,
+	expectedVersion: number,
 	stepId: StepId,
 	name: string
 ): Promise<void> {
-	const map = await loadOrThrow(repository, mapId);
-	const updated = domain.renameStep(map, stepId, name);
-	await repository.save(updated);
+	await mutate(repository, caller, mapId, expectedVersion, (map) => ({
+		map: domain.renameStep(map, stepId, name),
+		result: undefined
+	}));
 }
 
 export async function renameSlice(
 	repository: StoryMapRepository,
+	caller: Caller,
 	mapId: MapId,
+	expectedVersion: number,
 	sliceId: SliceId,
 	name: string
 ): Promise<void> {
-	const map = await loadOrThrow(repository, mapId);
-	const updated = domain.renameSlice(map, sliceId, name);
-	await repository.save(updated);
+	await mutate(repository, caller, mapId, expectedVersion, (map) => ({
+		map: domain.renameSlice(map, sliceId, name),
+		result: undefined
+	}));
 }
 
 export async function editStory(
 	repository: StoryMapRepository,
+	caller: Caller,
 	mapId: MapId,
+	expectedVersion: number,
 	storyId: StoryId,
 	changes: { title?: string; description?: string | null }
 ): Promise<void> {
-	const map = await loadOrThrow(repository, mapId);
 	const trimmedChanges =
 		changes.title !== undefined ? { ...changes, title: changes.title } : changes;
-	const updated = domain.editStory(map, storyId, trimmedChanges);
-	await repository.save(updated);
+	await mutate(repository, caller, mapId, expectedVersion, (map) => ({
+		map: domain.editStory(map, storyId, trimmedChanges),
+		result: undefined
+	}));
 }
 
 // ---------------------------------------------------------------------------
@@ -173,42 +298,54 @@ export async function editStory(
 
 export async function deleteActivity(
 	repository: StoryMapRepository,
+	caller: Caller,
 	mapId: MapId,
+	expectedVersion: number,
 	activityId: ActivityId
 ): Promise<void> {
-	const map = await loadOrThrow(repository, mapId);
-	const updated = domain.deleteActivity(map, activityId);
-	await repository.save(updated);
+	await mutate(repository, caller, mapId, expectedVersion, (map) => ({
+		map: domain.deleteActivity(map, activityId),
+		result: undefined
+	}));
 }
 
 export async function deleteStep(
 	repository: StoryMapRepository,
+	caller: Caller,
 	mapId: MapId,
+	expectedVersion: number,
 	stepId: StepId
 ): Promise<void> {
-	const map = await loadOrThrow(repository, mapId);
-	const updated = domain.deleteStep(map, stepId);
-	await repository.save(updated);
+	await mutate(repository, caller, mapId, expectedVersion, (map) => ({
+		map: domain.deleteStep(map, stepId),
+		result: undefined
+	}));
 }
 
 export async function deleteSlice(
 	repository: StoryMapRepository,
+	caller: Caller,
 	mapId: MapId,
+	expectedVersion: number,
 	sliceId: SliceId
 ): Promise<void> {
-	const map = await loadOrThrow(repository, mapId);
-	const updated = domain.deleteSlice(map, sliceId);
-	await repository.save(updated);
+	await mutate(repository, caller, mapId, expectedVersion, (map) => ({
+		map: domain.deleteSlice(map, sliceId),
+		result: undefined
+	}));
 }
 
 export async function deleteStory(
 	repository: StoryMapRepository,
+	caller: Caller,
 	mapId: MapId,
+	expectedVersion: number,
 	storyId: StoryId
 ): Promise<void> {
-	const map = await loadOrThrow(repository, mapId);
-	const updated = domain.deleteStory(map, storyId);
-	await repository.save(updated);
+	await mutate(repository, caller, mapId, expectedVersion, (map) => ({
+		map: domain.deleteStory(map, storyId),
+		result: undefined
+	}));
 }
 
 // ---------------------------------------------------------------------------
@@ -225,16 +362,19 @@ export async function deleteStory(
  */
 export async function moveStory(
 	repository: StoryMapRepository,
+	caller: Caller,
 	mapId: MapId,
+	expectedVersion: number,
 	storyId: StoryId,
 	toStepId: StepId,
 	toSliceId: SliceId | null,
 	beforeId: string | null,
 	afterId: string | null
 ): Promise<void> {
-	const map = await loadOrThrow(repository, mapId);
-	const updated = domain.moveStory(map, storyId, toStepId, toSliceId, beforeId, afterId);
-	await repository.save(updated);
+	await mutate(repository, caller, mapId, expectedVersion, (map) => ({
+		map: domain.moveStory(map, storyId, toStepId, toSliceId, beforeId, afterId),
+		result: undefined
+	}));
 }
 
 // ---------------------------------------------------------------------------
@@ -256,10 +396,11 @@ export async function moveStory(
 export async function suggestStoriesForStep(
 	repository: StoryMapRepository,
 	aiAssistant: AiAssistant,
+	caller: Caller,
 	mapId: MapId,
 	stepId: StepId
 ): Promise<StorySuggestion[]> {
-	const map = await loadOrThrow(repository, mapId);
+	const map = await loadOrThrow(repository, caller, mapId);
 	const step = domain.findStep(map, stepId);
 	const activity = domain.findActivity(map, step.activityId);
 

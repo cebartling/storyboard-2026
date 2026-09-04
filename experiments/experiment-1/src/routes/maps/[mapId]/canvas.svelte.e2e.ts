@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../../../e2e/auth-fixture';
 import { addActivity, addSlice, addStep, createMap } from './board-helpers';
 
 // E2e coverage for ADR 0010's camera persistence (commit 7 of the plan):

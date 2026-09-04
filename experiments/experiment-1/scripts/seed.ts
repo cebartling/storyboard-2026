@@ -10,11 +10,12 @@
 
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import Database from 'better-sqlite3';
 import { loadEnv } from 'vite';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as schema from '../src/lib/server/db/schema';
+import { openDatabase } from '../src/lib/server/db/open';
+import { Auth } from '../src/lib/server/auth/auth';
 import { DrizzleStoryMapRepository } from '../src/lib/server/repository/drizzle-story-map-repository';
 import { buildRetailCommerceMap } from '../src/lib/seed/retail-commerce';
 
@@ -41,8 +42,7 @@ function databaseUrl(): string {
 // DATABASE_URL is otherwise ambiguous in the output, and every message below
 // should name the file actually written rather than the value configured.
 const file = path.resolve(root, databaseUrl());
-const client = new Database(file);
-client.pragma('foreign_keys = ON');
+const client = openDatabase(file);
 const db = drizzle(client, { schema });
 
 try {
@@ -58,8 +58,27 @@ try {
 		});
 	}
 
+	// The seeded map needs an owner (ADR 0016), and the owner has to be a real
+	// account: `map_members` has a foreign key to `users`, and inventing a row
+	// here would create a login nobody knows the password to. So the script asks
+	// for the address of an account that already exists.
+	const ownerEmail = process.argv[2];
+	if (!ownerEmail) {
+		throw new Error(
+			'Usage: pnpm db:seed <owner-email>\n' +
+				'The seeded map is owned by an existing account — register one in the app first.'
+		);
+	}
+	const auth = new Auth(db);
+	const owner = auth.findUserByEmail(ownerEmail);
+	if (!owner) {
+		throw new Error(
+			`No account for ${ownerEmail} in ${file}. Register it in the app first, then re-run.`
+		);
+	}
+
 	const repository = new DrizzleStoryMapRepository(db);
-	const saved = await repository.save(buildRetailCommerceMap());
+	const saved = await repository.save({ userId: owner.id }, buildRetailCommerceMap());
 
 	const stepCount = saved.activities.reduce((n, a) => n + a.steps.length, 0);
 	console.log(
@@ -67,7 +86,7 @@ try {
 			`${saved.activities.length} activities, ${stepCount} steps, ` +
 			`${saved.slices.length} slices, ${saved.stories.length} stories.`
 	);
-	console.log(`Open it at /maps/${saved.id}`);
+	console.log(`Open it at /maps/${saved.id} (owned by ${owner.email})`);
 } finally {
 	client.close();
 }

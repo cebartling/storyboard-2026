@@ -16,10 +16,18 @@ import BoardDialogs, { type BoardDialog, actionError } from './board-dialogs.sve
 // user closed the dialog — is covered by "a failure arriving after the dialog
 // closed…", which holds the response open with `page.route` to keep the race
 // from depending on machine speed.
-async function open(dialog: BoardDialog) {
-	render(BoardDialogs, { dialog, onClose: () => {}, onLateFailure: () => {} });
+async function open(dialog: BoardDialog, boardVersion = 3) {
+	const result = render(BoardDialogs, {
+		dialog,
+		boardVersion,
+		clientId: 'test-tab',
+		onClose: () => {},
+		onLateFailure: () => {}
+	});
 	await tick();
-	return page.getByTestId('board-dialog').element() as HTMLDialogElement;
+	return Object.assign(page.getByTestId('board-dialog').element() as HTMLDialogElement, {
+		rerender: result.rerender
+	});
 }
 
 function form(dialogEl: HTMLDialogElement, action: string): HTMLFormElement {
@@ -154,5 +162,51 @@ describe('actionError', () => {
 		expect(actionError(null)).toBeNull();
 		expect(actionError({ other: 1 })).toBeNull();
 		expect(actionError({ error: 42 })).toBeNull();
+	});
+
+	// ADR 0015 §3. Every mutation carries the version its editor was opened at,
+	// so a stale editor is refused rather than silently overwriting whoever got
+	// there first.
+	describe('the version each form carries', () => {
+		const everyKind: BoardDialog[] = [
+			{ kind: 'addActivity' },
+			{ kind: 'editActivity', activityId: 'a-1', name: 'Browse' },
+			{ kind: 'addStep', activityId: 'a-1', activityName: 'Browse' },
+			{ kind: 'editStep', stepId: 's-1', name: 'Search' },
+			{ kind: 'addSlice' },
+			{ kind: 'editSlice', sliceId: 'sl-1', name: 'Release 1' },
+			{ kind: 'addStory', stepId: 's-1', sliceId: null, scopeLabel: 'Search' },
+			{ kind: 'editStory', storyId: 'st-1', title: 'Keyword search', description: null }
+		];
+
+		it.each(everyKind.map((dialog) => [dialog.kind, dialog] as const))(
+			'%s sends the board version with every form it renders',
+			async (_kind, dialog) => {
+				const dialogEl = await open(dialog, 3);
+
+				const forms = [...dialogEl.querySelectorAll('form')] as HTMLFormElement[];
+				expect(forms.length).toBeGreaterThan(0);
+				for (const formEl of forms) {
+					expect(hidden(formEl, 'version')).toBe('3');
+				}
+			}
+		);
+
+		it('keeps the version it was opened at when the board moves on underneath it', async () => {
+			// This is the whole point. Reading the live version at submit time
+			// would mean a dialog opened before someone else's edit quietly adopts
+			// their version and overwrites them — the exact bug the round-trip
+			// exists to close, made *more* likely by live refetching.
+			const subject: BoardDialog = { kind: 'editStep', stepId: 's-1', name: 'Search' };
+			const dialogEl = await open(subject, 3);
+			expect(hidden(form(dialogEl, '?/renameStep'), 'version')).toBe('3');
+
+			// The same dialog object, a newer board: what a remote change looks
+			// like to a dialog the user still has open.
+			await dialogEl.rerender({ dialog: subject, boardVersion: 4 });
+			await tick();
+
+			expect(hidden(form(dialogEl, '?/renameStep'), 'version')).toBe('3');
+		});
 	});
 });

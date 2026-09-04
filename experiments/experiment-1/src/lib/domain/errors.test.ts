@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ConflictError, InvariantError } from './errors';
+import { ConflictError, ForbiddenError, InvariantError } from './errors';
 import {
 	addActivity,
 	addSlice,
@@ -112,5 +112,28 @@ describe('editStory field handling', () => {
 		const edited = editStory(map, story.story.id, { description: null });
 
 		expect(edited.stories[0].description).toBeNull();
+	});
+});
+
+/**
+ * `ForbiddenError` is the third of the three (ADR 0016). It is not a variant of
+ * InvariantError: "you may not do this" and "this request does not make sense"
+ * map to different statuses and different remedies, and the route layer
+ * dispatches on type rather than message text.
+ */
+describe('ForbiddenError', () => {
+	it('is distinguishable from the other domain errors', () => {
+		const forbidden = new ForbiddenError('Only the owner can delete this map.');
+
+		expect(forbidden).toBeInstanceOf(ForbiddenError);
+		expect(forbidden).not.toBeInstanceOf(InvariantError);
+		expect(forbidden).not.toBeInstanceOf(ConflictError);
+		expect(forbidden.name).toBe('ForbiddenError');
+	});
+
+	it('keeps a message written for the person who made the request', () => {
+		expect(new ForbiddenError('Only the owner can delete this map.').message).toBe(
+			'Only the owner can delete this map.'
+		);
 	});
 });

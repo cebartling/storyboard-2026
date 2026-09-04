@@ -33,7 +33,8 @@
 		zoneLabel,
 		flipDurationMs = 150,
 		onMove,
-		onEditStory
+		onEditStory,
+		onDragStateChange
 	}: {
 		items: DndStoryItem[];
 		stepId: string;
@@ -45,7 +46,24 @@
 		onMove: (detail: MoveDetail) => void;
 		/** Passes the whole item up, so the page need not look it back up. */
 		onEditStory: (item: DndStoryItem) => void;
+		/**
+		 * Called with `true` when a drag begins over this zone and `false` when it
+		 * ends. The page uses it to suspend live refetching: a refetch mid-drag
+		 * replaces the array `svelte-dnd-action` is animating and the card jumps
+		 * out from under the pointer (ADR 0015 Stage 1).
+		 */
+		onDragStateChange?: (dragging: boolean) => void;
 	} = $props();
+
+	// Only the transitions are reported. `consider` fires continuously while a
+	// card is over the zone, and the page does not need to hear about each one.
+	let dragging = false;
+
+	function reportDragging(next: boolean) {
+		if (dragging === next) return;
+		dragging = next;
+		onDragStateChange?.(next);
+	}
 
 	// A writable derived: `svelte-dnd-action` needs to own the array during
 	// consider/finalize, and the
@@ -55,10 +73,16 @@
 	let localItems = $derived(items);
 
 	function handleConsider(e: CustomEvent<DndEvent<DndStoryItem>>) {
+		reportDragging(true);
 		localItems = e.detail.items;
 	}
 
 	function handleFinalize(e: CustomEvent<DndEvent<DndStoryItem>>) {
+		// Before the trigger check below: every zone the drag touched gets a
+		// finalize, and each has to say it is done. Reporting only on
+		// DROPPED_INTO_ZONE would leave the origin zone of a cross-zone drag
+		// believing a drag was still in progress forever.
+		reportDragging(false);
 		localItems = e.detail.items;
 
 		// Only the zone the card actually landed in should persist the move —

@@ -6,6 +6,12 @@ Accepted, 2026-09-03. **Supersedes [ADR 0014](./0014-collaboration-is-in-scope.m
 recorded that collaboration is in scope, named the migration surface, and declined to
 design anything until a real design existed. This is that design.
 
+**Extended by [ADR 0016](./0016-accounts-sessions-and-map-membership.md), 2026-09-03**,
+which supplies the identity §6 said did not exist and withdraws the anonymous cookie §6
+proposed: a signed-in account makes it redundant, and §6's insistence that it must not
+become the authentication identity is honoured by never creating it. Presence identity is
+now `{ userId, displayName, clientId }`.
+
 ## Context
 
 ADR 0014 established the decision (collaboration is in scope, not yet built) and the
@@ -136,6 +142,11 @@ user-settable display name. **This is explicitly not authentication** — it att
 cursor to a browser session, nothing more, and it must not become the thing auth is later
 grafted onto (ADR 0006 records that auth changes the repository port's signature).
 
+> **Superseded by ADR 0016.** The anonymous cookie is not built. Real accounts landed
+> instead, so presence rides on `locals.user` plus a per-connection `clientId` the client
+> mints. The paragraph's _requirement_ is unchanged and now enforced by types rather than
+> discipline — see ADR 0016 §6.
+
 ### 7. Reconnection replays from a bounded buffer
 
 Clients hold `lastSeq`. On reconnect they send it; the hub replays notifications from a
@@ -187,3 +198,50 @@ remote change, which is cheap at this board size and will not be at every board 
 needs multiple server instances, this ADR should be superseded rather than amended — the
 first invalidates §5, the second invalidates §2, and §2 is the one holding the rank scheme
 together.
+
+## Amendments, 2026-09-03
+
+Found while implementing Stage 0, and recorded here rather than silently diverging.
+
+**§4's "streams close on `sveltekit:shutdown`" cannot work as written.**
+`@sveltejs/adapter-node@5.5.7` emits that event _inside_ the callback of
+`httpServer.close()`, which Node runs only once every connection has ended. An open SSE
+stream is a live connection, so the callback cannot fire until `closeAllConnections()` at
+the 30-second `SHUTDOWN_TIMEOUT` — the event arrives after the very deadline it was meant to
+avoid. Streams must be closed from a `SIGTERM`/`SIGINT` listener registered beside the
+adapter's own, which lets `close()` complete; the `sveltekit:shutdown` listener stays as
+belt-and-braces.
+
+**§7's sequence number should be the persisted map version, not a hub-local counter.** A
+counter resets when the process restarts and cannot be compared against anything `load()`
+returned, which leaves a gap between a client's load and its subscription. With
+`seq = version`, the client sends the version it already has and the gap closes
+deterministically. The ring buffer stays, but is nearly vestigial.
+
+**§5 does not say where the broadcast is published.** It is the route, after the action
+succeeds, with `seq = expectedVersion + 1` — exact, under the write lock and the
+compare-and-set. Publishing from the use case would need a third outbound port, which
+ADR 0006 forbids.
+
+**A mutation is broadcast to the client that caused it, and must not be.** Not addressed at
+all in §5, and it is not cosmetic: the submitting client has already refetched as part of
+its own submission, so the echo re-renders the board a second time for every local edit —
+and mid-drag that second render detaches the card from under the pointer. Mutations
+therefore carry the tab's `clientId`, and the hub skips that subscriber while still
+buffering the change for replay. Suppressing by sequence number alone does not work: the
+echo arrives before the submission's own refetch has finished.
+
+**§7's reconnection cannot be left to the browser.** An `EventSource` that loses its network
+can sit in `CONNECTING` indefinitely after connectivity returns. The client reconnects
+itself on any error, carrying its position in the URL as well as in `Last-Event-ID`.
+
+**§2 slightly overstates what the write lock buys.** It says the second of two concurrent
+inserts "sees the first's rank". Once §3's version round-trip is in place that cannot
+happen: the second writer holds the version its editor was opened at and is refused before
+it reaches the domain. What the lock actually guarantees — and this is still load-bearing —
+is that no two writers ever compute ranks against the same state, and that a retry runs
+against committed state rather than contending at the SQLite level. There is a test named
+for each of the two properties.
+
+Also noted, not fixed: **`deleteMap` has no broadcast story.** Subscribers of a deleted map
+will refetch into a 404. Acceptable for Stage 1.

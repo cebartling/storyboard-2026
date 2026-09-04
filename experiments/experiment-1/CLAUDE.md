@@ -35,11 +35,12 @@ versions before 10 reject this directory's `pnpm-workspace.yaml` with
 | **Single canvas component test** | `corepack pnpm vitest run src/lib/components/board-viewport.svelte.spec.ts`                |
 | **Single e2e test**              | `corepack pnpm playwright test -g "drag story to slice"`                                   |
 | **Single canvas e2e test**       | `corepack pnpm playwright test -g "pan and zoom persist"`                                  |
+| Collaboration demo (headed)      | `corepack pnpm exec playwright test --config=playwright.demo.config.ts`                    |
 | Types                            | `corepack pnpm check`                                                                      |
 | Lint / format                    | `corepack pnpm lint` / `corepack pnpm format`                                              |
 | New migration                    | `corepack pnpm db:generate` (commit `drizzle/`)                                            |
 | Inspect DB                       | `corepack pnpm db:studio`                                                                  |
-| Seed sample data                 | `corepack pnpm db:seed`                                                                    |
+| Seed sample data                 | `corepack pnpm db:seed <owner-email>` (account must exist)                                 |
 
 Migrations apply automatically at db-module load, so `corepack pnpm dev` and the e2e server
 self-migrate. E2e runs against a throwaway `e2e.db` and never touch `local.db`.
@@ -108,13 +109,66 @@ Drags need `mouse.down()` → several `mouse.move(x, y, { steps: 5 })` waypoints
 waits → `mouse.up()`, then a settle before asserting. See the e2e spec beside
 `src/routes/maps/[mapId]/`.
 
+## Authentication and access (ADR 0016)
+
+Every page except `/login` and `/register` requires an account; `src/hooks.server.ts`
+redirects anonymous requests and populates `locals.user`. Maps have members
+(`map_members`): the creator is the `owner`, who may delete and share; anyone they share
+with is an `editor`, who may change the board but not delete or share it. A non-member gets
+`null` from `load()` and a 404 from the route — the same answer as for a map that does not
+exist, so ids cannot be probed for.
+
+**Every `StoryMapRepository` method takes a `Caller` first**, and the adapters enforce
+access, not the app layer. Both adapters are held to
+`src/lib/app/story-map-repository-contract.ts`: put a new access rule there, or it is
+enforced nowhere. `requireCaller(locals)` is the only place a `Caller` is constructed —
+keep it that way, because it is what stops ADR 0015's presence identity from becoming the
+auth identity.
+
+`corepack pnpm db:seed <owner-email>` needs an account that already exists. Maps in an old
+`local.db` have no members and are invisible until adopted; the SQL is in
+`documentation/architecture.md`.
+
+## Real-time collaboration (ADR 0015)
+
+Stages 0 and 1 are both built. Read the ADR **and its amendments block** before touching the
+write path or the stream — the amendments correct four things the code contradicted.
+
+- Writes are serialised per map by `src/lib/app/keyed-lock.ts`, and every mutation carries
+  the version its editor was _opened_ at. A stale editor gets a 409 that keeps what they
+  typed and refreshes the board beneath them.
+- `src/lib/server/collab/` is the fan-out: a per-map hub, and an SSE stream authorised
+  through the same use case the page load uses. The notification is a sequence number, never
+  a payload — clients react by calling `invalidateAll()`.
+- **Every mutation must carry `clientId`.** The hub skips the tab that caused a change,
+  because it has already refetched; without it the board re-renders twice per local edit and
+  a drag loses its card mid-flight. `board-dialogs.svelte` sets it from the submit function,
+  and the drag path sets it on the POST.
+- `src/lib/collab/map-sync.svelte.ts` is the client. It suspends refetching while any drag
+  is in progress (queued, not dropped), and reconnects itself rather than trusting the
+  browser's own retry.
+- An open dialog is told when its subject changes or is deleted underneath it
+  (`src/lib/board/dialog-subject.ts`).
+
+**Single process is a correctness requirement, not an incidental fact** — two instances
+would each hold their own lock and their own hubs. Both `KeyedLock` and `MapHub` say so.
+
+`src/demo/collab-demo.ts` is a headed walkthrough of all of this — two windows side by side,
+each captioning what it is doing — for showing someone the feature rather than testing it. It
+runs under `playwright.demo.config.ts` against its own `demo.db`, and is deliberately outside
+both suites: `testMatch` does not overlap, and it asserts too loosely to be a regression test.
+If you change a selector the e2e suite uses, check the demo still runs.
+
+Testing collaboration: `collab.svelte.e2e.ts` drives two browser contexts through the auth
+fixture's `newUser`. The one rule that keeps it from flaking is to wait for both boards to
+report `data-collab-state="connected"` before mutating anything. Do not use
+`context.setOffline` to simulate a drop — it leaves an open stream connected but blocks the
+refetch, and SvelteKit answers a failed load with a full-page navigation; route-abort the
+`**/events*` requests instead.
+
 ## Not built (deliberately)
 
-Real-time collaboration, authentication, and AI calls. Collaboration is **in scope for the
-product** and simply not built yet (ADR 0014) — which matters, because the single-aggregate
-shape means two editors on different cards already conflict. ADR 0015 is the design; read it
-before adding a domain mutation or touching the write path. Note it also records a live bug
-it fixes: today the client holds no version, so two people editing one board overwrite each
-other silently. The `AiAssistant` port exists with a
-null implementation so AI plugs in without rework — its contract style (domain snapshots
-in, structured suggestions out) is the commitment; its method list is provisional.
+AI calls, and ADR 0015's Stage 2 (fine-grained effects), which stays deferred. The
+`AiAssistant` port exists with a null implementation so AI plugs in without rework — its
+contract style (domain snapshots in, structured suggestions out) is the commitment; its
+method list is provisional.

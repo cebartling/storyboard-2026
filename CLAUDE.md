@@ -23,7 +23,7 @@ from the repo root.
 
 | Experiment | Stack | Subject |
 | --- | --- | --- |
-| `experiments/experiment-1/` | SvelteKit 2 + Svelte 5 (runes), Tailwind CSS 4, Drizzle + SQLite, Vitest, Playwright | Jeff Patton's user story mapping technique as a vertical slice |
+| `experiments/experiment-1/` | SvelteKit 2 + Svelte 5 (runes), Tailwind CSS 4, Drizzle + SQLite, Vitest, Playwright | Jeff Patton's user story mapping technique as a vertical slice, with accounts and shared maps |
 
 ## experiment-1 quick reference
 
@@ -50,6 +50,13 @@ domain imports nothing from Svelte, SvelteKit, or Drizzle, and that is the const
 worth preserving — it is why the domain is testable without a database. See that
 experiment's `documentation/architecture.md`, and ADR 0006 for why the hexagonal layering
 stops where it does.
+
+The app requires an account (ADR 0016): every repository method takes a `Caller`, maps have
+owners and editors, and both repository implementations are held to one shared contract
+test. ADR 0015 is the collaboration design, and both its stages are built — versions
+round-trip, writes are serialised per map, and boards stay in sync over SSE with presence
+and live cursors. Both rest on a single-process deployment, which is a correctness
+requirement rather than a convenience.
 
 ## Working agreements
 

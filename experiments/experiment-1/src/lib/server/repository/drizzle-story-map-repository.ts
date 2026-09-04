@@ -11,18 +11,45 @@
  * `StoryMap`, `save()` takes one.
  */
 
-import { ConflictError } from '$lib/domain/errors';
+import { ConflictError, ForbiddenError } from '$lib/domain/errors';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import type { ActivityId, MapId, SliceId, StepId, StoryId } from '$lib/domain/ids';
-import type { StoryMapRepository } from '$lib/domain/ports';
+import type { ActivityId, MapId, SliceId, StepId, StoryId, UserId } from '$lib/domain/ids';
+import type { Caller, MapAccess, MapSummary, Role, StoryMapRepository } from '$lib/domain/ports';
 import type { Activity, Slice, Step, Story, StoryMap } from '$lib/domain/story-map';
 import * as schema from '../db/schema';
 
 export class DrizzleStoryMapRepository implements StoryMapRepository {
 	constructor(private readonly db: BetterSQLite3Database<typeof schema>) {}
 
-	async load(id: MapId): Promise<StoryMap | null> {
+	/**
+	 * The caller's role on a map, or null if they are not a member. One row, and
+	 * it answers both "does this exist" and "may they" — which is the reason
+	 * ADR 0016 puts authorisation here rather than in the app layer.
+	 */
+	private roleWithin(
+		tx: BetterSQLite3Database<typeof schema>,
+		mapId: MapId,
+		userId: UserId
+	): Role | null {
+		const row = tx
+			.select({ role: schema.mapMembers.role })
+			.from(schema.mapMembers)
+			.where(and(eq(schema.mapMembers.mapId, mapId), eq(schema.mapMembers.userId, userId)))
+			.get();
+		return row?.role ?? null;
+	}
+
+	/**
+	 * Authorisation without the aggregate. One indexed row, where `load` would
+	 * run five queries and rebuild the whole board to answer the same question —
+	 * which matters on the cursor path, the busiest endpoint in the app.
+	 */
+	async roleOf(caller: Caller, id: MapId): Promise<Role | null> {
+		return this.db.transaction((tx) => this.roleWithin(tx, id, caller.userId));
+	}
+
+	async load(caller: Caller, id: MapId): Promise<MapAccess | null> {
 		// One transaction for five reads. In-process this is already safe —
 		// better-sqlite3 is synchronous, so nothing interleaves — but the seed
 		// script and the e2e server are documented concurrent writers on the same
@@ -30,7 +57,14 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 		// otherwise hand back a torn aggregate: stories referencing steps that
 		// are not in `activities`. Cheap here, and it makes the guarantee the
 		// caller already assumes actually true.
-		return this.db.transaction((tx) => this.loadWithin(tx, id));
+		return this.db.transaction((tx) => {
+			const role = this.roleWithin(tx, id, caller.userId);
+			// A non-member is told exactly what someone asking for a nonexistent
+			// map is told, so ids cannot be probed for.
+			if (!role) return null;
+			const map = this.loadWithin(tx, id);
+			return map ? { map, role } : null;
+		});
 	}
 
 	private loadWithin(db: BetterSQLite3Database<typeof schema>, id: MapId): StoryMap | null {
@@ -114,160 +148,232 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 		};
 	}
 
-	async save(map: StoryMap): Promise<StoryMap> {
+	async save(caller: Caller, map: StoryMap): Promise<StoryMap> {
 		const nextVersion = map.version + 1;
-		this.db.transaction((tx) => {
-			const update = tx
-				.update(schema.maps)
-				.set({ name: map.name, createdAt: map.createdAt, version: nextVersion })
-				.where(and(eq(schema.maps.id, map.id), eq(schema.maps.version, map.version)))
-				.run();
-
-			if (update.changes === 0) {
-				const existing = tx
-					.select({ version: schema.maps.version })
+		// `immediate` takes the write lock at BEGIN rather than on the first
+		// write. Without it, a transaction that reads before it writes holds a
+		// read snapshot that goes stale the moment another connection commits,
+		// and SQLite reports SQLITE_BUSY_SNAPSHOT — which the busy handler never
+		// retries, so `busy_timeout` cannot save it (ADR 0015 Stage 0).
+		//
+		// This one happens to write first today, so it is safe either way; it is
+		// marked anyway so that adding a read at the top (an ownership check, say)
+		// cannot silently reintroduce the hazard. `delete()` below really does
+		// read first, and really does fail without this.
+		this.db.transaction(
+			(tx) => {
+				// Membership is checked inside the same transaction as the write, so
+				// access revoked concurrently cannot be raced. This is the "read at
+				// the top" the comment above anticipated — the immediate BEGIN is
+				// what keeps it safe.
+				const existingRow = tx
+					.select({ id: schema.maps.id })
 					.from(schema.maps)
 					.where(eq(schema.maps.id, map.id))
 					.get();
-
-				if (existing) {
-					throw new ConflictError(
-						`Story map ${map.id} changed since it was loaded (expected version ${map.version}, current version ${existing.version})`
-					);
-				}
-				if (map.version !== 0) {
-					throw new ConflictError(`Story map ${map.id} no longer exists`);
+				if (existingRow && !this.roleWithin(tx, map.id, caller.userId)) {
+					throw new ForbiddenError('You do not have access to this story map.');
 				}
 
-				tx.insert(schema.maps)
-					.values({
-						id: map.id,
-						name: map.name,
-						createdAt: map.createdAt,
-						version: nextVersion
-					})
+				const update = tx
+					.update(schema.maps)
+					.set({ name: map.name, createdAt: map.createdAt, version: nextVersion })
+					.where(and(eq(schema.maps.id, map.id), eq(schema.maps.version, map.version)))
 					.run();
-			}
 
-			// Delete every existing row for this map, leaf tables first (FK-safe),
-			// then reinsert everything from the in-memory aggregate.
-			const existingActivityIds = tx
-				.select({ id: schema.activities.id })
-				.from(schema.activities)
-				.where(eq(schema.activities.mapId, map.id))
-				.all()
-				.map((r) => r.id);
+				if (update.changes === 0) {
+					const existing = tx
+						.select({ version: schema.maps.version })
+						.from(schema.maps)
+						.where(eq(schema.maps.id, map.id))
+						.get();
 
-			const existingStepIds = existingActivityIds.length
-				? tx
-						.select({ id: schema.steps.id })
-						.from(schema.steps)
-						.where(inArray(schema.steps.activityId, existingActivityIds))
-						.all()
-						.map((r) => r.id)
-				: [];
+					if (existing) {
+						throw new ConflictError(
+							`Story map ${map.id} changed since it was loaded (expected version ${map.version}, current version ${existing.version})`
+						);
+					}
+					if (map.version !== 0) {
+						throw new ConflictError(`Story map ${map.id} no longer exists`);
+					}
 
-			for (const stepId of existingStepIds) {
-				tx.delete(schema.stories).where(eq(schema.stories.stepId, stepId)).run();
-			}
-			for (const stepId of existingStepIds) {
-				tx.delete(schema.steps).where(eq(schema.steps.id, stepId)).run();
-			}
-			for (const activityId of existingActivityIds) {
-				tx.delete(schema.activities).where(eq(schema.activities.id, activityId)).run();
-			}
-			tx.delete(schema.slices).where(eq(schema.slices.mapId, map.id)).run();
-
-			for (const activity of map.activities) {
-				tx.insert(schema.activities)
-					.values({
-						id: activity.id,
-						mapId: activity.mapId,
-						name: activity.name,
-						rank: activity.rank
-					})
-					.run();
-				for (const step of activity.steps) {
-					tx.insert(schema.steps)
+					tx.insert(schema.maps)
 						.values({
-							id: step.id,
-							activityId: step.activityId,
-							name: step.name,
-							rank: step.rank
+							id: map.id,
+							name: map.name,
+							createdAt: map.createdAt,
+							version: nextVersion
+						})
+						.run();
+					// The owner row goes in with the map, in the same transaction, so
+					// there is never an instant at which a map exists that nobody can
+					// reach.
+					tx.insert(schema.mapMembers)
+						.values({ mapId: map.id, userId: caller.userId, role: 'owner' })
+						.run();
+				}
+
+				// Delete every existing row for this map, leaf tables first (FK-safe),
+				// then reinsert everything from the in-memory aggregate.
+				const existingActivityIds = tx
+					.select({ id: schema.activities.id })
+					.from(schema.activities)
+					.where(eq(schema.activities.mapId, map.id))
+					.all()
+					.map((r) => r.id);
+
+				const existingStepIds = existingActivityIds.length
+					? tx
+							.select({ id: schema.steps.id })
+							.from(schema.steps)
+							.where(inArray(schema.steps.activityId, existingActivityIds))
+							.all()
+							.map((r) => r.id)
+					: [];
+
+				for (const stepId of existingStepIds) {
+					tx.delete(schema.stories).where(eq(schema.stories.stepId, stepId)).run();
+				}
+				for (const stepId of existingStepIds) {
+					tx.delete(schema.steps).where(eq(schema.steps.id, stepId)).run();
+				}
+				for (const activityId of existingActivityIds) {
+					tx.delete(schema.activities).where(eq(schema.activities.id, activityId)).run();
+				}
+				tx.delete(schema.slices).where(eq(schema.slices.mapId, map.id)).run();
+
+				for (const activity of map.activities) {
+					tx.insert(schema.activities)
+						.values({
+							id: activity.id,
+							mapId: activity.mapId,
+							name: activity.name,
+							rank: activity.rank
+						})
+						.run();
+					for (const step of activity.steps) {
+						tx.insert(schema.steps)
+							.values({
+								id: step.id,
+								activityId: step.activityId,
+								name: step.name,
+								rank: step.rank
+							})
+							.run();
+					}
+				}
+
+				for (const slice of map.slices) {
+					tx.insert(schema.slices)
+						.values({ id: slice.id, mapId: slice.mapId, name: slice.name, rank: slice.rank })
+						.run();
+				}
+
+				for (const story of map.stories) {
+					tx.insert(schema.stories)
+						.values({
+							id: story.id,
+							stepId: story.stepId,
+							title: story.title,
+							description: story.description,
+							sliceId: story.sliceId,
+							rank: story.rank
 						})
 						.run();
 				}
-			}
-
-			for (const slice of map.slices) {
-				tx.insert(schema.slices)
-					.values({ id: slice.id, mapId: slice.mapId, name: slice.name, rank: slice.rank })
-					.run();
-			}
-
-			for (const story of map.stories) {
-				tx.insert(schema.stories)
-					.values({
-						id: story.id,
-						stepId: story.stepId,
-						title: story.title,
-						description: story.description,
-						sliceId: story.sliceId,
-						rank: story.rank
-					})
-					.run();
-			}
-		});
+			},
+			{ behavior: 'immediate' }
+		);
 
 		return { ...map, version: nextVersion };
 	}
 
-	async listSummaries(): Promise<{ id: MapId; name: string; createdAt: Date }[]> {
+	async listSummaries(caller: Caller): Promise<MapSummary[]> {
 		const rows = this.db
-			.select({ id: schema.maps.id, name: schema.maps.name, createdAt: schema.maps.createdAt })
+			.select({
+				id: schema.maps.id,
+				name: schema.maps.name,
+				createdAt: schema.maps.createdAt,
+				role: schema.mapMembers.role
+			})
 			.from(schema.maps)
+			.innerJoin(schema.mapMembers, eq(schema.mapMembers.mapId, schema.maps.id))
+			.where(eq(schema.mapMembers.userId, caller.userId))
 			.all();
 		return rows
-			.map((r) => ({ id: r.id as MapId, name: r.name, createdAt: r.createdAt }))
+			.map((r) => ({ id: r.id as MapId, name: r.name, createdAt: r.createdAt, role: r.role }))
 			.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 	}
 
-	async delete(id: MapId): Promise<void> {
+	async delete(caller: Caller, id: MapId): Promise<void> {
 		// Delete leaf-first rather than leaning on the FK cascades. `stories`
 		// references `slices` with ON DELETE SET NULL, so cascading from the map
 		// would un-slice every story on the way out — and un-slicing en masse
 		// collides in the unsliced scope, whose ranks are only unique within
 		// that scope. Deleting a map means the stories go too, not that they
 		// move to the unsliced band.
-		this.db.transaction((tx) => {
-			const activityIds = tx
-				.select({ id: schema.activities.id })
-				.from(schema.activities)
-				.where(eq(schema.activities.mapId, id))
-				.all()
-				.map((r) => r.id);
+		this.db.transaction(
+			(tx) => {
+				const role = this.roleWithin(tx, id, caller.userId);
+				// Silent for a non-member: they must not be able to tell a map they
+				// cannot see from one that was never there.
+				if (!role) return;
+				if (role !== 'owner') {
+					throw new ForbiddenError('Only the owner can delete this story map.');
+				}
 
-			const stepIds = activityIds.length
-				? tx
-						.select({ id: schema.steps.id })
-						.from(schema.steps)
-						.where(inArray(schema.steps.activityId, activityIds))
-						.all()
-						.map((r) => r.id)
-				: [];
+				const activityIds = tx
+					.select({ id: schema.activities.id })
+					.from(schema.activities)
+					.where(eq(schema.activities.mapId, id))
+					.all()
+					.map((r) => r.id);
 
-			for (const stepId of stepIds) {
-				tx.delete(schema.stories).where(eq(schema.stories.stepId, stepId)).run();
-			}
-			for (const stepId of stepIds) {
-				tx.delete(schema.steps).where(eq(schema.steps.id, stepId)).run();
-			}
-			for (const activityId of activityIds) {
-				tx.delete(schema.activities).where(eq(schema.activities.id, activityId)).run();
-			}
-			tx.delete(schema.slices).where(eq(schema.slices.mapId, id)).run();
-			tx.delete(schema.maps).where(eq(schema.maps.id, id)).run();
-		});
+				const stepIds = activityIds.length
+					? tx
+							.select({ id: schema.steps.id })
+							.from(schema.steps)
+							.where(inArray(schema.steps.activityId, activityIds))
+							.all()
+							.map((r) => r.id)
+					: [];
+
+				for (const stepId of stepIds) {
+					tx.delete(schema.stories).where(eq(schema.stories.stepId, stepId)).run();
+				}
+				for (const stepId of stepIds) {
+					tx.delete(schema.steps).where(eq(schema.steps.id, stepId)).run();
+				}
+				for (const activityId of activityIds) {
+					tx.delete(schema.activities).where(eq(schema.activities.id, activityId)).run();
+				}
+				tx.delete(schema.slices).where(eq(schema.slices.mapId, id)).run();
+				tx.delete(schema.maps).where(eq(schema.maps.id, id)).run();
+			},
+			// See save(): this transaction reads the child ids before deleting
+			// them, which is exactly the read-then-write shape that fails under
+			// contention without an immediate BEGIN.
+			{ behavior: 'immediate' }
+		);
+	}
+	async addMember(caller: Caller, id: MapId, userId: UserId, role: 'editor'): Promise<void> {
+		this.db.transaction(
+			(tx) => {
+				if (this.roleWithin(tx, id, caller.userId) !== 'owner') {
+					// Deliberately the same answer for an editor and for a stranger:
+					// neither may share the map on, and distinguishing them would tell
+					// a stranger the map exists.
+					throw new ForbiddenError('Only the owner can share this story map.');
+				}
+				// Idempotent: re-sharing with someone who is already on the map is a
+				// thing people do, and it is not an error.
+				tx.insert(schema.mapMembers)
+					.values({ mapId: id, userId, role })
+					.onConflictDoNothing()
+					.run();
+			},
+			{ behavior: 'immediate' }
+		);
 	}
 }
 

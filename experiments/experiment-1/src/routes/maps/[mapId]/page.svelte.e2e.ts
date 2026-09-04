@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test } from '../../../e2e/auth-fixture';
 import {
 	addActivity,
 	addSlice,
@@ -129,19 +130,32 @@ test('drag story to slice', async ({ page }) => {
 	// removes the overflow, so both endpoints stay put.
 	await page.getByTestId('zoom-fit').click();
 
-	// A failed direct drag action must explain the failure instead of silently
-	// snapping back. Delete Story A behind the rendered page so its next move
-	// exercises the server's stale-client validation path.
+	// A change made behind the rendered page now reaches it on its own: the
+	// board is subscribed to the map's event stream (ADR 0015 Stage 1). This
+	// used to be a stale-client setup — the card stayed on screen and the next
+	// drag failed against a story the server had already deleted. Now the card
+	// simply goes, which is both the better outcome and a stronger assertion:
+	// nothing in this test reloads the page.
 	const storyAId = (await sliceCell
 		.locator('[data-testid^="story-"]')
 		.getAttribute('data-testid'))!.replace('story-', '');
 	await page.evaluate(async (storyId) => {
 		const body = new FormData();
+		// No `clientId`: this stands in for another person's browser, so the
+		// notification must come back to this one.
+		body.set(
+			'version',
+			document.querySelector('[data-testid="board"]')!.getAttribute('data-board-version')!
+		);
 		body.set('storyId', storyId);
 		await fetch('?/deleteStory', { method: 'POST', body });
 	}, storyAId);
-	await dragTo(page, sliceCell.locator('[data-testid^="story-"]'), unslicedCell);
-	await expect(page.locator('p.error[role="alert"]')).toContainText(`Story not found: ${storyAId}`);
+
+	// Scoped to the cells rather than the page: the minimap renders the board's
+	// geometry too, so a page-wide text query would match twice over.
+	await expect(sliceCell.locator('[data-testid^="story-"]')).toHaveCount(0);
+	// And the rest of the board is untouched by the remote change.
+	await expect(unslicedCell.locator('[data-testid^="story-"]')).toHaveText([/Story B/]);
 });
 
 // The two things the dialogs made possible that the inline forms could not do
@@ -258,24 +272,20 @@ test('a failed dialog submission keeps the dialog open and owns the error', asyn
 	const sliceId = await firstSliceId(page);
 	await addStory(page, stepId, sliceId, 'Doomed story');
 
-	// Open the editor, then delete the story behind the rendered page — the
-	// same stale-client setup the drag failure test uses — so Save posts
-	// against a story the server no longer has.
+	// A title of only spaces: `required` lets it through the browser, and the
+	// server trims and rejects it. This used to delete the story behind the page
+	// instead, which no longer reaches the save at all — live sync now tells the
+	// open dialog its subject is gone and disables Save (ADR 0015 Stage 1). A
+	// failure that leaves the subject intact is what this test needs.
 	await page.getByRole('button', { name: 'Edit story Doomed story' }).click();
 	const editor = page.getByRole('dialog');
-	const storyId = await editor.locator('input[name="storyId"]').first().inputValue();
-	await page.evaluate(async (id) => {
-		const body = new FormData();
-		body.set('storyId', id);
-		await fetch('?/deleteStory', { method: 'POST', body });
-	}, storyId);
 
-	await editor.getByLabel('Story title').fill('Renamed after deletion');
+	await editor.getByLabel('Story title').fill('   ');
 	await editor.getByRole('button', { name: 'Save' }).click();
 
 	// Still open, carrying the domain's own message.
 	await expect(editor).toBeVisible();
-	await expect(editor.locator('p.error')).toContainText(`Story not found: ${storyId}`);
+	await expect(editor.locator('p.error')).toContainText('required');
 
 	// And not echoed into the board's banner: suppressing applyAction is what
 	// keeps the message in one place, so a duplicate here means that broke.
@@ -283,7 +293,7 @@ test('a failed dialog submission keeps the dialog open and owns the error', asyn
 
 	// The typed value survives, so the user can retry or copy it out rather
 	// than losing the edit to a failed save.
-	await expect(editor.getByLabel('Story title')).toHaveValue('Renamed after deletion');
+	await expect(editor.getByLabel('Story title')).toHaveValue('   ');
 
 	// Opening a different editor must not inherit the dead story's message.
 	await page.getByRole('button', { name: 'Close' }).click();
@@ -320,15 +330,9 @@ test('a failure arriving after the dialog closed lands on the board', async ({ p
 
 	await page.getByRole('button', { name: 'Edit story Doomed story' }).click();
 	const editor = page.getByRole('dialog');
-	const storyId = await editor.locator('input[name="storyId"]').first().inputValue();
 
-	// Same stale-client setup as the test above: delete behind the rendered
-	// page so the save is guaranteed to fail.
-	await page.evaluate(async (id) => {
-		const body = new FormData();
-		body.set('storyId', id);
-		await fetch('?/deleteStory', { method: 'POST', body });
-	}, storyId);
+	// Same guaranteed failure as the test above — a title of only spaces, which
+	// the browser lets through and the server rejects.
 
 	// Comfortably longer than the close below takes, so the ordering does not
 	// depend on how fast this machine is.
@@ -341,7 +345,7 @@ test('a failure arriving after the dialog closed lands on the board', async ({ p
 		}
 	);
 
-	await editor.getByLabel('Story title').fill('Renamed after deletion');
+	await editor.getByLabel('Story title').fill('   ');
 	await editor.getByRole('button', { name: 'Save' }).click();
 
 	// Escape while the request is still in flight. `submitting` disables the
@@ -353,9 +357,7 @@ test('a failure arriving after the dialog closed lands on the board', async ({ p
 
 	// When the response finally lands, the message has to surface on the board
 	// rather than into the closed dialog, where nobody would read it.
-	await expect(page.locator('main > div > p.error[role="alert"]')).toContainText(
-		`Story not found: ${storyId}`
-	);
+	await expect(page.locator('main > div > p.error[role="alert"]')).toContainText('required');
 
 	// The banner has had its moment by the time the user reaches for the next
 	// editor. Left up, it would sit there contradicting a board that has since
@@ -578,4 +580,56 @@ test('deleting a slice keeps its stories, and deleting a story removes it', asyn
 		page.getByTestId(`cell-${stepId}-unsliced`).locator('[data-testid^="story-"]')
 	).toHaveCount(0);
 	expect(pageErrors.map((e) => e.message)).toEqual([]);
+});
+
+// The bug ADR 0015 §3 exists to close, driven end to end: two editors on one
+// board, one of them holding an editor open across the other's change.
+//
+// Before the version round-trip this test could not fail — the client held no
+// version, so every request loaded and saved within itself and the second save
+// simply won. The lost edit was invisible to both people.
+test("an editor open across someone else's change is refused instead of overwriting it", async ({
+	page
+}) => {
+	await createMap(page, `Concurrent ${Date.now()}`);
+	await addActivity(page, 'Browse');
+	await addStep(page, 'Search products');
+	const stepId = await firstStepId(page);
+	await addStory(page, stepId, 'unsliced', 'Keyword search');
+
+	// Alice opens the editor. Her dialog now holds the version as it is today.
+	const card = page.locator('[data-testid^="story-"]').first();
+	await card.getByRole('button', { name: /edit story/i }).click();
+	const editor = dialog(page);
+	await expect(editor).toBeVisible();
+
+	// Bob renames the same story from another connection, moving the board on.
+	const storyId = await editor.locator('input[name="storyId"]').first().inputValue();
+	await page.evaluate(async (id) => {
+		const body = new FormData();
+		body.set(
+			'version',
+			document.querySelector('[data-testid="board"]')!.getAttribute('data-board-version')!
+		);
+		body.set('storyId', id);
+		body.set('title', "Bob's title");
+		await fetch('?/editStory', { method: 'POST', body });
+	}, storyId);
+
+	// Alice saves. Her version is stale, so she is told rather than obeyed.
+	await editor.getByLabel('Story title').fill("Alice's title");
+	await editor.getByRole('button', { name: 'Save' }).click();
+	await expect(editor.locator('p.error')).toContainText('changed this map while you were editing');
+
+	// Her work is still in the field. Telling her to reload would have been
+	// telling her to throw it away, which is why the message no longer does.
+	await expect(editor.getByLabel('Story title')).toHaveValue("Alice's title");
+
+	// The board behind her has been refreshed to Bob's version, so saving again
+	// is now a knowing overwrite rather than a second rejection.
+	await editor.getByRole('button', { name: 'Save' }).click();
+	await expect(editor).toBeHidden();
+	await page.reload();
+	await expect(page.getByText("Alice's title")).toBeVisible();
+	await expect(page.getByText("Bob's title")).toHaveCount(0);
 });

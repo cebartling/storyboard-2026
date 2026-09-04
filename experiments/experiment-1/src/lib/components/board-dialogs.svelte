@@ -13,7 +13,8 @@
 		| { kind: 'addSlice' }
 		| { kind: 'editSlice'; sliceId: string; name: string }
 		| { kind: 'addStory'; stepId: string; sliceId: string | null; scopeLabel: string }
-		| { kind: 'editStory'; storyId: string; title: string; description: string | null };
+		| { kind: 'editStory'; storyId: string; title: string; description: string | null }
+		| { kind: 'shareMap'; mapName: string };
 
 	/** Reads the `{ error }` payload `run-action.ts` puts in every `fail()`. */
 	export function actionError(data: unknown): string | null {
@@ -29,7 +30,8 @@
 		addSlice: 'Add slice',
 		editSlice: 'Edit slice',
 		addStory: 'Add story',
-		editStory: 'Edit story'
+		editStory: 'Edit story',
+		shareMap: 'Share map'
 	};
 </script>
 
@@ -42,6 +44,8 @@
 	// (ADR 0008) — only the submission path changed: `use:enhance` instead of
 	// a full-page navigation, because navigating away would tear down the
 	// dialog the user is standing in.
+	import { tick, untrack } from 'svelte';
+	import type { SubjectStatus } from '$lib/board/dialog-subject';
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import type { SubmitFunction } from '@sveltejs/kit';
@@ -49,10 +53,27 @@
 
 	let {
 		dialog,
+		boardVersion,
+		clientId,
+		subject,
 		onClose,
-		onLateFailure
+		onLateFailure,
+		onReplaceSubject
 	}: {
 		dialog: BoardDialog | null;
+		/** The board's current aggregate version, as `load()` last returned it. */
+		boardVersion: number;
+		/**
+		 * This tab, sent with every mutation so the hub can skip notifying us about
+		 * our own change — we refetch as part of the submission itself.
+		 */
+		clientId: string;
+		/**
+		 * Whether what this dialog is editing still looks the way it did when the
+		 * dialog opened. Computed by the page from the live board, because live
+		 * refetching means the ground can move under an open editor (ADR 0015).
+		 */
+		subject?: SubjectStatus | null;
 		/** `deleted` when the submission removed the thing the dialog was
 		 *  editing, so the caller can put focus somewhere that still exists —
 		 *  the trigger that opened the dialog is gone by then. */
@@ -62,10 +83,47 @@
 		 * nowhere in here to render it, so the board shows it instead.
 		 */
 		onLateFailure: (message: string) => void;
+		/** Adopt the other editor's version, discarding what is in the form. */
+		onReplaceSubject?: (dialog: BoardDialog) => void;
 	} = $props();
+
+	const subjectDeleted = $derived(subject?.status === 'deleted');
+	const subjectChanged = $derived(subject?.status === 'changed');
 
 	let error = $state<string | null>(null);
 	let submitting = $state(false);
+
+	/**
+	 * The version this editor was opened at — snapshotted, deliberately not read
+	 * live (ADR 0015 §3).
+	 *
+	 * Sending the *current* version at submit time would defeat the whole
+	 * mechanism: a dialog opened before someone else's edit would silently adopt
+	 * their version and overwrite them. Live refetching (ADR 0015 §5) makes that
+	 * routine rather than theoretical, so the snapshot has to be taken here, at
+	 * open time, and held until the dialog closes.
+	 */
+	let openedAtVersion = $state(0);
+	/**
+	 * Which dialog `openedAtVersion` was captured for. A plain `let`, not state:
+	 * nothing renders it, it only decides whether the snapshot is still the right
+	 * one. Comparing the subject — rather than relying on the effect's dependency
+	 * set — is what makes "snapshot at open time" hold no matter how the parent
+	 * happens to pass its props.
+	 */
+	let snapshotFor: BoardDialog | null = null;
+
+	$effect(() => {
+		const opening = dialog;
+		if (!opening) {
+			snapshotFor = null;
+			return;
+		}
+		if (opening !== snapshotFor) {
+			snapshotFor = opening;
+			openedAtVersion = untrack(() => boardVersion);
+		}
+	});
 
 	// A failure keeps the dialog open with its message; opening a different
 	// editor must not inherit it. Only the open transition needs clearing —
@@ -83,9 +141,13 @@
 	// load, nothing else reruns `load()`. It is the same refresh the drag path
 	// already uses, for the reason ADR 0008 gives (this page has exactly one
 	// load function, so there is nothing narrower to invalidate).
-	const submit: SubmitFunction = ({ formElement }) => {
+	const submit: SubmitFunction = ({ formElement, formData }) => {
 		error = null;
 		submitting = true;
+		// Set here rather than as a hidden input in each of the twelve forms: it
+		// is a constant for the life of the page, so there is nothing to snapshot
+		// and nothing a form reset could revert (unlike `version`).
+		formData.set('clientId', clientId);
 		// Captured at submit time: the user can close the dialog while the
 		// request is in flight, and a message shown in a closed dialog is a
 		// message nobody reads.
@@ -107,6 +169,19 @@
 			// re-enable Save and Delete for a whole round trip while the dialog
 			// is still open, which is long enough to click twice.
 			if (result.type === 'failure') {
+				if (result.status === 409) {
+					// A stale editor (ADR 0015 §3). Refresh the board so the user is
+					// looking at what the other person actually did, and re-snapshot
+					// the version so their next Save is a knowing overwrite rather
+					// than another rejection. What they typed is deliberately left
+					// alone — it is the one thing that cannot be recovered.
+					await invalidateAll();
+					// `boardVersion` is a prop fed from `load()`; let the refetch's
+					// new value reach it before re-snapshotting, or we would capture
+					// the version we already know is stale.
+					await tick();
+					openedAtVersion = boardVersion;
+				}
 				report(actionError(result.data) ?? 'Something went wrong. Please try again.');
 				return;
 			}
@@ -157,8 +232,33 @@
 		<p class="error mb-3" role="alert">{error}</p>
 	{/if}
 
+	<!-- The ground moved under this editor while it was open (ADR 0015 Stage 1).
+	     A notice rather than an error: nothing the user did failed. -->
+	{#if subjectDeleted}
+		<p class="notice mb-3" role="status" data-testid="subject-deleted">
+			Someone else deleted this while you were editing. Close this dialog — there is nothing left to
+			save.
+		</p>
+	{:else if subjectChanged && subject?.status === 'changed'}
+		<div
+			class="notice mb-3 flex flex-wrap items-center gap-3"
+			role="status"
+			data-testid="subject-changed"
+		>
+			<span class="flex-1">Someone else changed this while you were editing.</span>
+			<button
+				type="button"
+				class="btn btn-quiet"
+				onclick={() => onReplaceSubject?.(subject.current)}
+			>
+				Use their version
+			</button>
+		</div>
+	{/if}
+
 	{#if dialog?.kind === 'addActivity'}
 		<form method="POST" action="?/addActivity" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<div class="flex flex-col gap-1.5">
 				<label for="dialog-activity-name" class="field-label">New activity</label>
 				<input
@@ -170,12 +270,17 @@
 					placeholder="e.g. Browse"
 				/>
 			</div>
-			<button type="submit" class="btn btn-primary self-start" disabled={submitting}>
+			<button
+				type="submit"
+				class="btn btn-primary self-start"
+				disabled={submitting || subjectDeleted}
+			>
 				Add activity
 			</button>
 		</form>
 	{:else if dialog?.kind === 'editActivity'}
 		<form method="POST" action="?/renameActivity" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<input type="hidden" name="activityId" value={dialog.activityId} />
 			<div class="flex flex-col gap-1.5">
 				<label for="dialog-activity-rename" class="field-label">Rename activity</label>
@@ -188,7 +293,12 @@
 					class="input"
 				/>
 			</div>
-			<button type="submit" class="btn btn-primary self-start" disabled={submitting}>Save</button>
+			<button
+				type="submit"
+				class="btn btn-primary self-start"
+				disabled={submitting || subjectDeleted}
+				>{subjectChanged ? 'Save mine anyway' : 'Save'}</button
+			>
 		</form>
 		<form
 			method="POST"
@@ -196,14 +306,18 @@
 			use:enhance={submit}
 			class="border-line mt-5 border-t pt-4"
 		>
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<input type="hidden" name="activityId" value={dialog.activityId} />
 			<p class="text-ink-muted mb-2 text-sm">
 				Deleting an activity also deletes its steps and stories.
 			</p>
-			<button type="submit" class="btn btn-danger" disabled={submitting}>Delete activity</button>
+			<button type="submit" class="btn btn-danger" disabled={submitting || subjectDeleted}
+				>Delete activity</button
+			>
 		</form>
 	{:else if dialog?.kind === 'addStep'}
 		<form method="POST" action="?/addStep" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<input type="hidden" name="activityId" value={dialog.activityId} />
 			<div class="flex flex-col gap-1.5">
 				<label for="dialog-step-name" class="field-label">New step name</label>
@@ -217,12 +331,17 @@
 				/>
 			</div>
 			<p class="text-ink-muted text-sm">Added to <strong>{dialog.activityName}</strong>.</p>
-			<button type="submit" class="btn btn-primary self-start" disabled={submitting}>
+			<button
+				type="submit"
+				class="btn btn-primary self-start"
+				disabled={submitting || subjectDeleted}
+			>
 				Add step
 			</button>
 		</form>
 	{:else if dialog?.kind === 'editStep'}
 		<form method="POST" action="?/renameStep" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<input type="hidden" name="stepId" value={dialog.stepId} />
 			<div class="flex flex-col gap-1.5">
 				<label for="dialog-step-rename" class="field-label">Rename step</label>
@@ -235,7 +354,12 @@
 					class="input"
 				/>
 			</div>
-			<button type="submit" class="btn btn-primary self-start" disabled={submitting}>Save</button>
+			<button
+				type="submit"
+				class="btn btn-primary self-start"
+				disabled={submitting || subjectDeleted}
+				>{subjectChanged ? 'Save mine anyway' : 'Save'}</button
+			>
 		</form>
 		<form
 			method="POST"
@@ -243,12 +367,16 @@
 			use:enhance={submit}
 			class="border-line mt-5 border-t pt-4"
 		>
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<input type="hidden" name="stepId" value={dialog.stepId} />
 			<p class="text-ink-muted mb-2 text-sm">Deleting a step also deletes its stories.</p>
-			<button type="submit" class="btn btn-danger" disabled={submitting}>Delete step</button>
+			<button type="submit" class="btn btn-danger" disabled={submitting || subjectDeleted}
+				>Delete step</button
+			>
 		</form>
 	{:else if dialog?.kind === 'addSlice'}
 		<form method="POST" action="?/createSlice" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<div class="flex flex-col gap-1.5">
 				<label for="dialog-slice-name" class="field-label">New slice</label>
 				<input
@@ -260,12 +388,17 @@
 					placeholder="e.g. Release 1"
 				/>
 			</div>
-			<button type="submit" class="btn btn-primary self-start" disabled={submitting}>
+			<button
+				type="submit"
+				class="btn btn-primary self-start"
+				disabled={submitting || subjectDeleted}
+			>
 				Add slice
 			</button>
 		</form>
 	{:else if dialog?.kind === 'editSlice'}
 		<form method="POST" action="?/renameSlice" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<input type="hidden" name="sliceId" value={dialog.sliceId} />
 			<div class="flex flex-col gap-1.5">
 				<label for="dialog-slice-rename" class="field-label">Rename slice</label>
@@ -278,7 +411,12 @@
 					class="input"
 				/>
 			</div>
-			<button type="submit" class="btn btn-primary self-start" disabled={submitting}>Save</button>
+			<button
+				type="submit"
+				class="btn btn-primary self-start"
+				disabled={submitting || subjectDeleted}
+				>{subjectChanged ? 'Save mine anyway' : 'Save'}</button
+			>
 		</form>
 		<form
 			method="POST"
@@ -286,14 +424,18 @@
 			use:enhance={submit}
 			class="border-line mt-5 border-t pt-4"
 		>
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<input type="hidden" name="sliceId" value={dialog.sliceId} />
 			<p class="text-ink-muted mb-2 text-sm">
 				Stories in this slice move back to the unsliced band.
 			</p>
-			<button type="submit" class="btn btn-danger" disabled={submitting}>Delete slice</button>
+			<button type="submit" class="btn btn-danger" disabled={submitting || subjectDeleted}
+				>Delete slice</button
+			>
 		</form>
 	{:else if dialog?.kind === 'addStory'}
 		<form method="POST" action="?/addStory" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<input type="hidden" name="stepId" value={dialog.stepId} />
 			<input type="hidden" name="sliceId" value={dialog.sliceId ?? ''} />
 			<div class="flex flex-col gap-1.5">
@@ -308,12 +450,17 @@
 				/>
 			</div>
 			<p class="text-ink-muted text-sm">Added to <strong>{dialog.scopeLabel}</strong>.</p>
-			<button type="submit" class="btn btn-primary self-start" disabled={submitting}>
+			<button
+				type="submit"
+				class="btn btn-primary self-start"
+				disabled={submitting || subjectDeleted}
+			>
 				Add story
 			</button>
 		</form>
 	{:else if dialog?.kind === 'editStory'}
 		<form method="POST" action="?/editStory" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<input type="hidden" name="storyId" value={dialog.storyId} />
 			<div class="flex flex-col gap-1.5">
 				<label for="dialog-story-edit-title" class="field-label">Story title</label>
@@ -336,7 +483,12 @@
 					placeholder="Optional detail, acceptance notes, open questions…"
 					value={dialog.description ?? ''}></textarea>
 			</div>
-			<button type="submit" class="btn btn-primary self-start" disabled={submitting}>Save</button>
+			<button
+				type="submit"
+				class="btn btn-primary self-start"
+				disabled={submitting || subjectDeleted}
+				>{subjectChanged ? 'Save mine anyway' : 'Save'}</button
+			>
 		</form>
 		<form
 			method="POST"
@@ -344,8 +496,35 @@
 			use:enhance={submit}
 			class="border-line mt-5 border-t pt-4"
 		>
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<input type="hidden" name="storyId" value={dialog.storyId} />
-			<button type="submit" class="btn btn-danger" disabled={submitting}>Delete story</button>
+			<button type="submit" class="btn btn-danger" disabled={submitting || subjectDeleted}
+				>Delete story</button
+			>
+		</form>
+	{:else if dialog?.kind === 'shareMap'}
+		<!-- No version input: sharing changes who may reach the map, not the
+		     board, so it neither reads nor advances the aggregate (ADR 0016). -->
+		<form method="POST" action="?/shareMap" use:enhance={submit} class="flex flex-col gap-3">
+			<p class="text-ink-muted text-sm">
+				People you add can edit <strong>{dialog.mapName}</strong> but cannot delete or share it.
+			</p>
+			<div class="flex flex-col gap-1">
+				<label class="field-label" for="share-email">Email address</label>
+				<input
+					id="share-email"
+					name="email"
+					type="email"
+					class="input"
+					placeholder="them@example.com"
+					required
+				/>
+			</div>
+			<button
+				type="submit"
+				class="btn btn-primary self-start"
+				disabled={submitting || subjectDeleted}>Share</button
+			>
 		</form>
 	{/if}
 </Modal>
