@@ -13,25 +13,21 @@
 
 import { ConflictError, ForbiddenError } from '$lib/domain/errors';
 import { and, eq, inArray } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { AppDatabase } from '../db/database';
 import type { ActivityId, MapId, SliceId, StepId, StoryId, UserId } from '$lib/domain/ids';
 import type { Caller, MapAccess, MapSummary, Role, StoryMapRepository } from '$lib/domain/ports';
 import type { Activity, Slice, Step, Story, StoryMap } from '$lib/domain/story-map';
 import * as schema from '../db/schema';
 
 export class DrizzleStoryMapRepository implements StoryMapRepository {
-	constructor(private readonly db: BetterSQLite3Database<typeof schema>) {}
+	constructor(private readonly db: AppDatabase) {}
 
 	/**
 	 * The caller's role on a map, or null if they are not a member. One row, and
 	 * it answers both "does this exist" and "may they" — which is the reason
 	 * ADR 0016 puts authorisation here rather than in the app layer.
 	 */
-	private roleWithin(
-		tx: BetterSQLite3Database<typeof schema>,
-		mapId: MapId,
-		userId: UserId
-	): Role | null {
+	private roleWithin(tx: AppDatabase, mapId: MapId, userId: UserId): Role | null {
 		const row = tx
 			.select({ role: schema.mapMembers.role })
 			.from(schema.mapMembers)
@@ -67,7 +63,7 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 		});
 	}
 
-	private loadWithin(db: BetterSQLite3Database<typeof schema>, id: MapId): StoryMap | null {
+	private loadWithin(db: AppDatabase, id: MapId): StoryMap | null {
 		const mapRow = db.select().from(schema.maps).where(eq(schema.maps.id, id)).get();
 		if (!mapRow) return null;
 
@@ -162,41 +158,27 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 		// read first, and really does fail without this.
 		this.db.transaction(
 			(tx) => {
-				// Membership is checked inside the same transaction as the write, so
-				// access revoked concurrently cannot be raced. This is the "read at
-				// the top" the comment above anticipated — the immediate BEGIN is
-				// what keeps it safe.
-				const existingRow = tx
-					.select({ id: schema.maps.id })
+				// Read the current version, then decide. This used to be a conditional
+				// `UPDATE ... WHERE version = ?` whose affected-row count said whether
+				// it matched — but an affected-row count is the one thing the two
+				// SQLite drivers do not agree on (`RunResult` against `void`), and the
+				// seed script runs on the other one.
+				//
+				// Correct *only* because the transaction is immediate: the write lock
+				// is held from BEGIN, so nothing can commit between this read and the
+				// write below. Under a deferred transaction this form would be racy
+				// where the conditional UPDATE was not. The membership check below was
+				// already a read before a write, so this moves no boundary.
+				const existing = tx
+					.select({ version: schema.maps.version })
 					.from(schema.maps)
 					.where(eq(schema.maps.id, map.id))
 					.get();
-				if (existingRow && !this.roleWithin(tx, map.id, caller.userId)) {
-					throw new ForbiddenError('You do not have access to this story map.');
-				}
 
-				const update = tx
-					.update(schema.maps)
-					.set({ name: map.name, createdAt: map.createdAt, version: nextVersion })
-					.where(and(eq(schema.maps.id, map.id), eq(schema.maps.version, map.version)))
-					.run();
-
-				if (update.changes === 0) {
-					const existing = tx
-						.select({ version: schema.maps.version })
-						.from(schema.maps)
-						.where(eq(schema.maps.id, map.id))
-						.get();
-
-					if (existing) {
-						throw new ConflictError(
-							`Story map ${map.id} changed since it was loaded (expected version ${map.version}, current version ${existing.version})`
-						);
-					}
+				if (!existing) {
 					if (map.version !== 0) {
 						throw new ConflictError(`Story map ${map.id} no longer exists`);
 					}
-
 					tx.insert(schema.maps)
 						.values({
 							id: map.id,
@@ -210,6 +192,21 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 					// reach.
 					tx.insert(schema.mapMembers)
 						.values({ mapId: map.id, userId: caller.userId, role: 'owner' })
+						.run();
+				} else {
+					if (existing.version !== map.version) {
+						throw new ConflictError(
+							`Story map ${map.id} changed since it was loaded (expected version ${map.version}, current version ${existing.version})`
+						);
+					}
+					// Access revoked concurrently cannot be raced, for the same reason
+					// the version read above cannot: the lock is already held.
+					if (!this.roleWithin(tx, map.id, caller.userId)) {
+						throw new ForbiddenError('You do not have access to this story map.');
+					}
+					tx.update(schema.maps)
+						.set({ name: map.name, createdAt: map.createdAt, version: nextVersion })
+						.where(eq(schema.maps.id, map.id))
 						.run();
 				}
 
