@@ -46,6 +46,12 @@ authentication. Passwords are hashed with `node:crypto`'s `scrypt` and stored as
 The algorithm prefix exists so that moving to argon2 later is a new prefix and a rehash on
 next login, rather than a migration that invalidates every password at once.
 
+Citing OWASP means adopting its parameters, not only its list: **N=2^17, r=8, p=1**, passed
+explicitly. Node's own default is N=2^14, which is eight times cheaper for an attacker
+working offline against a leaked `users` table — so relying on the default would have made
+the justification above false. `maxmem` has to be raised with it, since the default 32MB
+ceiling is below what N=2^17 needs and scrypt throws rather than quietly using less.
+
 The _shape_ of the `sv add lucia` template is adopted — hashed session token, fixed expiry,
 a hook populating `locals.user` — and its packages are not. Lucia itself is a deprecated
 library turned guide, and Auth.js solves OAuth-provider plumbing this experiment has no use

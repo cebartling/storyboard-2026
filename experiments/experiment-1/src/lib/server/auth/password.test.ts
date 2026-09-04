@@ -39,4 +39,14 @@ describe('password hashing', () => {
 			await expect(verifyPassword('hunter2', stored)).resolves.toBe(false);
 		}
 	);
+
+	it('uses a cost above the default, which is below the standard the ADR cites', async () => {
+		// Node's scrypt default is N=2^14; OWASP's minimum is N=2^17. The
+		// difference is not visible in the stored string, so the only honest check
+		// is that hashing is measurably expensive.
+		const startedAt = Date.now();
+		await hashPassword('correct horse battery staple');
+
+		expect(Date.now() - startedAt).toBeGreaterThan(20);
+	});
 });
