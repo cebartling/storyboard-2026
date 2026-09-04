@@ -116,108 +116,121 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 
 	async save(map: StoryMap): Promise<StoryMap> {
 		const nextVersion = map.version + 1;
-		this.db.transaction((tx) => {
-			const update = tx
-				.update(schema.maps)
-				.set({ name: map.name, createdAt: map.createdAt, version: nextVersion })
-				.where(and(eq(schema.maps.id, map.id), eq(schema.maps.version, map.version)))
-				.run();
-
-			if (update.changes === 0) {
-				const existing = tx
-					.select({ version: schema.maps.version })
-					.from(schema.maps)
-					.where(eq(schema.maps.id, map.id))
-					.get();
-
-				if (existing) {
-					throw new ConflictError(
-						`Story map ${map.id} changed since it was loaded (expected version ${map.version}, current version ${existing.version})`
-					);
-				}
-				if (map.version !== 0) {
-					throw new ConflictError(`Story map ${map.id} no longer exists`);
-				}
-
-				tx.insert(schema.maps)
-					.values({
-						id: map.id,
-						name: map.name,
-						createdAt: map.createdAt,
-						version: nextVersion
-					})
+		// `immediate` takes the write lock at BEGIN rather than on the first
+		// write. Without it, a transaction that reads before it writes holds a
+		// read snapshot that goes stale the moment another connection commits,
+		// and SQLite reports SQLITE_BUSY_SNAPSHOT — which the busy handler never
+		// retries, so `busy_timeout` cannot save it (ADR 0015 Stage 0).
+		//
+		// This one happens to write first today, so it is safe either way; it is
+		// marked anyway so that adding a read at the top (an ownership check, say)
+		// cannot silently reintroduce the hazard. `delete()` below really does
+		// read first, and really does fail without this.
+		this.db.transaction(
+			(tx) => {
+				const update = tx
+					.update(schema.maps)
+					.set({ name: map.name, createdAt: map.createdAt, version: nextVersion })
+					.where(and(eq(schema.maps.id, map.id), eq(schema.maps.version, map.version)))
 					.run();
-			}
 
-			// Delete every existing row for this map, leaf tables first (FK-safe),
-			// then reinsert everything from the in-memory aggregate.
-			const existingActivityIds = tx
-				.select({ id: schema.activities.id })
-				.from(schema.activities)
-				.where(eq(schema.activities.mapId, map.id))
-				.all()
-				.map((r) => r.id);
+				if (update.changes === 0) {
+					const existing = tx
+						.select({ version: schema.maps.version })
+						.from(schema.maps)
+						.where(eq(schema.maps.id, map.id))
+						.get();
 
-			const existingStepIds = existingActivityIds.length
-				? tx
-						.select({ id: schema.steps.id })
-						.from(schema.steps)
-						.where(inArray(schema.steps.activityId, existingActivityIds))
-						.all()
-						.map((r) => r.id)
-				: [];
+					if (existing) {
+						throw new ConflictError(
+							`Story map ${map.id} changed since it was loaded (expected version ${map.version}, current version ${existing.version})`
+						);
+					}
+					if (map.version !== 0) {
+						throw new ConflictError(`Story map ${map.id} no longer exists`);
+					}
 
-			for (const stepId of existingStepIds) {
-				tx.delete(schema.stories).where(eq(schema.stories.stepId, stepId)).run();
-			}
-			for (const stepId of existingStepIds) {
-				tx.delete(schema.steps).where(eq(schema.steps.id, stepId)).run();
-			}
-			for (const activityId of existingActivityIds) {
-				tx.delete(schema.activities).where(eq(schema.activities.id, activityId)).run();
-			}
-			tx.delete(schema.slices).where(eq(schema.slices.mapId, map.id)).run();
-
-			for (const activity of map.activities) {
-				tx.insert(schema.activities)
-					.values({
-						id: activity.id,
-						mapId: activity.mapId,
-						name: activity.name,
-						rank: activity.rank
-					})
-					.run();
-				for (const step of activity.steps) {
-					tx.insert(schema.steps)
+					tx.insert(schema.maps)
 						.values({
-							id: step.id,
-							activityId: step.activityId,
-							name: step.name,
-							rank: step.rank
+							id: map.id,
+							name: map.name,
+							createdAt: map.createdAt,
+							version: nextVersion
 						})
 						.run();
 				}
-			}
 
-			for (const slice of map.slices) {
-				tx.insert(schema.slices)
-					.values({ id: slice.id, mapId: slice.mapId, name: slice.name, rank: slice.rank })
-					.run();
-			}
+				// Delete every existing row for this map, leaf tables first (FK-safe),
+				// then reinsert everything from the in-memory aggregate.
+				const existingActivityIds = tx
+					.select({ id: schema.activities.id })
+					.from(schema.activities)
+					.where(eq(schema.activities.mapId, map.id))
+					.all()
+					.map((r) => r.id);
 
-			for (const story of map.stories) {
-				tx.insert(schema.stories)
-					.values({
-						id: story.id,
-						stepId: story.stepId,
-						title: story.title,
-						description: story.description,
-						sliceId: story.sliceId,
-						rank: story.rank
-					})
-					.run();
-			}
-		});
+				const existingStepIds = existingActivityIds.length
+					? tx
+							.select({ id: schema.steps.id })
+							.from(schema.steps)
+							.where(inArray(schema.steps.activityId, existingActivityIds))
+							.all()
+							.map((r) => r.id)
+					: [];
+
+				for (const stepId of existingStepIds) {
+					tx.delete(schema.stories).where(eq(schema.stories.stepId, stepId)).run();
+				}
+				for (const stepId of existingStepIds) {
+					tx.delete(schema.steps).where(eq(schema.steps.id, stepId)).run();
+				}
+				for (const activityId of existingActivityIds) {
+					tx.delete(schema.activities).where(eq(schema.activities.id, activityId)).run();
+				}
+				tx.delete(schema.slices).where(eq(schema.slices.mapId, map.id)).run();
+
+				for (const activity of map.activities) {
+					tx.insert(schema.activities)
+						.values({
+							id: activity.id,
+							mapId: activity.mapId,
+							name: activity.name,
+							rank: activity.rank
+						})
+						.run();
+					for (const step of activity.steps) {
+						tx.insert(schema.steps)
+							.values({
+								id: step.id,
+								activityId: step.activityId,
+								name: step.name,
+								rank: step.rank
+							})
+							.run();
+					}
+				}
+
+				for (const slice of map.slices) {
+					tx.insert(schema.slices)
+						.values({ id: slice.id, mapId: slice.mapId, name: slice.name, rank: slice.rank })
+						.run();
+				}
+
+				for (const story of map.stories) {
+					tx.insert(schema.stories)
+						.values({
+							id: story.id,
+							stepId: story.stepId,
+							title: story.title,
+							description: story.description,
+							sliceId: story.sliceId,
+							rank: story.rank
+						})
+						.run();
+				}
+			},
+			{ behavior: 'immediate' }
+		);
 
 		return { ...map, version: nextVersion };
 	}
@@ -239,35 +252,41 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 		// collides in the unsliced scope, whose ranks are only unique within
 		// that scope. Deleting a map means the stories go too, not that they
 		// move to the unsliced band.
-		this.db.transaction((tx) => {
-			const activityIds = tx
-				.select({ id: schema.activities.id })
-				.from(schema.activities)
-				.where(eq(schema.activities.mapId, id))
-				.all()
-				.map((r) => r.id);
+		this.db.transaction(
+			(tx) => {
+				const activityIds = tx
+					.select({ id: schema.activities.id })
+					.from(schema.activities)
+					.where(eq(schema.activities.mapId, id))
+					.all()
+					.map((r) => r.id);
 
-			const stepIds = activityIds.length
-				? tx
-						.select({ id: schema.steps.id })
-						.from(schema.steps)
-						.where(inArray(schema.steps.activityId, activityIds))
-						.all()
-						.map((r) => r.id)
-				: [];
+				const stepIds = activityIds.length
+					? tx
+							.select({ id: schema.steps.id })
+							.from(schema.steps)
+							.where(inArray(schema.steps.activityId, activityIds))
+							.all()
+							.map((r) => r.id)
+					: [];
 
-			for (const stepId of stepIds) {
-				tx.delete(schema.stories).where(eq(schema.stories.stepId, stepId)).run();
-			}
-			for (const stepId of stepIds) {
-				tx.delete(schema.steps).where(eq(schema.steps.id, stepId)).run();
-			}
-			for (const activityId of activityIds) {
-				tx.delete(schema.activities).where(eq(schema.activities.id, activityId)).run();
-			}
-			tx.delete(schema.slices).where(eq(schema.slices.mapId, id)).run();
-			tx.delete(schema.maps).where(eq(schema.maps.id, id)).run();
-		});
+				for (const stepId of stepIds) {
+					tx.delete(schema.stories).where(eq(schema.stories.stepId, stepId)).run();
+				}
+				for (const stepId of stepIds) {
+					tx.delete(schema.steps).where(eq(schema.steps.id, stepId)).run();
+				}
+				for (const activityId of activityIds) {
+					tx.delete(schema.activities).where(eq(schema.activities.id, activityId)).run();
+				}
+				tx.delete(schema.slices).where(eq(schema.slices.mapId, id)).run();
+				tx.delete(schema.maps).where(eq(schema.maps.id, id)).run();
+			},
+			// See save(): this transaction reads the child ids before deleting
+			// them, which is exactly the read-then-write shape that fails under
+			// contention without an immediate BEGIN.
+			{ behavior: 'immediate' }
+		);
 	}
 }
 

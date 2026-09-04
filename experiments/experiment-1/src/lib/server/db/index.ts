@@ -1,17 +1,16 @@
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import Database from 'better-sqlite3';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { openDatabase } from './open';
 import * as schema from './schema';
 import { env } from '$env/dynamic/private';
 
 if (!env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
 
-const client = new Database(env.DATABASE_URL);
-// Required for the schema's `onDelete: 'cascade' | 'set null'` FKs to take
-// effect — SQLite enforces foreign keys per-connection, off by default.
-client.pragma('foreign_keys = ON');
+// WAL, busy_timeout and foreign_keys all live in `open.ts`, which is testable
+// without this module's env read and startup migration. See ADR 0015 Stage 0.
+const client = openDatabase(env.DATABASE_URL);
 
 export const db = drizzle(client, { schema });
 

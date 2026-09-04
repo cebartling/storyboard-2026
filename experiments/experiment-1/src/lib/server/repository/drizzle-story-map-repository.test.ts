@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Worker } from 'node:worker_threads';
 import type { MapId } from '$lib/domain/ids';
 import {
 	addActivity,
@@ -17,6 +18,7 @@ import {
 } from '$lib/domain/story-map';
 import type { Story } from '$lib/domain/story-map';
 import { buildRetailCommerceMap } from '$lib/seed/retail-commerce';
+import { openDatabase } from '../db/open';
 import * as schema from '../db/schema';
 import { DrizzleStoryMapRepository } from './drizzle-story-map-repository';
 
@@ -46,14 +48,17 @@ function canonicalStoryOrder(stories: Story[]): Story[] {
 
 describe('DrizzleStoryMapRepository', () => {
 	let tmpDir: string;
+	let dbFile: string;
 	let client: Database.Database;
 	let db: BetterSQLite3Database<typeof schema>;
 	let repository: DrizzleStoryMapRepository;
 
 	beforeAll(() => {
 		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'story-map-repo-test-'));
-		client = new Database(path.join(tmpDir, 'test.db'));
-		client.pragma('foreign_keys = ON');
+		dbFile = path.join(tmpDir, 'test.db');
+		// The real connection, pragmas and all — this suite is what proves the
+		// WAL/busy_timeout behaviour reaches the repository, not just `open.ts`.
+		client = openDatabase(dbFile);
 		db = drizzle(client, { schema });
 		migrate(db, { migrationsFolder });
 		repository = new DrizzleStoryMapRepository(db);
@@ -441,6 +446,78 @@ describe('DrizzleStoryMapRepository', () => {
 					})
 					.run()
 			).toThrow(/UNIQUE/i);
+		});
+	});
+
+	describe('concurrent writers', () => {
+		/**
+		 * Holds a write lock from another thread. A worker rather than a timer
+		 * because better-sqlite3 is synchronous: its busy wait blocks this
+		 * thread's event loop, so a `setTimeout` here would never fire to
+		 * release the lock.
+		 */
+		function holdWriteLock(
+			file: string,
+			holdMs: number
+		): { locked: Promise<void>; worker: Worker } {
+			const worker = new Worker(
+				`
+				const { parentPort, workerData } = require('node:worker_threads');
+				const Database = require('better-sqlite3');
+				const db = new Database(workerData.file);
+				db.exec('BEGIN IMMEDIATE');
+				parentPort.postMessage('locked');
+				Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, workerData.holdMs);
+				db.exec('COMMIT');
+				db.close();
+				`,
+				{ eval: true, workerData: { file, holdMs } }
+			);
+			const locked = new Promise<void>((resolve, reject) => {
+				worker.once('message', () => resolve());
+				worker.once('error', reject);
+			});
+			return { locked, worker };
+		}
+
+		it('save() waits for a concurrent writer rather than failing', async () => {
+			// Passes today only incidentally: save()'s first statement is an UPDATE,
+			// so even a deferred BEGIN takes the write lock straight away. This test
+			// exists to catch the day someone puts a SELECT in front of it — see the
+			// `behavior: 'immediate'` comment on the transaction itself.
+			const saved = await repository.save(createStoryMap('Locked out'));
+
+			const holdMs = 300;
+			const { locked, worker } = holdWriteLock(dbFile, holdMs);
+			await locked;
+
+			const startedAt = Date.now();
+			await expect(
+				repository.save({ ...saved, name: 'Renamed under contention' })
+			).resolves.toMatchObject({
+				name: 'Renamed under contention'
+			});
+			expect(Date.now() - startedAt).toBeGreaterThanOrEqual(holdMs * 0.8);
+
+			await worker.terminate();
+			expect((await repository.load(saved.id))?.name).toBe('Renamed under contention');
+		});
+
+		it('delete() waits for a concurrent writer rather than failing', async () => {
+			// delete() genuinely reads before it writes (it collects child ids
+			// first), so a deferred BEGIN takes a read snapshot, then finds that
+			// snapshot stale once the other writer commits: SQLITE_BUSY_SNAPSHOT,
+			// which the busy handler never retries.
+			const saved = await repository.save(createStoryMap('Doomed'));
+			const holdMs = 300;
+			const { locked, worker } = holdWriteLock(dbFile, holdMs);
+			await locked;
+			const startedAt = Date.now();
+			await expect(repository.delete(saved.id)).resolves.toBeUndefined();
+			expect(Date.now() - startedAt).toBeGreaterThanOrEqual(holdMs * 0.8);
+
+			await worker.terminate();
+			expect(await repository.load(saved.id)).toBeNull();
 		});
 	});
 });
