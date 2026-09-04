@@ -83,6 +83,13 @@ An unauthenticated visitor may reach `/login` and `/register` and nothing else;
 `hooks.server.ts` redirects everything else. There is no public read path, and adding one
 later means adding it there rather than remembering a check at each route.
 
+**Account existence is not secret, and the code should not pretend otherwise.** `/register`
+answers "That email address is already registered", which is the honest trade for a usable
+signup form. `login` still refuses an unknown address and a wrong password identically _and
+in the same time_ — a missing user is verified against a decoy hash — because a timing
+channel that contradicts the message is worse than either answer alone, and at the scrypt
+cost above it would be a tenth of a second wide.
+
 ### 4. The caller is a port argument, and the adapters enforce it
 
 Every `StoryMapRepository` method takes `caller: Caller` first. `load` and `listSummaries`

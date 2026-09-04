@@ -48,6 +48,17 @@ export function normaliseEmail(email: string): string {
 	return email.trim().toLowerCase();
 }
 
+/**
+ * A hash of a random password, computed once per process and reused. Only ever
+ * compared against, so that a login for an address with no account costs the
+ * same as one with — see `login`.
+ */
+let decoy: Promise<string> | null = null;
+function decoyHash(): Promise<string> {
+	decoy ??= hashPassword(randomBytes(32).toString('base64url'));
+	return decoy;
+}
+
 export class Auth {
 	constructor(private readonly db: BetterSQLite3Database<typeof schema>) {}
 
@@ -80,14 +91,29 @@ export class Auth {
 		return this.db.select().from(schema.users).where(eq(schema.users.email, normalisedEmail)).get();
 	}
 
-	/** Returns null for both an unknown email and a wrong password: telling them
-	 *  apart would confirm which addresses have accounts. */
+	/**
+	 * Returns null for both an unknown email and a wrong password, and takes the
+	 * same time doing it.
+	 *
+	 * Returning early for an unknown address would leave a timing channel that
+	 * says which addresses have accounts — and a wide one, since scrypt at the
+	 * cost ADR 0016 requires takes on the order of a tenth of a second. So a
+	 * missing user is verified against a fixed hash whose password nobody knows,
+	 * purely to spend the same time.
+	 *
+	 * This closes the channel *here*. It does not make accounts unenumerable:
+	 * `/register` still answers "That email address is already registered",
+	 * which is the honest trade for a usable signup form.
+	 */
 	async login(
 		email: string,
 		password: string
 	): Promise<{ user: AuthenticatedUser; session: Session } | null> {
 		const row = this.findByEmail(normaliseEmail(email));
-		if (!row) return null;
+		if (!row) {
+			await verifyPassword(password, await decoyHash());
+			return null;
+		}
 		if (!(await verifyPassword(password, row.passwordHash))) return null;
 
 		return {

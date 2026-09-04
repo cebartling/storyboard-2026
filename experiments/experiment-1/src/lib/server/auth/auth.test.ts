@@ -87,6 +87,28 @@ describe('Auth', () => {
 			// addresses have accounts.
 			expect(await auth.login('nobody@example.test', 'hunter2hunter2')).toBeNull();
 		});
+
+		it('takes as long to refuse an unknown address as a wrong password', async () => {
+			// Returning early for a missing user would answer "does this address
+			// have an account" by the clock — and loudly, since scrypt at the cost
+			// ADR 0016 requires takes on the order of a tenth of a second.
+			await auth.register('ada@example.test', 'Ada', 'hunter2hunter2');
+			// Warm the decoy hash, which is computed once per process.
+			await auth.login('nobody@example.test', 'x');
+
+			const wrongPasswordAt = Date.now();
+			await auth.login('ada@example.test', 'wrong-password');
+			const wrongPassword = Date.now() - wrongPasswordAt;
+
+			const unknownAt = Date.now();
+			await auth.login('nobody@example.test', 'wrong-password');
+			const unknown = Date.now() - unknownAt;
+
+			// Both do real work; neither is an early return. Generous bounds — this
+			// is about orders of magnitude, not microseconds.
+			expect(unknown).toBeGreaterThan(wrongPassword / 4);
+			expect(wrongPassword).toBeGreaterThan(unknown / 4);
+		});
 	});
 
 	describe('sessions', () => {
