@@ -23,5 +23,9 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 # Playwright
 test-results
-# SQLite
+# SQLite. The -wal/-shm sidecars appear because the connection runs in WAL mode
+# (ADR 0015 Stage 0); they are as much a local artefact as the database itself.
 *.db
+*.db-wal
+*.db-shm
+*.db-journal
