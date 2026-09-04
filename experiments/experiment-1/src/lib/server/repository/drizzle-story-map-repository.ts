@@ -152,17 +152,23 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 		// and SQLite reports SQLITE_BUSY_SNAPSHOT — which the busy handler never
 		// retries, so `busy_timeout` cannot save it (ADR 0015 Stage 0).
 		//
-		// This one happens to write first today, so it is safe either way; it is
-		// marked anyway so that adding a read at the top (an ownership check, say)
-		// cannot silently reintroduce the hazard. `delete()` below really does
-		// read first, and really does fail without this.
+		// **Required here, not precautionary.** This transaction reads the version
+		// and the caller's membership before it writes, so both of those reads
+		// depend on the lock already being held. `delete()` below is the same
+		// shape. (This comment used to say the method wrote first and was safe
+		// either way; that stopped being true when the compare-and-set became a
+		// read-then-write.)
 		this.db.transaction(
 			(tx) => {
 				// Read the current version, then decide. This used to be a conditional
 				// `UPDATE ... WHERE version = ?` whose affected-row count said whether
-				// it matched — but an affected-row count is the one thing the two
-				// SQLite drivers do not agree on (`RunResult` against `void`), and the
-				// seed script runs on the other one.
+				// it matched. The count is unavailable through `AppDatabase`: Drizzle
+				// types its bun-sqlite driver's `.run()` as returning `void` where
+				// better-sqlite3's returns `RunResult`, so the shared supertype offers
+				// nothing to read. Note this is a *typing* gap and not a difference in
+				// behaviour — `bun:sqlite` does report `changes` at runtime — but the
+				// repository is written against the shared type, not against whichever
+				// driver happens to be underneath.
 				//
 				// Correct *only* because the transaction is immediate: the write lock
 				// is held from BEGIN, so nothing can commit between this read and the

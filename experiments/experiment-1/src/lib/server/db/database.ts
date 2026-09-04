@@ -9,8 +9,11 @@ import type * as schema from './schema';
  * `better-sqlite3`, and `scripts/seed.ts` runs on `bun:sqlite` because
  * better-sqlite3 segfaults the Bun runtime on connection.
  *
- * The two differ only in what a write returns — `RunResult` against `void` —
- * which is exactly why `save()` must not read an affected-row count. See the
- * compare-and-set in `drizzle-story-map-repository.ts`.
+ * The two are typed differently for what a write returns — `RunResult` against
+ * `void` — so this supertype offers nothing there, which is why `save()` must
+ * not read an affected-row count. That is a gap in Drizzle's types rather than
+ * a difference in behaviour: `bun:sqlite` does report `changes` at runtime. The
+ * repository is written against this type, not against whichever driver is
+ * underneath, so the constraint is real either way.
  */
 export type AppDatabase = BaseSQLiteDatabase<'sync', unknown, typeof schema>;

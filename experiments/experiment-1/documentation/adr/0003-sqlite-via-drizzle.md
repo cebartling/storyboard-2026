@@ -51,13 +51,23 @@ than `BetterSQLite3Database`. The choice of driver is now the composition root's
 where it belonged.
 
 That cost one substantive change. The compare-and-set added under ADR 0015 Stage 0 read the
-affected-row count of a conditional `UPDATE … WHERE version = ?` — and the affected-row
-count is precisely what the two drivers disagree on (`RunResult` against `void`). It is now
-a read-then-write inside the transaction, which is correct **only because the transaction is
-`{ behavior: 'immediate' }`**: the write lock is held from `BEGIN`, so nothing can commit in
-between. Under a deferred transaction the new form would be racy where the old one was not.
-The concurrency tests that hold a lock from a worker thread are what check this, and they
-passed unchanged through the rewrite.
+affected-row count of a conditional `UPDATE … WHERE version = ?`, and that count is not
+available through the shared type: Drizzle types its bun-sqlite driver's `.run()` as
+returning `void` where better-sqlite3's returns `RunResult`.
+
+Be precise about what that is, because an earlier draft of this amendment was not: it is a
+gap in **Drizzle's types**, not a difference in behaviour. `bun:sqlite` reports `changes` at
+runtime perfectly well. The repository is written against `AppDatabase` rather than against
+whichever driver is underneath, so the constraint binds regardless — but "the drivers
+disagree at runtime" was wrong, and anyone reasoning from it would reach false conclusions.
+
+The compare-and-set is now a read-then-write inside the transaction, correct **only because
+the transaction is `{ behavior: 'immediate' }`**: the write lock is held from `BEGIN`, so
+nothing can commit in between. Under a deferred transaction this form would be racy where
+the conditional UPDATE was not. Keeping the conditional UPDATE and re-reading the version
+afterwards would have avoided that dependency; it was not done because `immediate` is
+already required by the membership check in the same transaction, and the concurrency tests
+that hold a lock from a worker thread cover it. They passed unchanged through the rewrite.
 
 The "no concurrency path" caveat above is also softer than when it was written: ADR 0015
 Stage 0 added WAL and a busy timeout, and those pragmas now live in

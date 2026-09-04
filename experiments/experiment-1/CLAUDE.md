@@ -191,9 +191,11 @@ exception: the seed script opens its own connection through `bun:sqlite`, which 
 
 Two consequences worth knowing before changing any of this:
 
-- **`save()` must not read an affected-row count.** The two drivers disagree there
-  (`RunResult` against `void`), which is why the compare-and-set is a read-then-write and
-  why it depends on `{ behavior: 'immediate' }` for correctness. See the comment on it.
+- **`save()` must not read an affected-row count.** Drizzle types the two drivers'
+  writes differently (`RunResult` against `void`), so the shared `AppDatabase` type offers
+  nothing to read — a typing gap, not a behavioural one; `bun:sqlite` does report `changes`
+  at runtime. That is why the compare-and-set is a read-then-write, and why it depends on
+  `{ behavior: 'immediate' }` for correctness. See the comment on it.
 - **The demo's preview server runs under Node**, spawned as a child process by
   `demo/harness.ts`. Only the driving script is Bun. Do not "simplify" that.
 
