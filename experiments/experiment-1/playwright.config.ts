@@ -11,5 +11,10 @@ export default defineConfig({
 		env: { DATABASE_URL: 'e2e.db' },
 		reuseExistingServer: false
 	},
+	// Set explicitly rather than left to Playwright's inference from
+	// `webServer.port`: the auth fixture builds its own browser contexts, which
+	// do not inherit the test-scoped `baseURL`, and a worker fixture reads this
+	// off the project config instead.
+	use: { baseURL: 'http://localhost:4173' },
 	testMatch: '**/*.e2e.{ts,js}'
 });

@@ -4,7 +4,7 @@
  * `AiAssistant` contract-style commitment.
  */
 
-import type { MapId } from './ids';
+import type { MapId, UserId } from './ids';
 import type { StoryMap } from './story-map';
 
 /**
@@ -12,13 +12,57 @@ import type { StoryMap } from './story-map';
  * the domain layer's rank math and move/slice semantics free of Drizzle
  * types, so `src/lib/domain/` unit-tests with zero database (see ADR 0004).
  * Start coarse (whole-map `save()`); revisit only if drags feel slow.
+ *
+ * Every method takes a `Caller`, which is the port-signature change ADR 0006
+ * priced (finding A10) and ADR 0016 pays. Authorisation is enforced in the
+ * adapters rather than the app layer because the adapters are what hold the
+ * membership rows: one query answers "does this exist" and "may they" together,
+ * and a non-member simply gets null. The cost of policy living in two
+ * implementations is drift, which is why both are held to one shared contract
+ * test (`src/lib/app/story-map-repository-contract.ts`).
  */
+export type Role = 'owner' | 'editor';
+
+/**
+ * Who is making the request. A value, not a service — the app layer never sees
+ * a user record, only this (ADR 0016).
+ */
+export interface Caller {
+	readonly userId: UserId;
+}
+
+/** A map the caller may see, and what they are allowed to do with it. */
+export interface MapAccess {
+	map: StoryMap;
+	role: Role;
+}
+
+export interface MapSummary {
+	id: MapId;
+	name: string;
+	createdAt: Date;
+	role: Role;
+}
+
 export interface StoryMapRepository {
-	load(id: MapId): Promise<StoryMap | null>;
-	/** Saves only when `map.version` is still current, then returns the new version. */
-	save(map: StoryMap): Promise<StoryMap>;
-	listSummaries(): Promise<{ id: MapId; name: string; createdAt: Date }[]>;
-	delete(id: MapId): Promise<void>;
+	/**
+	 * Returns null when the map does not exist **or** the caller is not a member.
+	 * The two are deliberately indistinguishable: a caller who could tell them
+	 * apart could enumerate other people's map ids.
+	 */
+	load(caller: Caller, id: MapId): Promise<MapAccess | null>;
+	/**
+	 * Saves only when `map.version` is still current, then returns the new
+	 * version. A map the store has never seen is created with `caller` as its
+	 * owner, in the same transaction — there is no window in which a map exists
+	 * with nobody able to reach it.
+	 */
+	save(caller: Caller, map: StoryMap): Promise<StoryMap>;
+	listSummaries(caller: Caller): Promise<MapSummary[]>;
+	/** Owner only. A no-op when the map is missing or the caller is not a member. */
+	delete(caller: Caller, id: MapId): Promise<void>;
+	/** Owner only, and idempotent for someone who is already a member. */
+	addMember(caller: Caller, id: MapId, userId: UserId, role: 'editor'): Promise<void>;
 }
 
 /**

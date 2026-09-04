@@ -21,28 +21,45 @@ import type { ActivityId, MapId, SliceId, StepId, StoryId } from '$lib/domain/id
 
 import { buildBoardViewModel } from '$lib/board/board-view-model';
 import { optionalNeighbour, requireString, requireVersion } from './form-fields';
+import { requireCaller } from '$lib/server/auth/require-caller';
 import { runAction } from '../../run-action';
 
-export const load: PageServerLoad = async ({ params }) => {
-	const map = await loadMap(deps.storyMapRepository, params.mapId as MapId);
-	if (!map) {
+export const load: PageServerLoad = async ({ params, locals }) => {
+	const access = await loadMap(
+		deps.storyMapRepository,
+		requireCaller(locals),
+		params.mapId as MapId
+	);
+	// 404, not 403: `load` returns null for a map that is not yours exactly as
+	// for one that does not exist, so an outsider cannot probe for map ids.
+	if (!access) {
 		error(404, `No story map with id ${params.mapId}`);
 	}
 
-	return { board: buildBoardViewModel(map) };
+	// The role travels beside the board rather than inside the view model: it is
+	// a fact about the viewer, not about the map.
+	return { board: buildBoardViewModel(access.map), role: access.role };
 };
 
 export const actions: Actions = {
-	addActivity: async ({ request, params }) => {
+	addActivity: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
 		const form = await request.formData();
 		return runAction('addActivity', async () => {
 			const expectedVersion = requireVersion(form.get('version'));
 			const name = requireString(form.get('name'), 'Activity name');
-			await addActivity(deps.storyMapRepository, params.mapId as MapId, expectedVersion, name);
+			await addActivity(
+				deps.storyMapRepository,
+				caller,
+				params.mapId as MapId,
+				expectedVersion,
+				name
+			);
 		});
 	},
 
-	renameActivity: async ({ request, params }) => {
+	renameActivity: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
 		const form = await request.formData();
 		return runAction('renameActivity', async () => {
 			const expectedVersion = requireVersion(form.get('version'));
@@ -50,6 +67,7 @@ export const actions: Actions = {
 			const name = requireString(form.get('name'), 'Activity name');
 			await renameActivity(
 				deps.storyMapRepository,
+				caller,
 				params.mapId as MapId,
 				expectedVersion,
 				activityId,
@@ -58,13 +76,15 @@ export const actions: Actions = {
 		});
 	},
 
-	deleteActivity: async ({ request, params }) => {
+	deleteActivity: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
 		const form = await request.formData();
 		return runAction('deleteActivity', async () => {
 			const expectedVersion = requireVersion(form.get('version'));
 			const activityId = requireString(form.get('activityId'), 'activityId') as ActivityId;
 			await deleteActivity(
 				deps.storyMapRepository,
+				caller,
 				params.mapId as MapId,
 				expectedVersion,
 				activityId
@@ -72,7 +92,8 @@ export const actions: Actions = {
 		});
 	},
 
-	addStep: async ({ request, params }) => {
+	addStep: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
 		const form = await request.formData();
 		return runAction('addStep', async () => {
 			const expectedVersion = requireVersion(form.get('version'));
@@ -80,6 +101,7 @@ export const actions: Actions = {
 			const name = requireString(form.get('name'), 'Step name');
 			await addStep(
 				deps.storyMapRepository,
+				caller,
 				params.mapId as MapId,
 				expectedVersion,
 				activityId,
@@ -88,7 +110,8 @@ export const actions: Actions = {
 		});
 	},
 
-	renameStep: async ({ request, params }) => {
+	renameStep: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
 		const form = await request.formData();
 		return runAction('renameStep', async () => {
 			const expectedVersion = requireVersion(form.get('version'));
@@ -96,6 +119,7 @@ export const actions: Actions = {
 			const name = requireString(form.get('name'), 'Step name');
 			await renameStep(
 				deps.storyMapRepository,
+				caller,
 				params.mapId as MapId,
 				expectedVersion,
 				stepId,
@@ -104,25 +128,40 @@ export const actions: Actions = {
 		});
 	},
 
-	deleteStep: async ({ request, params }) => {
+	deleteStep: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
 		const form = await request.formData();
 		return runAction('deleteStep', async () => {
 			const expectedVersion = requireVersion(form.get('version'));
 			const stepId = requireString(form.get('stepId'), 'stepId') as StepId;
-			await deleteStep(deps.storyMapRepository, params.mapId as MapId, expectedVersion, stepId);
+			await deleteStep(
+				deps.storyMapRepository,
+				caller,
+				params.mapId as MapId,
+				expectedVersion,
+				stepId
+			);
 		});
 	},
 
-	createSlice: async ({ request, params }) => {
+	createSlice: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
 		const form = await request.formData();
 		return runAction('createSlice', async () => {
 			const expectedVersion = requireVersion(form.get('version'));
 			const name = requireString(form.get('name'), 'Slice name');
-			await createSlice(deps.storyMapRepository, params.mapId as MapId, expectedVersion, name);
+			await createSlice(
+				deps.storyMapRepository,
+				caller,
+				params.mapId as MapId,
+				expectedVersion,
+				name
+			);
 		});
 	},
 
-	renameSlice: async ({ request, params }) => {
+	renameSlice: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
 		const form = await request.formData();
 		return runAction('renameSlice', async () => {
 			const expectedVersion = requireVersion(form.get('version'));
@@ -130,6 +169,7 @@ export const actions: Actions = {
 			const name = requireString(form.get('name'), 'Slice name');
 			await renameSlice(
 				deps.storyMapRepository,
+				caller,
 				params.mapId as MapId,
 				expectedVersion,
 				sliceId,
@@ -138,16 +178,24 @@ export const actions: Actions = {
 		});
 	},
 
-	deleteSlice: async ({ request, params }) => {
+	deleteSlice: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
 		const form = await request.formData();
 		return runAction('deleteSlice', async () => {
 			const expectedVersion = requireVersion(form.get('version'));
 			const sliceId = requireString(form.get('sliceId'), 'sliceId') as SliceId;
-			await deleteSlice(deps.storyMapRepository, params.mapId as MapId, expectedVersion, sliceId);
+			await deleteSlice(
+				deps.storyMapRepository,
+				caller,
+				params.mapId as MapId,
+				expectedVersion,
+				sliceId
+			);
 		});
 	},
 
-	addStory: async ({ request, params }) => {
+	addStory: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
 		const form = await request.formData();
 		return runAction('addStory', async () => {
 			const expectedVersion = requireVersion(form.get('version'));
@@ -158,6 +206,7 @@ export const actions: Actions = {
 				typeof sliceIdRaw === 'string' && sliceIdRaw.length > 0 ? (sliceIdRaw as SliceId) : null;
 			await addStory(
 				deps.storyMapRepository,
+				caller,
 				params.mapId as MapId,
 				expectedVersion,
 				stepId,
@@ -167,7 +216,8 @@ export const actions: Actions = {
 		});
 	},
 
-	editStory: async ({ request, params }) => {
+	editStory: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
 		const form = await request.formData();
 		return runAction('editStory', async () => {
 			const expectedVersion = requireVersion(form.get('version'));
@@ -181,23 +231,38 @@ export const actions: Actions = {
 				typeof descriptionRaw === 'string' && descriptionRaw.trim().length > 0
 					? descriptionRaw.trim()
 					: null;
-			await editStory(deps.storyMapRepository, params.mapId as MapId, expectedVersion, storyId, {
-				title,
-				description
-			});
+			await editStory(
+				deps.storyMapRepository,
+				caller,
+				params.mapId as MapId,
+				expectedVersion,
+				storyId,
+				{
+					title,
+					description
+				}
+			);
 		});
 	},
 
-	deleteStory: async ({ request, params }) => {
+	deleteStory: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
 		const form = await request.formData();
 		return runAction('deleteStory', async () => {
 			const expectedVersion = requireVersion(form.get('version'));
 			const storyId = requireString(form.get('storyId'), 'storyId') as StoryId;
-			await deleteStory(deps.storyMapRepository, params.mapId as MapId, expectedVersion, storyId);
+			await deleteStory(
+				deps.storyMapRepository,
+				caller,
+				params.mapId as MapId,
+				expectedVersion,
+				storyId
+			);
 		});
 	},
 
-	moveStory: async ({ request, params }) => {
+	moveStory: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
 		const form = await request.formData();
 		return runAction('moveStory', async () => {
 			const expectedVersion = requireVersion(form.get('version'));
@@ -210,6 +275,7 @@ export const actions: Actions = {
 			const afterId = optionalNeighbour(form.get('afterId'));
 			await moveStory(
 				deps.storyMapRepository,
+				caller,
 				params.mapId as MapId,
 				expectedVersion,
 				storyId,

@@ -1,5 +1,13 @@
 import { sql } from 'drizzle-orm';
-import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import {
+	check,
+	index,
+	integer,
+	primaryKey,
+	sqliteTable,
+	text,
+	uniqueIndex
+} from 'drizzle-orm/sqlite-core';
 
 // StoryMap — the aggregate root. See documentation/domain-model.md.
 export const maps = sqliteTable('maps', {
@@ -81,5 +89,66 @@ export const stories = sqliteTable(
 		uniqueIndex('stories_step_id_unsliced_rank_idx')
 			.on(table.stepId, table.rank)
 			.where(sql`${table.sliceId} is null`)
+	]
+);
+
+// ---------------------------------------------------------------------------
+// Accounts and access (ADR 0016). Deliberately outside the StoryMap aggregate:
+// membership is not a board invariant, and `save()` rewrites every child row of
+// the aggregate on each write — putting members in there would rewrite the
+// access list on every drag.
+// ---------------------------------------------------------------------------
+
+export const users = sqliteTable('users', {
+	id: text('id').primaryKey(),
+	/** Stored lowercased and trimmed, so uniqueness means what a person expects. */
+	email: text('email').notNull().unique(),
+	displayName: text('display_name').notNull(),
+	/** `scrypt$<salt>$<hash>`, both base64url. See `auth/password.ts`. */
+	passwordHash: text('password_hash').notNull(),
+	createdAt: integer('created_at', { mode: 'timestamp' })
+		.notNull()
+		.$defaultFn(() => new Date())
+});
+
+/**
+ * Sessions, keyed by the SHA-256 of the token rather than the token itself: the
+ * raw value exists only in the user's cookie, so a leaked database does not
+ * hand over live sessions. Logging out is a DELETE, which is the thing a signed
+ * cookie or JWT cannot do without a denylist that is itself a table.
+ */
+export const sessions = sqliteTable(
+	'sessions',
+	{
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull()
+	},
+	(table) => [index('sessions_user_id_idx').on(table.userId)]
+);
+
+export const mapMembers = sqliteTable(
+	'map_members',
+	{
+		mapId: text('map_id')
+			.notNull()
+			.references(() => maps.id, { onDelete: 'cascade' }),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		role: text('role', { enum: ['owner', 'editor'] }).notNull()
+	},
+	(table) => [
+		primaryKey({ columns: [table.mapId, table.userId] }),
+		index('map_members_user_id_idx').on(table.userId),
+		// Exactly one owner per map, enforced in the schema rather than by
+		// convention — the same partial-index technique as
+		// `stories_step_id_unsliced_rank_idx`.
+		uniqueIndex('map_members_one_owner_idx')
+			.on(table.mapId)
+			.where(sql`"role" = 'owner'`),
+		check('map_members_role_check', sql`"role" in ('owner', 'editor')`)
 	]
 );

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../e2e/auth-fixture';
 
 // End-to-end slice for step 6 (map CRUD): create a map from `/`, land on
 // its board, reload, and confirm it persisted. Runs against its own

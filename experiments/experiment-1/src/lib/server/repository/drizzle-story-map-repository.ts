@@ -11,18 +11,36 @@
  * `StoryMap`, `save()` takes one.
  */
 
-import { ConflictError } from '$lib/domain/errors';
+import { ConflictError, ForbiddenError } from '$lib/domain/errors';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import type { ActivityId, MapId, SliceId, StepId, StoryId } from '$lib/domain/ids';
-import type { StoryMapRepository } from '$lib/domain/ports';
+import type { ActivityId, MapId, SliceId, StepId, StoryId, UserId } from '$lib/domain/ids';
+import type { Caller, MapAccess, MapSummary, Role, StoryMapRepository } from '$lib/domain/ports';
 import type { Activity, Slice, Step, Story, StoryMap } from '$lib/domain/story-map';
 import * as schema from '../db/schema';
 
 export class DrizzleStoryMapRepository implements StoryMapRepository {
 	constructor(private readonly db: BetterSQLite3Database<typeof schema>) {}
 
-	async load(id: MapId): Promise<StoryMap | null> {
+	/**
+	 * The caller's role on a map, or null if they are not a member. One row, and
+	 * it answers both "does this exist" and "may they" — which is the reason
+	 * ADR 0016 puts authorisation here rather than in the app layer.
+	 */
+	private roleWithin(
+		tx: BetterSQLite3Database<typeof schema>,
+		mapId: MapId,
+		userId: UserId
+	): Role | null {
+		const row = tx
+			.select({ role: schema.mapMembers.role })
+			.from(schema.mapMembers)
+			.where(and(eq(schema.mapMembers.mapId, mapId), eq(schema.mapMembers.userId, userId)))
+			.get();
+		return row?.role ?? null;
+	}
+
+	async load(caller: Caller, id: MapId): Promise<MapAccess | null> {
 		// One transaction for five reads. In-process this is already safe —
 		// better-sqlite3 is synchronous, so nothing interleaves — but the seed
 		// script and the e2e server are documented concurrent writers on the same
@@ -30,7 +48,14 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 		// otherwise hand back a torn aggregate: stories referencing steps that
 		// are not in `activities`. Cheap here, and it makes the guarantee the
 		// caller already assumes actually true.
-		return this.db.transaction((tx) => this.loadWithin(tx, id));
+		return this.db.transaction((tx) => {
+			const role = this.roleWithin(tx, id, caller.userId);
+			// A non-member is told exactly what someone asking for a nonexistent
+			// map is told, so ids cannot be probed for.
+			if (!role) return null;
+			const map = this.loadWithin(tx, id);
+			return map ? { map, role } : null;
+		});
 	}
 
 	private loadWithin(db: BetterSQLite3Database<typeof schema>, id: MapId): StoryMap | null {
@@ -114,7 +139,7 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 		};
 	}
 
-	async save(map: StoryMap): Promise<StoryMap> {
+	async save(caller: Caller, map: StoryMap): Promise<StoryMap> {
 		const nextVersion = map.version + 1;
 		// `immediate` takes the write lock at BEGIN rather than on the first
 		// write. Without it, a transaction that reads before it writes holds a
@@ -128,6 +153,19 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 		// read first, and really does fail without this.
 		this.db.transaction(
 			(tx) => {
+				// Membership is checked inside the same transaction as the write, so
+				// access revoked concurrently cannot be raced. This is the "read at
+				// the top" the comment above anticipated — the immediate BEGIN is
+				// what keeps it safe.
+				const existingRow = tx
+					.select({ id: schema.maps.id })
+					.from(schema.maps)
+					.where(eq(schema.maps.id, map.id))
+					.get();
+				if (existingRow && !this.roleWithin(tx, map.id, caller.userId)) {
+					throw new ForbiddenError('You do not have access to this story map.');
+				}
+
 				const update = tx
 					.update(schema.maps)
 					.set({ name: map.name, createdAt: map.createdAt, version: nextVersion })
@@ -157,6 +195,12 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 							createdAt: map.createdAt,
 							version: nextVersion
 						})
+						.run();
+					// The owner row goes in with the map, in the same transaction, so
+					// there is never an instant at which a map exists that nobody can
+					// reach.
+					tx.insert(schema.mapMembers)
+						.values({ mapId: map.id, userId: caller.userId, role: 'owner' })
 						.run();
 				}
 
@@ -235,17 +279,24 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 		return { ...map, version: nextVersion };
 	}
 
-	async listSummaries(): Promise<{ id: MapId; name: string; createdAt: Date }[]> {
+	async listSummaries(caller: Caller): Promise<MapSummary[]> {
 		const rows = this.db
-			.select({ id: schema.maps.id, name: schema.maps.name, createdAt: schema.maps.createdAt })
+			.select({
+				id: schema.maps.id,
+				name: schema.maps.name,
+				createdAt: schema.maps.createdAt,
+				role: schema.mapMembers.role
+			})
 			.from(schema.maps)
+			.innerJoin(schema.mapMembers, eq(schema.mapMembers.mapId, schema.maps.id))
+			.where(eq(schema.mapMembers.userId, caller.userId))
 			.all();
 		return rows
-			.map((r) => ({ id: r.id as MapId, name: r.name, createdAt: r.createdAt }))
+			.map((r) => ({ id: r.id as MapId, name: r.name, createdAt: r.createdAt, role: r.role }))
 			.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 	}
 
-	async delete(id: MapId): Promise<void> {
+	async delete(caller: Caller, id: MapId): Promise<void> {
 		// Delete leaf-first rather than leaning on the FK cascades. `stories`
 		// references `slices` with ON DELETE SET NULL, so cascading from the map
 		// would un-slice every story on the way out — and un-slicing en masse
@@ -254,6 +305,14 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 		// move to the unsliced band.
 		this.db.transaction(
 			(tx) => {
+				const role = this.roleWithin(tx, id, caller.userId);
+				// Silent for a non-member: they must not be able to tell a map they
+				// cannot see from one that was never there.
+				if (!role) return;
+				if (role !== 'owner') {
+					throw new ForbiddenError('Only the owner can delete this story map.');
+				}
+
 				const activityIds = tx
 					.select({ id: schema.activities.id })
 					.from(schema.activities)
@@ -285,6 +344,25 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 			// See save(): this transaction reads the child ids before deleting
 			// them, which is exactly the read-then-write shape that fails under
 			// contention without an immediate BEGIN.
+			{ behavior: 'immediate' }
+		);
+	}
+	async addMember(caller: Caller, id: MapId, userId: UserId, role: 'editor'): Promise<void> {
+		this.db.transaction(
+			(tx) => {
+				if (this.roleWithin(tx, id, caller.userId) !== 'owner') {
+					// Deliberately the same answer for an editor and for a stranger:
+					// neither may share the map on, and distinguishing them would tell
+					// a stranger the map exists.
+					throw new ForbiddenError('Only the owner can share this story map.');
+				}
+				// Idempotent: re-sharing with someone who is already on the map is a
+				// thing people do, and it is not an error.
+				tx.insert(schema.mapMembers)
+					.values({ mapId: id, userId, role })
+					.onConflictDoNothing()
+					.run();
+			},
 			{ behavior: 'immediate' }
 		);
 	}

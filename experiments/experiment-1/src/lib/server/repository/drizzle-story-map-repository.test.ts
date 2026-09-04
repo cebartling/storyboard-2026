@@ -18,6 +18,9 @@ import {
 } from '$lib/domain/story-map';
 import type { Story } from '$lib/domain/story-map';
 import { buildRetailCommerceMap } from '$lib/seed/retail-commerce';
+import type { UserId } from '$lib/domain/ids';
+import type { Caller } from '$lib/domain/ports';
+import { describeStoryMapRepositoryContract } from '$lib/app/story-map-repository-contract';
 import { openDatabase } from '../db/open';
 import * as schema from '../db/schema';
 import { DrizzleStoryMapRepository } from './drizzle-story-map-repository';
@@ -52,6 +55,12 @@ describe('DrizzleStoryMapRepository', () => {
 	let client: Database.Database;
 	let db: BetterSQLite3Database<typeof schema>;
 	let repository: DrizzleStoryMapRepository;
+	const caller: Caller = { userId: 'repo-test-owner' as UserId };
+
+	/** `load` now returns `{ map, role }`; most of these tests only want the map. */
+	async function loadMap(id: MapId) {
+		return (await repository.load(caller, id))?.map ?? null;
+	}
 
 	beforeAll(() => {
 		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'story-map-repo-test-'));
@@ -62,6 +71,16 @@ describe('DrizzleStoryMapRepository', () => {
 		db = drizzle(client, { schema });
 		migrate(db, { migrationsFolder });
 		repository = new DrizzleStoryMapRepository(db);
+		// Every map needs an owner now (ADR 0016), and map_members has a real FK
+		// to users, so the caller has to be a row rather than a bare id.
+		db.insert(schema.users)
+			.values({
+				id: caller.userId,
+				email: 'owner@example.test',
+				displayName: 'Owner',
+				passwordHash: 'not-a-real-hash'
+			})
+			.run();
 	});
 
 	afterAll(() => {
@@ -112,8 +131,8 @@ describe('DrizzleStoryMapRepository', () => {
 	it('round-trips a full aggregate: activities, steps, slices, and stories', async () => {
 		const map = buildSampleMap();
 
-		const saved = await repository.save(map);
-		const loaded = await repository.load(map.id);
+		const saved = await repository.save(caller, map);
+		const loaded = await loadMap(map.id);
 
 		expect(loaded).not.toBeNull();
 		// Stories have no single well-defined order across the whole map (rank
@@ -145,8 +164,8 @@ describe('DrizzleStoryMapRepository', () => {
 		// Reorder: move "Third" to the front.
 		map = moveStory(map, story3.story.id, s.step.id, null, null, story1.story.id);
 
-		await repository.save(map);
-		const loaded = await repository.load(map.id);
+		await repository.save(caller, map);
+		const loaded = await loadMap(map.id);
 
 		expect(loaded!.stories.map((story) => story.title)).toEqual(['Third', 'First', 'Second']);
 	});
@@ -160,22 +179,22 @@ describe('DrizzleStoryMapRepository', () => {
 		const story = addStory(map, s.step.id, 'Unsliced story');
 		map = story.map;
 
-		await repository.save(map);
-		const loaded = await repository.load(map.id);
+		await repository.save(caller, map);
+		const loaded = await loadMap(map.id);
 
 		expect(loaded!.stories[0].sliceId).toBeNull();
 	});
 
 	it('load() returns null for an id that does not exist', async () => {
-		const loaded = await repository.load('00000000-0000-0000-0000-000000000000' as MapId);
+		const loaded = await loadMap('00000000-0000-0000-0000-000000000000' as MapId);
 		expect(loaded).toBeNull();
 	});
 
 	it('listSummaries() lists saved maps without their nested entities', async () => {
 		const map = buildSampleMap();
-		await repository.save(map);
+		await repository.save(caller, map);
 
-		const summaries = await repository.listSummaries();
+		const summaries = await repository.listSummaries(caller);
 		const summary = summaries.find((s) => s.id === map.id);
 
 		expect(summary).toBeDefined();
@@ -184,26 +203,26 @@ describe('DrizzleStoryMapRepository', () => {
 
 	it('saving the current version twice does not duplicate rows', async () => {
 		const map = buildSampleMap();
-		const firstSave = await repository.save(map);
-		await repository.save(firstSave);
+		const firstSave = await repository.save(caller, map);
+		await repository.save(caller, firstSave);
 
-		const loaded = await repository.load(map.id);
+		const loaded = await loadMap(map.id);
 		expect(loaded!.stories).toHaveLength(map.stories.length);
 		expect(loaded!.activities).toHaveLength(map.activities.length);
 	});
 
 	it('rejects a stale save without overwriting the newer change', async () => {
 		const map = buildSampleMap();
-		await repository.save(map);
-		const firstRequest = await repository.load(map.id);
-		const staleRequest = await repository.load(map.id);
+		await repository.save(caller, map);
+		const firstRequest = await loadMap(map.id);
+		const staleRequest = await loadMap(map.id);
 
-		await repository.save({ ...firstRequest!, name: 'Saved by first request' });
+		await repository.save(caller, { ...firstRequest!, name: 'Saved by first request' });
 
 		await expect(
-			repository.save({ ...staleRequest!, name: 'Overwritten by stale request' })
+			repository.save(caller, { ...staleRequest!, name: 'Overwritten by stale request' })
 		).rejects.toThrow(/changed since it was loaded/);
-		expect((await repository.load(map.id))!.name).toBe('Saved by first request');
+		expect((await loadMap(map.id))!.name).toBe('Saved by first request');
 	});
 
 	// A1 of documentation/review-2026-09-02.md, as an experiment rather than an
@@ -218,15 +237,15 @@ describe('DrizzleStoryMapRepository', () => {
 	// accident of implementation.
 	it('rejects a second editor who changed a different story than the first', async () => {
 		const map = buildSampleMap();
-		await repository.save(map);
+		await repository.save(caller, map);
 
-		const alice = (await repository.load(map.id))!;
-		const bob = (await repository.load(map.id))!;
+		const alice = (await loadMap(map.id))!;
+		const bob = (await loadMap(map.id))!;
 
 		const [first, second] = alice.stories;
 		expect(first.id).not.toBe(second.id);
 
-		await repository.save({
+		await repository.save(caller, {
 			...alice,
 			stories: alice.stories.map((s) =>
 				s.id === first.id ? { ...s, title: 'Renamed by Alice' } : s
@@ -234,7 +253,7 @@ describe('DrizzleStoryMapRepository', () => {
 		});
 
 		await expect(
-			repository.save({
+			repository.save(caller, {
 				...bob,
 				stories: bob.stories.map((s) =>
 					s.id === second.id ? { ...s, title: 'Renamed by Bob' } : s
@@ -244,7 +263,7 @@ describe('DrizzleStoryMapRepository', () => {
 
 		// Bob's edit is lost entirely: he has to reload and retype it, even
 		// though the two edits could not have conflicted.
-		const after = (await repository.load(map.id))!;
+		const after = (await loadMap(map.id))!;
 		expect(after.stories.find((s) => s.id === first.id)!.title).toBe('Renamed by Alice');
 		expect(after.stories.find((s) => s.id === second.id)!.title).toBe(second.title);
 	});
@@ -261,7 +280,7 @@ describe('DrizzleStoryMapRepository', () => {
 	// review predicted.
 	it('allows a raw DELETE of a map, and refuses one of a slice that still has stories', async () => {
 		const map = buildSampleMap();
-		await repository.save(map);
+		await repository.save(caller, map);
 		const slice = map.slices[0];
 
 		// Refused, and that is the point: un-slicing is `deleteSlice`'s job in
@@ -274,7 +293,7 @@ describe('DrizzleStoryMapRepository', () => {
 
 		// Cascades all the way down, which it could not do before.
 		expect(() => client.prepare('DELETE FROM maps WHERE id = ?').run(map.id)).not.toThrow();
-		expect(await repository.load(map.id)).toBeNull();
+		expect(await loadMap(map.id)).toBeNull();
 		// Scoped to this map's own rows: the harness shares one temp database
 		// across the file, so other tests' maps are legitimately still there.
 		const remaining = (table: string, column: string, ids: string[]) =>
@@ -302,8 +321,8 @@ describe('DrizzleStoryMapRepository', () => {
 	// come back.
 	it('rolls the whole save back when a child insert fails', async () => {
 		const map = buildSampleMap();
-		const saved = await repository.save(map);
-		const before = (await repository.load(map.id))!;
+		const saved = await repository.save(caller, map);
+		const before = (await loadMap(map.id))!;
 
 		// Two stories in the *same* (step, slice) scope — ranks are scoped, so a
 		// duplicate across two steps would not collide at all.
@@ -320,9 +339,9 @@ describe('DrizzleStoryMapRepository', () => {
 			)
 		};
 
-		await expect(repository.save(collides)).rejects.toThrow(/UNIQUE constraint failed/);
+		await expect(repository.save(caller, collides)).rejects.toThrow(/UNIQUE constraint failed/);
 
-		const after = (await repository.load(map.id))!;
+		const after = (await loadMap(map.id))!;
 		expect(after.version).toBe(saved.version);
 		expect(after.name).toBe(before.name);
 		expect(canonicalStoryOrder(after.stories)).toEqual(canonicalStoryOrder(before.stories));
@@ -334,23 +353,23 @@ describe('DrizzleStoryMapRepository', () => {
 	// caller gets a message that says which.
 	it('reports a deleted map differently from a stale one', async () => {
 		const map = buildSampleMap();
-		await repository.save(map);
-		const loaded = (await repository.load(map.id))!;
+		await repository.save(caller, map);
+		const loaded = (await loadMap(map.id))!;
 
-		await repository.delete(map.id);
+		await repository.delete(caller, map.id);
 
-		await expect(repository.save({ ...loaded, name: 'Writing to a ghost' })).rejects.toThrow(
-			/no longer exists/
-		);
+		await expect(
+			repository.save(caller, { ...loaded, name: 'Writing to a ghost' })
+		).rejects.toThrow(/no longer exists/);
 	});
 
 	it('delete() removes the map and cascades to its children', async () => {
 		const map = buildSampleMap();
-		await repository.save(map);
+		await repository.save(caller, map);
 
-		await repository.delete(map.id);
+		await repository.delete(caller, map.id);
 
-		const loaded = await repository.load(map.id);
+		const loaded = await loadMap(map.id);
 		expect(loaded).toBeNull();
 
 		// Activities alone would pass even if stories were orphaned under a
@@ -394,8 +413,8 @@ describe('DrizzleStoryMapRepository', () => {
 	it('round-trips the retail commerce seed map', async () => {
 		const map = buildRetailCommerceMap(wholeSecondNow());
 
-		const saved = await repository.save(map);
-		const loaded = await repository.load(saved.id);
+		const saved = await repository.save(caller, map);
+		const loaded = await loadMap(saved.id);
 
 		expect(loaded).not.toBeNull();
 		expect(loaded!.activities).toEqual(saved.activities);
@@ -407,7 +426,7 @@ describe('DrizzleStoryMapRepository', () => {
 	describe('rank uniqueness index', () => {
 		it('rejects a duplicate rank within a sliced scope', async () => {
 			const map = buildSampleMap();
-			await repository.save(map);
+			await repository.save(caller, map);
 			const story = map.stories.find((s) => s.sliceId !== null)!;
 
 			expect(() =>
@@ -427,7 +446,7 @@ describe('DrizzleStoryMapRepository', () => {
 
 		it('rejects a duplicate rank in the unsliced band', async () => {
 			const map = buildSampleMap();
-			await repository.save(map);
+			await repository.save(caller, map);
 			const story = map.stories.find((s) => s.sliceId === null)!;
 
 			// SQLite treats NULLs as distinct in a UNIQUE index, so an index on
@@ -485,7 +504,7 @@ describe('DrizzleStoryMapRepository', () => {
 			// so even a deferred BEGIN takes the write lock straight away. This test
 			// exists to catch the day someone puts a SELECT in front of it — see the
 			// `behavior: 'immediate'` comment on the transaction itself.
-			const saved = await repository.save(createStoryMap('Locked out'));
+			const saved = await repository.save(caller, createStoryMap('Locked out'));
 
 			const holdMs = 300;
 			const { locked, worker } = holdWriteLock(dbFile, holdMs);
@@ -493,14 +512,14 @@ describe('DrizzleStoryMapRepository', () => {
 
 			const startedAt = Date.now();
 			await expect(
-				repository.save({ ...saved, name: 'Renamed under contention' })
+				repository.save(caller, { ...saved, name: 'Renamed under contention' })
 			).resolves.toMatchObject({
 				name: 'Renamed under contention'
 			});
 			expect(Date.now() - startedAt).toBeGreaterThanOrEqual(holdMs * 0.8);
 
 			await worker.terminate();
-			expect((await repository.load(saved.id))?.name).toBe('Renamed under contention');
+			expect((await loadMap(saved.id))?.name).toBe('Renamed under contention');
 		});
 
 		it('delete() waits for a concurrent writer rather than failing', async () => {
@@ -508,16 +527,48 @@ describe('DrizzleStoryMapRepository', () => {
 			// first), so a deferred BEGIN takes a read snapshot, then finds that
 			// snapshot stale once the other writer commits: SQLITE_BUSY_SNAPSHOT,
 			// which the busy handler never retries.
-			const saved = await repository.save(createStoryMap('Doomed'));
+			const saved = await repository.save(caller, createStoryMap('Doomed'));
 			const holdMs = 300;
 			const { locked, worker } = holdWriteLock(dbFile, holdMs);
 			await locked;
 			const startedAt = Date.now();
-			await expect(repository.delete(saved.id)).resolves.toBeUndefined();
+			await expect(repository.delete(caller, saved.id)).resolves.toBeUndefined();
 			expect(Date.now() - startedAt).toBeGreaterThanOrEqual(holdMs * 0.8);
 
 			await worker.terminate();
-			expect(await repository.load(saved.id)).toBeNull();
+			expect(await loadMap(saved.id)).toBeNull();
 		});
 	});
+});
+
+// The same contract the in-memory double is held to, against a real migrated
+// SQLite file. A rule that passes here and not there (or vice versa) is the
+// drift ADR 0016 accepts as the cost of enforcing policy in the adapters.
+describeStoryMapRepositoryContract('DrizzleStoryMapRepository', async () => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'story-map-contract-'));
+	const contractClient = openDatabase(path.join(dir, 'test.db'));
+	const contractDb = drizzle(contractClient, { schema });
+	migrate(contractDb, { migrationsFolder });
+
+	let nextUser = 0;
+	return {
+		repository: new DrizzleStoryMapRepository(contractDb),
+		createUser: async () => {
+			// A real row, because map_members has a foreign key to users: the
+			// in-memory double has no such constraint, and this is exactly the kind
+			// of difference the shared contract exists to surface.
+			nextUser += 1;
+			const userId = `contract-user-${nextUser}` as UserId;
+			contractDb
+				.insert(schema.users)
+				.values({
+					id: userId,
+					email: `contract-${nextUser}@example.test`,
+					displayName: `Contract ${nextUser}`,
+					passwordHash: 'not-a-real-hash'
+				})
+				.run();
+			return { userId };
+		}
+	};
 });

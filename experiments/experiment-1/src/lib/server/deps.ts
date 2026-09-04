@@ -13,15 +13,23 @@
 import type { AiAssistant } from '$lib/domain/ports';
 import type { StoryMapRepository } from '$lib/domain/ports';
 import { db } from './db';
+import { Auth } from './auth/auth';
 import { NullAiAssistant } from './ai/null-assistant';
 import { DrizzleStoryMapRepository } from './repository/drizzle-story-map-repository';
 
 export interface Deps {
 	storyMapRepository: StoryMapRepository;
 	aiAssistant: AiAssistant;
+	/**
+	 * Accounts and sessions (ADR 0016). Not an outbound port — see the docblock
+	 * on `Auth` for why — but it is process-scoped state wired once, which is
+	 * what this module is for.
+	 */
+	auth: Auth;
 }
 
 export const deps: Deps = {
 	storyMapRepository: new DrizzleStoryMapRepository(db),
-	aiAssistant: new NullAiAssistant()
+	aiAssistant: new NullAiAssistant(),
+	auth: new Auth(db)
 };
