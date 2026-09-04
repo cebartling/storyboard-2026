@@ -2,7 +2,7 @@ import type { Db } from 'mongodb';
 import { collections } from './collections';
 
 /**
- * Creates the indexes the application's correctness depends on.
+ * Creates the indexes the application's correctness depends on (ADR 0003).
  *
  * This replaces experiment-1's five committed migration files. Documents need
  * no schema migration to add a field, so what is left is exactly the set of

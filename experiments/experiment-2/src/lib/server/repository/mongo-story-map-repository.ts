@@ -6,14 +6,15 @@ import { inRankOrder, type StoryMap } from '$lib/domain/story-map';
 import { collections, memberId, type Collections, type MapDoc } from '../db/collections';
 
 /**
- * `StoryMapRepository` over MongoDB, storing each map as a single document.
+ * `StoryMapRepository` over MongoDB, storing each map as a single document
+ * (ADR 0003).
  *
  * The port is unchanged from experiment-1 — same six methods, same `Caller`
  * argument, same shared contract test. That is deliberate: whether this file
  * could be written without touching anything above it is the experiment.
  *
  * Authorisation is enforced here rather than in the app layer, for the reason
- * experiment-1's ADR 0016 gives: this is what holds the membership rows, so one
+ * ADR 0015 gives: this is what holds the membership rows, so one
  * lookup answers "does it exist" and "may they" together, and a non-member gets
  * the same `null` as someone asking for a map that was never there.
  */
@@ -67,8 +68,8 @@ export class MongoStoryMapRepository implements StoryMapRepository {
 			throw new ForbiddenError('You do not have access to this story map.');
 		}
 
-		// The compare-and-set, and the reason this is nicer than it was: one
-		// atomic conditional update. Experiment-1 had to read the version and
+		// The compare-and-set (ADR 0016), and the reason this is nicer than it
+		// was: one atomic conditional update. Experiment-1 had to read the version and
 		// then write, which was correct only because the transaction took the
 		// write lock at BEGIN. There is no such subtlety here.
 		const result = await this.c.maps.findOneAndUpdate(

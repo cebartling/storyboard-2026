@@ -71,7 +71,7 @@
 		/**
 		 * Whether what this dialog is editing still looks the way it did when the
 		 * dialog opened. Computed by the page from the live board, because live
-		 * refetching means the ground can move under an open editor (ADR 0015).
+		 * refetching means the ground can move under an open editor (ADR 0014).
 		 */
 		subject?: SubjectStatus | null;
 		/** `deleted` when the submission removed the thing the dialog was
@@ -95,11 +95,11 @@
 
 	/**
 	 * The version this editor was opened at — snapshotted, deliberately not read
-	 * live (ADR 0015 §3).
+	 * live (ADR 0014 §3).
 	 *
 	 * Sending the *current* version at submit time would defeat the whole
 	 * mechanism: a dialog opened before someone else's edit would silently adopt
-	 * their version and overwrite them. Live refetching (ADR 0015 §5) makes that
+	 * their version and overwrite them. Live refetching (ADR 0014 §5) makes that
 	 * routine rather than theoretical, so the snapshot has to be taken here, at
 	 * open time, and held until the dialog closes.
 	 */
@@ -170,7 +170,7 @@
 			// is still open, which is long enough to click twice.
 			if (result.type === 'failure') {
 				if (result.status === 409) {
-					// A stale editor (ADR 0015 §3). Refresh the board so the user is
+					// A stale editor (ADR 0014 §3). Refresh the board so the user is
 					// looking at what the other person actually did, and re-snapshot
 					// the version so their next Save is a knowing overwrite rather
 					// than another rejection. What they typed is deliberately left
@@ -232,7 +232,7 @@
 		<p class="error mb-3" role="alert">{error}</p>
 	{/if}
 
-	<!-- The ground moved under this editor while it was open (ADR 0015 Stage 1).
+	<!-- The ground moved under this editor while it was open (ADR 0014 Stage 1).
 	     A notice rather than an error: nothing the user did failed. -->
 	{#if subjectDeleted}
 		<p class="notice mb-3" role="status" data-testid="subject-deleted">
@@ -504,7 +504,7 @@
 		</form>
 	{:else if dialog?.kind === 'shareMap'}
 		<!-- No version input: sharing changes who may reach the map, not the
-		     board, so it neither reads nor advances the aggregate (ADR 0016). -->
+		     board, so it neither reads nor advances the aggregate (ADR 0015). -->
 		<form method="POST" action="?/shareMap" use:enhance={submit} class="flex flex-col gap-3">
 			<p class="text-ink-muted text-sm">
 				People you add can edit <strong>{dialog.mapName}</strong> but cannot delete or share it.

@@ -2,9 +2,9 @@ import { redirect } from '@sveltejs/kit';
 import type { Caller } from '$lib/domain/ports';
 
 /**
- * The **only** place a `Caller` is constructed (ADR 0016).
+ * The **only** place a `Caller` is constructed (ADR 0015).
  *
- * That is the mechanism, not a convention: ADR 0015 §6 insists the presence
+ * That is the mechanism, not a convention: ADR 0014 §6 insists the presence
  * identity must never become the authentication identity, and funnelling every
  * caller through one function that reads `locals.user` — plus `UserId` being a
  * separate brand from the presence client id — is what makes "must not" into

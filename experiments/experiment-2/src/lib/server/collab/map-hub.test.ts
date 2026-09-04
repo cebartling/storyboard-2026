@@ -29,7 +29,7 @@ describe('MapHub', () => {
 		});
 
 		it('carries no payload beyond the sequence number', () => {
-			// ADR 0015 §5: notify-and-refetch, not diff broadcast. Keeping the event
+			// ADR 0014 §5: notify-and-refetch, not diff broadcast. Keeping the event
 			// empty is what makes the decision cheap to revisit and impossible to
 			// half-implement.
 			const hub = new MapHub();
@@ -213,7 +213,7 @@ describe('MapHub', () => {
 			hub.publishCursor(alice.subscriber, { x: 1, y: 2 });
 
 			// A later joiner learns nothing about where anyone's pointer was; losing
-			// them on reconnect is correct behaviour, not data loss (ADR 0015 §6).
+			// them on reconnect is correct behaviour, not data loss (ADR 0014 §6).
 			const bob = recorder('b', 'bob', 'Bob');
 			hub.subscribe(bob.subscriber, null);
 			expect(bob.events.filter((e) => e.type === 'cursor')).toEqual([]);

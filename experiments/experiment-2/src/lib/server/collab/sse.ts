@@ -1,7 +1,7 @@
 import type { MapHub, Participant, HubEvent } from './map-hub';
 
 /**
- * Server-sent events for one map's stream (ADR 0015 §4).
+ * Server-sent events for one map's stream (ADR 0014 §4).
  *
  * SSE rather than a WebSocket because `@sveltejs/adapter-node` has no upgrade
  * seam — supporting sockets would mean replacing the adapter's entry point and
@@ -125,7 +125,7 @@ export function createEventStream(
 /**
  * Ends every open stream.
  *
- * ADR 0015 §4 says to do this on `sveltekit:shutdown`, which cannot work:
+ * ADR 0014 §4 says to do this on `sveltekit:shutdown`, which cannot work:
  * adapter-node emits that event inside `httpServer.close()`'s callback, and
  * Node runs that callback only once every connection has ended — an open SSE
  * stream is a live connection, so the event would arrive at the force-kill

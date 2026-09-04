@@ -27,15 +27,15 @@ request-flow trace.
               │  rank.ts  ids.ts         │   │   ports.ts)             │
               │                          │   │                         │
               │ pure TS, zero svelte/    │   │  StoryMapRepository     │
-              │ drizzle imports —        │   │  AiAssistant            │
+              │ mongodb imports —        │   │  AiAssistant            │
               │ aggregate + move/        │   └──────┬───────────┬────┘
               │ reorder/slice logic      │          │            │
               └──────────────────────────┘   ┌──────▼─────┐  ┌──▼──────────┐
                                               │ src/lib/    │  │ src/lib/    │
                                               │ server/     │  │ server/ai/  │
                                               │ repository/ │  │             │
-                                              │ (Drizzle +  │  │ Null        │
-                                              │  SQLite)    │  │ AiAssistant │
+                                              │ (MongoDB)   │  │ Null        │
+                                              │             │  │ AiAssistant │
                                               └─────────────┘  └─────────────┘
                                                       ▲
                                               composition root:
@@ -48,14 +48,14 @@ request-flow trace.
 
 Two things sit beside that picture rather than inside it:
 
-- **`src/lib/server/auth/`** — accounts and sessions (ADR 0016). Not an outbound port: one
-  implementation, one consumer, already testable against a temp SQLite file, so under
+- **`src/lib/server/auth/`** — accounts and sessions (ADR 0015). Not an outbound port: one
+  implementation, one consumer, already testable against an in-memory MongoDB, so under
   ADR 0006's own test a port would be ceremony. The layers above it see a `Caller`, which is
   a value, never a user record. `src/hooks.server.ts` resolves the session cookie into
   `locals.user`, and `requireCaller(locals)` is the single place a `Caller` is constructed.
-- **`src/lib/app/keyed-lock.ts`** — the per-map write lock (ADR 0015 §2). Neither adapter nor
+- **`src/lib/app/keyed-lock.ts`** — the per-map write lock (ADR 0014 §2). Neither adapter nor
   port; it serialises a use case's whole `load → mutate → save`, which no port method spans.
-- **`src/lib/server/collab/`** — the per-map event hubs and the SSE stream (ADR 0015 Stage 1),
+- **`src/lib/server/collab/`** — the per-map event hubs and the SSE stream (ADR 0014 Stage 1),
   wired in `deps.ts` alongside the adapters. Not a port: nothing in `src/lib/domain/` or
   `src/lib/app/` knows it exists, and the broadcast is published from the route after an
   action succeeds — publishing from a use case would need a third outbound port, which
@@ -73,10 +73,12 @@ that policy lives in two implementations, which is why both are held to
 
 1. **`StoryMapRepository`** — loads and saves a whole `StoryMap` aggregate. This is the
    port that matters for testability: the domain layer's rank math and move/slice
-   semantics can be unit-tested with zero database, and the repository's Drizzle
-   implementation can be integration-tested separately against a real (temp-file) SQLite
-   database. Swappability was not the goal — there is no second implementation planned —
-   testability is.
+   semantics can be unit-tested with zero database, and the repository's MongoDB
+   implementation can be integration-tested separately against a real (in-process,
+   in-memory) replica set. Swappability was not the goal — but it is what this experiment
+   turned out to measure, and the port survived the measurement: the whole adapter was
+   replaced and the port, the contract test, the domain, the use cases, the components and
+   the routes did not change.
 2. **`AiAssistant`** — the user-mandated seam for future AI features. Implemented today
    only as `NullAiAssistant`. The commitment this port represents is the _contract style_
    (domain snapshots in, structured suggestions out, never free text or raw prompts), not
@@ -93,15 +95,21 @@ see ADR 0006 for what was deliberately left out and why.
 
 ## Composition root
 
-`src/lib/server/deps.ts` is where concrete adapters are constructed and wired: the Drizzle
-`StoryMapRepository` implementation with its DB client, and `NullAiAssistant`. `load()`
+`src/lib/server/deps.ts` is where concrete adapters are constructed and wired: the MongoDB
+`StoryMapRepository` implementation with its client, and `NullAiAssistant`. `load()`
 functions and form actions import from `deps.ts` and pass the resulting objects into
-`src/lib/app/` use-case functions. Nothing outside `deps.ts` imports Drizzle or touches a
-DB client directly — that is the boundary the repository port exists to enforce.
+`src/lib/app/` use-case functions. Nothing outside `deps.ts` imports the MongoDB driver or
+touches a client directly — that is the boundary the repository port exists to enforce.
+
+The client is a module-level singleton because that is what a `MongoClient` is for: it is a
+connection pool, meant to be created once and shared, and one per request would defeat
+pooling entirely. It is closed on `SIGTERM`/`SIGINT` beside the SSE streams — its pool holds
+live handles, so leaving it open keeps the event loop alive past the point everything else
+has finished.
 
 `scripts/seed.ts` is the one exception, and only because it is not part of the app: it runs
 outside SvelteKit (`$env/dynamic/private` does not resolve under `tsx`), so it builds its own
-Drizzle client and repository. Its map-building logic lives in `src/lib/seed/`, which imports
+client and repository. Its map-building logic lives in `src/lib/seed/`, which imports
 nothing but `src/lib/domain/` and is unit-tested without a database.
 
 ## Request flow: `moveStory` end to end
@@ -170,32 +178,31 @@ Three layers, each tested at the boundary where it's cheapest to get signal: the
 layer (`src/lib/domain/`) is pure TypeScript with no I/O, so it gets fast Vitest unit
 tests covering rank math, move/reorder, and slice-reassignment invariants directly — this
 is the highest-value test surface in the project because it's where the domain rules
-actually live; the Drizzle `StoryMapRepository` implementation is integration-tested
-against a real temp SQLite file (created and torn down per test run) rather than mocked,
-since the whole point of the port is to isolate Drizzle-specific behavior, and that
-behavior is exactly what needs verifying against a real driver; and Playwright drives the
-full vertical slice through a real browser against the running SvelteKit app (its own
-`e2e.db`), covering the one scenario that matters end to end — create map, add
+actually live; the MongoDB `StoryMapRepository` implementation is integration-tested
+against a real replica set (`mongodb-memory-server`, one server for the run and a fresh
+database per test) rather than mocked, since the whole point of the port is to isolate
+driver-specific behaviour, and that behaviour is exactly what needs verifying against a
+real driver; and Playwright drives the full vertical slice through a real browser against
+the running SvelteKit app (its own `storyboard-e2e` database, dropped before every run),
+covering the one scenario that matters end to end — create map, add
 activity/step/story, drag to reorder, drag onto a slice, reload, and confirm order and
 slice membership persisted.
 
-## Adopting maps created before accounts existed
+## Starting from an empty database
 
-ADR 0016 gives every map an owner, and the migration deliberately does not invent one — a
-fabricated `map_members` row would point at a user id nobody can log in as. Maps in a
-developer's `local.db` from before that change therefore have no members and do not appear
-in any list.
+There are no migrations to run — `src/lib/server/db/indexes.ts` creates the indexes at
+startup and `createIndex` is idempotent, so `pnpm dev`, the e2e server and the demo all work
+against an empty database with no separate step (ADR 0003).
 
-`e2e.db` is deleted on every run and needs nothing. To adopt the old maps in `local.db`,
-register an account in the app, then (via `corepack pnpm db:studio`, or `sqlite3 local.db`):
+Every map needs an owner (ADR 0015), and nothing invents one: a fabricated membership row
+would point at a user id nobody can log in as. So the seed script takes the address of an
+account that already exists.
 
-```sql
-INSERT INTO map_members (map_id, user_id, role)
-SELECT id, (SELECT id FROM users WHERE email = 'you@example.com'), 'owner'
-FROM maps
-WHERE id NOT IN (SELECT map_id FROM map_members);
+```
+corepack pnpm db:up                       # MongoDB, healthy and PRIMARY
+corepack pnpm dev                         # register an account in the app
+corepack pnpm db:seed you@example.com     # the sample map, owned by that account
 ```
 
-This lives here rather than in a script because `local.db` is a development artefact
-(ADR 0003) and the decision of who should own an orphaned map is not one a migration can
-make.
+`corepack pnpm db:reset` throws the volume away and starts again. The e2e and demo
+databases are separate and are dropped before each run, so neither needs tidying.

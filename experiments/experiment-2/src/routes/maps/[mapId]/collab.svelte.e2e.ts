@@ -2,7 +2,7 @@ import { expect, test } from '../../../e2e/auth-fixture';
 import { addActivity, addStep, addStory, createMap, dialog, firstStepId } from './board-helpers';
 
 /**
- * Live collaboration, driven with two real browser contexts (ADR 0015 Stage 1).
+ * Live collaboration, driven with two real browser contexts (ADR 0014 Stage 1).
  *
  * The one rule that keeps these from flaking: **wait for both boards to report
  * `data-collab-state="connected"` before mutating anything.** Otherwise a change

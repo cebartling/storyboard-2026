@@ -3,7 +3,7 @@ import type { BoardViewModel } from './board-view-model';
 
 /**
  * Whether the thing an open dialog is editing still looks the way it did when
- * the dialog opened (ADR 0015 Stage 1).
+ * the dialog opened (ADR 0014 Stage 1).
  *
  * Live refetching makes this routine rather than rare: the board underneath an
  * open editor now changes on its own. Without this the user's first sign that

@@ -22,7 +22,7 @@ export function optionalNeighbour(value: FormDataEntryValue | null): string | nu
 }
 
 /**
- * The aggregate version the client's editor was opened at (ADR 0015 §3).
+ * The aggregate version the client's editor was opened at (ADR 0014 §3).
  *
  * Strict on purpose. A missing or unparseable version cannot be defaulted:
  * treating it as "whatever is current" would reinstate the silent overwrite

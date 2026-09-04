@@ -72,7 +72,7 @@
 							<!-- Editors can change everything on the board and delete nothing
 							     of the map itself. The control is absent rather than disabled:
 							     a disabled button invites a click and explains nothing. The
-							     server refuses it regardless (ADR 0016). -->
+							     server refuses it regardless (ADR 0015). -->
 							<span class="text-ink-muted text-xs" data-testid="shared-badge">Shared with you</span>
 						{/if}
 					</div>

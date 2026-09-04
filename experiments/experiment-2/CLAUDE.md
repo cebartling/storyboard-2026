@@ -1,6 +1,6 @@
-# CLAUDE.md — experiment-1
+# CLAUDE.md — experiment-2
 
-Guidance for Claude Code when working in `experiments/experiment-1/`.
+Guidance for Claude Code when working in `experiments/experiment-2/`.
 
 ## What this is
 
@@ -8,8 +8,14 @@ A vertical-slice implementation of Jeff Patton's user story mapping technique, b
 test an architecture before committing the product to one. Cardboard (cardboardit.com) is
 the reference implementation of the technique.
 
+**This is `experiment-1` with its persistence replaced** — MongoDB instead of SQLite, at
+full parity (ADR 0003). experiment-1 is still runnable and is the one to compare against;
+where the two disagree about anything except storage, **this one is authoritative**, because
+it is the later reading of the same decisions. Do not import from it or share code with it
+(ADR 0001); the duplication is the accepted cost.
+
 **Self-contained**: this directory has its own `package.json`, dependencies, and tests.
-Run every command below from `experiments/experiment-1/`, not the repo root.
+Run every command below from `experiments/experiment-2/`, not the repo root.
 
 Read `documentation/` before changing anything structural — `glossary.md` for the Patton
 vocabulary (note: we say **Step** where Patton says _user task_), `domain-model.md` for
@@ -35,25 +41,31 @@ versions before 10 reject this directory's `pnpm-workspace.yaml` with
 | **Single canvas component test** | `corepack pnpm vitest run src/lib/components/board-viewport.svelte.spec.ts`                |
 | **Single e2e test**              | `corepack pnpm playwright test -g "drag story to slice"`                                   |
 | **Single canvas e2e test**       | `corepack pnpm playwright test -g "pan and zoom persist"`                                  |
-| Collaboration demo (headed)      | `corepack pnpm demo` (Bun)                                                                 |
-| Types                            | `corepack pnpm check` (**two passes** — app, then Bun scripts)                             |
+| Collaboration demo (headed)      | `corepack pnpm demo`                                                                       |
+| Types                            | `corepack pnpm check`                                                                      |
 | Lint / format                    | `corepack pnpm lint` / `corepack pnpm format`                                              |
-| New migration                    | `corepack pnpm db:generate` (commit `drizzle/`)                                            |
-| Inspect DB                       | `corepack pnpm db:studio`                                                                  |
+| Start / stop MongoDB             | `corepack pnpm db:up` / `corepack pnpm db:down`                                            |
+| Wipe MongoDB                     | `corepack pnpm db:reset` (drops the volume, waits for PRIMARY)                             |
 | Seed sample data                 | `corepack pnpm db:seed <owner-email>` (account must exist)                                 |
 
-Migrations apply automatically at db-module load, so `corepack pnpm dev` and the e2e server
-self-migrate. E2e runs against a throwaway `e2e.db` and never touch `local.db`.
+**`corepack pnpm db:up` first.** The dev server, the e2e suite and the demo all need the
+Compose container; only `test:unit` does not, because it starts its own in-process replica
+set. If a command dies with "Could not reach MongoDB", that is what it is telling you.
 
-`db:seed` runs `scripts/seed.ts` (under **Bun** — see Runtimes below), which writes the
-sample retail commerce map from `src/lib/seed/` to `DATABASE_URL`.
+There are no migrations. `src/lib/server/db/indexes.ts` runs at db-module load and
+`createIndex` is idempotent, so `dev`, the e2e server and the demo all self-configure. Each
+uses its own database — `storyboard`, `storyboard-e2e` and `storyboard-demo` — and the
+latter two are dropped before every run.
+
+`db:seed` runs `scripts/seed.ts`, which writes the sample retail commerce map from
+`src/lib/seed/` to `MONGODB_DB`.
 It appends a new map on every run rather than replacing one — nothing in the app depends on
 the seed, so no test or fixture breaks if you delete it.
 
 ## Architecture constraints
 
 - `src/lib/domain/` is **pure TypeScript**: no imports from `svelte`, `@sveltejs/kit`, or
-  `drizzle`. All invariants live here, not only in the DB. Keep it that way — it is the
+  `mongodb`. All invariants live here, not only in the DB. Keep it that way — it is the
   reason the domain is testable without a database.
 - Routes call `src/lib/app/` use cases, which call the ports in `src/lib/domain/ports.ts`.
   Routes do not talk to the repository directly.
@@ -109,7 +121,7 @@ Drags need `mouse.down()` → several `mouse.move(x, y, { steps: 5 })` waypoints
 waits → `mouse.up()`, then a settle before asserting. See the e2e spec beside
 `src/routes/maps/[mapId]/`.
 
-## Authentication and access (ADR 0016)
+## Authentication and access (ADR 0015)
 
 Every page except `/login` and `/register` requires an account; `src/hooks.server.ts`
 redirects anonymous requests and populates `locals.user`. Maps have members
@@ -122,14 +134,14 @@ exist, so ids cannot be probed for.
 access, not the app layer. Both adapters are held to
 `src/lib/app/story-map-repository-contract.ts`: put a new access rule there, or it is
 enforced nowhere. `requireCaller(locals)` is the only place a `Caller` is constructed —
-keep it that way, because it is what stops ADR 0015's presence identity from becoming the
+keep it that way, because it is what stops ADR 0014's presence identity from becoming the
 auth identity.
 
-`corepack pnpm db:seed <owner-email>` needs an account that already exists. Maps in an old
-`local.db` have no members and are invisible until adopted; the SQL is in
-`documentation/architecture.md`.
+`corepack pnpm db:seed <owner-email>` needs an account that already exists — register one in
+the app first. Nothing invents an owner, because a fabricated membership row would point at
+a user id nobody can log in as.
 
-## Real-time collaboration (ADR 0015)
+## Real-time collaboration (ADR 0014)
 
 Stages 0 and 1 are both built. Read the ADR **and its amendments block** before touching the
 write path or the stream — the amendments correct four things the code contradicted.
@@ -173,50 +185,54 @@ report `data-collab-state="connected"` before mutating anything. Do not use
 refetch, and SvelteKit answers a failed load with a full-page navigation; route-abort the
 `**/events*` requests instead.
 
-## Runtimes: Node for the app, Bun for the scripts
+## Runtime: Node, everywhere
 
-Two runtimes, on purpose, and the split is not arbitrary:
+One runtime for the app, the dev and preview servers, vitest, Playwright, `scripts/` and
+`demo/`. The last two run through `tsx`.
 
-- **Node** runs the app, the dev server, the preview server, vitest and the Playwright e2e
-  suite. Nothing about the product depends on Bun.
-- **Bun** runs `demo/` and `scripts/seed.ts` — scripts, which Bun executes as TypeScript with
-  no build step.
+**Do not try Bun.** It looks like it should work — they are scripts, and the MongoDB driver
+is pure JavaScript, so `better-sqlite3`'s segfault (experiment-1's reason for the split) is
+gone. It does not: `vite build` panics with `NAPI FATAL ERROR` at "rendering chunks" and
+`vite dev` panics on the first request, because Vite 8.2.2 is rolldown-based and rolldown's
+native binding crashes Bun 1.4.0 _on use_. The binding loads fine, so it reads like a bad
+install rather than a hard incompatibility. ADR 0017 records the evidence.
 
-The line between them is `better-sqlite3`, a native addon that **segfaults Bun on
-construction** (`require()` succeeds, `new Database()` crashes; the same code is fine under
-Node). So anything holding a database connection in-process stays on Node — with one
-exception: the seed script opens its own connection through `bun:sqlite`, which is why
-`StoryMapRepository` and `Auth` take the driver-agnostic `AppDatabase` rather than
-`BetterSQLite3Database`.
+Consequences worth knowing, all of them simplifications relative to experiment-1:
 
-Two consequences worth knowing before changing any of this:
+- **`pnpm check` is a single pass.** `tsconfig.bun.json` and the `bun-types` global
+  declaration file are gone, and `scripts/` and `demo/` are in the app's TypeScript program
+  — so they are typechecked more strictly than before, not less.
+- **The demo harness spawns a plain Node preview server.** experiment-1's "the server must
+  run under Node even though the demo runs under Bun" rule is gone with the split.
 
-- **`save()` must not read an affected-row count.** Drizzle types the two drivers'
-  writes differently (`RunResult` against `void`), so the shared `AppDatabase` type offers
-  nothing to read — a typing gap, not a behavioural one; `bun:sqlite` does report `changes`
-  at runtime. That is why the compare-and-set is a read-then-write, and why it depends on
-  `{ behavior: 'immediate' }` for correctness. See the comment on it.
-- **The demo's preview server runs under Node**, spawned as a child process by
-  `demo/harness.ts`. Only the driving script is Bun. Do not "simplify" that.
-- **`pnpm check` runs two `svelte-check` passes, and the second is not redundant.**
-  `tsconfig.json` covers the app; `tsconfig.bun.json` covers `scripts/` and `demo/`. Those
-  two directories need `bun-types`, which is a _global_ declaration file — putting them in
-  the app's program makes `Bun.*` visible to SvelteKit routes, which run on Node, so
-  Bun-only code there would typecheck cleanly and then crash. Splitting the programs makes
-  the type environment match the runtime in each half.
+## Storage: MongoDB, one document per map (ADR 0003)
 
-  If the second pass ever looks like duplicated work, check before deleting it: put
-  `export const v: string = Bun.version;` in a file under `src/lib/` and run
-  `corepack pnpm check`. It must fail with "Cannot find name 'Bun'". The same line under
-  `scripts/` must pass. (This was found by a self-review, after a comment claimed the
-  `bun-types` reference was scoped to a single file. It was not.)
-
-Connection pragmas live in `src/lib/server/db/pragmas.ts` so both drivers apply the same
-ones; ADR 0015 Stage 0 made them load-bearing and two lists could drift.
+- **A whole map is one document.** Activities carry their steps; slices and stories are
+  arrays beside them. `load()` is a `findOne`, `save()` a single `findOneAndUpdate`.
+- **`_id` is the domain's UUIDv7 string, never an `ObjectId`.** Ids are minted in
+  `src/lib/domain/ids.ts` and travel to the browser in URLs.
+- **The read path must sort.** `inRankOrder` is applied in `toDomain`, and it is not
+  optional: rank decides what renders where, a move changes a rank rather than an array
+  position, and a document store hands arrays back as written. Without it every drag appears
+  to do nothing. The port's contract test pins this.
+- **Write `null`, not nothing.** MongoDB distinguishes a missing field from a null one, and
+  `sliceId: null` is the unsliced band — the default for every new story.
+- **The replica set is not optional.** Creating a map writes the map and its owner-membership
+  row in a transaction, and transactions need a replica set even with one node. A standalone
+  passes every test that does not create a map.
+- **MongoDB 7 is pinned, and 8 does not work here.** Docker Desktop's kernel is past the
+  cutoff MongoDB 8 refuses (SERVER-121912). `compose.yaml` lists everything already tried.
+- **Three constraints are configuration now, not schema** (`src/lib/server/db/indexes.ts`):
+  one owner per map, one account per email, and — in application code, since there are no
+  foreign keys — the session cascade in `Auth.deleteUser`. The one-owner index is _partial_;
+  a plain unique index on `mapId` would pass a one-owner test and silently make sharing
+  impossible, which is why `indexes.test.ts` also asserts a second editor is allowed.
+- **The compare-and-set is one conditional update** (ADR 0016). No transaction mode to depend
+  on. A `null` result means stale _or_ gone, and one follow-up read tells them apart.
 
 ## Not built (deliberately)
 
-AI calls, and ADR 0015's Stage 2 (fine-grained effects), which stays deferred. The
+AI calls, and ADR 0014's Stage 2 (fine-grained effects), which stays deferred. The
 `AiAssistant` port exists with a null implementation so AI plugs in without rework — its
 contract style (domain snapshots in, structured suggestions out) is the commitment; its
 method list is provisional.

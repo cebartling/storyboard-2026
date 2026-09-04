@@ -131,7 +131,7 @@ test('drag story to slice', async ({ page }) => {
 	await page.getByTestId('zoom-fit').click();
 
 	// A change made behind the rendered page now reaches it on its own: the
-	// board is subscribed to the map's event stream (ADR 0015 Stage 1). This
+	// board is subscribed to the map's event stream (ADR 0014 Stage 1). This
 	// used to be a stale-client setup — the card stayed on screen and the next
 	// drag failed against a story the server had already deleted. Now the card
 	// simply goes, which is both the better outcome and a stronger assertion:
@@ -275,7 +275,7 @@ test('a failed dialog submission keeps the dialog open and owns the error', asyn
 	// A title of only spaces: `required` lets it through the browser, and the
 	// server trims and rejects it. This used to delete the story behind the page
 	// instead, which no longer reaches the save at all — live sync now tells the
-	// open dialog its subject is gone and disables Save (ADR 0015 Stage 1). A
+	// open dialog its subject is gone and disables Save (ADR 0014 Stage 1). A
 	// failure that leaves the subject intact is what this test needs.
 	await page.getByRole('button', { name: 'Edit story Doomed story' }).click();
 	const editor = page.getByRole('dialog');
@@ -582,7 +582,7 @@ test('deleting a slice keeps its stories, and deleting a story removes it', asyn
 	expect(pageErrors.map((e) => e.message)).toEqual([]);
 });
 
-// The bug ADR 0015 §3 exists to close, driven end to end: two editors on one
+// The bug ADR 0014 §3 exists to close, driven end to end: two editors on one
 // board, one of them holding an editor open across the other's change.
 //
 // Before the version round-trip this test could not fail — the client held no

@@ -116,7 +116,7 @@ describe('editStory field handling', () => {
 });
 
 /**
- * `ForbiddenError` is the third of the three (ADR 0016). It is not a variant of
+ * `ForbiddenError` is the third of the three (ADR 0015). It is not a variant of
  * InvariantError: "you may not do this" and "this request does not make sense"
  * map to different statuses and different remedies, and the route layer
  * dispatches on type rather than message text.

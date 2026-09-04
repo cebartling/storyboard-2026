@@ -50,7 +50,7 @@ export async function createMap(
 	name: string
 ): Promise<StoryMap> {
 	// The caller becomes the map's owner, inside the repository's own
-	// transaction — see `StoryMapRepository.save` (ADR 0016).
+	// transaction — see `StoryMapRepository.save` (ADR 0015).
 	return repository.save(caller, createStoryMap(name));
 }
 
@@ -113,7 +113,7 @@ async function loadOrThrow(
 ): Promise<StoryMap> {
 	const access = await repository.load(caller, id);
 	// Null covers both "no such map" and "not yours" — the repository does not
-	// distinguish them, so neither can this (ADR 0016).
+	// distinguish them, so neither can this (ADR 0015).
 	if (!access) {
 		throw new InvariantError(`No story map with id ${id}`);
 	}
@@ -122,7 +122,7 @@ async function loadOrThrow(
 	// window that matters: a user holds an open editor for far longer than that.
 	// Comparing the version the client was *given* against what is stored now is
 	// what turns a stale editor into a 409 instead of a silent overwrite
-	// (ADR 0015 §3). Checked before the domain function runs, so nothing is
+	// (ADR 0014 §3). Checked before the domain function runs, so nothing is
 	// computed against state we already know is stale.
 	if (expectedVersion !== undefined && map.version !== expectedVersion) {
 		throw new ConflictError(
@@ -133,7 +133,7 @@ async function loadOrThrow(
 }
 
 /**
- * Serialises writes to one map (ADR 0015 §2). Module-level rather than injected:
+ * Serialises writes to one map (ADR 0014 §2). Module-level rather than injected:
  * it holds no configuration and has no second implementation, so a `Deps` entry
  * would be the DI-container creep ADR 0006 declined. The keys are map ids, so
  * separate tests never contend with each other.
@@ -146,7 +146,7 @@ const mapWriteLock = new KeyedLock<MapId>();
  * The shape every board mutation has: load the aggregate, apply one pure domain
  * function, save. Wrapping the whole of it — not just the save — is the point.
  *
- * Note what the lock does and does not buy, because ADR 0015 §2 overstates it
+ * Note what the lock does and does not buy, because ADR 0014 §2 overstates it
  * slightly. It says the second of two concurrent inserts "sees the first's
  * rank"; once §3's version round-trip is in place that cannot happen, because
  * the second writer is holding the version its editor opened at and is rejected

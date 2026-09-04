@@ -46,16 +46,16 @@
 
 	// Whether what the open dialog is editing still looks the way it did when it
 	// opened. Derived from the live board, so a remote change reaches the dialog
-	// the moment the refetch lands (ADR 0015 Stage 1).
+	// the moment the refetch lands (ADR 0014 Stage 1).
 	const subject = $derived(dialog ? subjectStatus(dialog, data.board) : null);
 
 	// ---------------------------------------------------------------------
-	// Live collaboration (ADR 0015 Stage 1)
+	// Live collaboration (ADR 0014 Stage 1)
 	// ---------------------------------------------------------------------
 
 	// This tab. Minted here, per page, and sent as a query parameter — never a
 	// cookie and never an identity, so it cannot become the thing auth is
-	// grafted onto (ADR 0015 §6, ADR 0016 §6).
+	// grafted onto (ADR 0014 §6, ADR 0015 §6).
 	const clientId = crypto.randomUUID() as ClientId;
 
 	// Connects on arrival and reconnects only when the map itself changes — see
@@ -94,7 +94,7 @@
 		else sync?.resume();
 	}
 
-	// A POST per pointer move would be wasteful, which ADR 0015 §4 names as the
+	// A POST per pointer move would be wasteful, which ADR 0014 §4 names as the
 	// one real cost of the SSE/POST split. 50ms is 20 updates a second — smooth
 	// enough to read as a live pointer, and an order of magnitude fewer requests
 	// than a raw pointermove stream.
@@ -302,7 +302,7 @@
 			</button>
 			{#if data.role === 'owner'}
 				<!-- Owner-only, and absent rather than disabled for an editor: the
-				     server refuses it either way (ADR 0016). -->
+				     server refuses it either way (ADR 0015). -->
 				<button
 					type="button"
 					class="btn btn-quiet"

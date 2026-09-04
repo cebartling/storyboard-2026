@@ -1,7 +1,7 @@
 import { expect, test } from '../e2e/auth-fixture';
 import { addActivity, createMap } from './maps/[mapId]/board-helpers';
 
-// ADR 0016. These are the tests that make "multi-user" mean something: a map
+// ADR 0015. These are the tests that make "multi-user" mean something: a map
 // belongs to somebody, and somebody else cannot see it.
 
 test('an anonymous visitor is sent to sign in', async ({ browser }) => {

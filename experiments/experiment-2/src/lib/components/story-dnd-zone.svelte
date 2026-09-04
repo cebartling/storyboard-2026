@@ -50,7 +50,7 @@
 		 * Called with `true` when a drag begins over this zone and `false` when it
 		 * ends. The page uses it to suspend live refetching: a refetch mid-drag
 		 * replaces the array `svelte-dnd-action` is animating and the card jumps
-		 * out from under the pointer (ADR 0015 Stage 1).
+		 * out from under the pointer (ADR 0014 Stage 1).
 		 */
 		onDragStateChange?: (dragging: boolean) => void;
 	} = $props();

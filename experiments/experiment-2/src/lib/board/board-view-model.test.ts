@@ -28,7 +28,7 @@ describe('buildBoardViewModel', () => {
 		// Dropping `version` here is what made cross-user editing silently
 		// last-write-wins: with no version on the client, every request loaded and
 		// saved within itself and the compare-and-set window was one request
-		// rather than one editing session (ADR 0015 §3).
+		// rather than one editing session (ADR 0014 §3).
 		const map = { ...mapWith([{ activity: 'Browse', steps: ['Search'] }]), version: 7 };
 
 		expect(buildBoardViewModel(map).version).toBe(7);

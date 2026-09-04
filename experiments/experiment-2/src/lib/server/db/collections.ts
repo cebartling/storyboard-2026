@@ -11,9 +11,9 @@ import type { Role } from '$lib/domain/ports';
  */
 
 /**
- * A whole story map, as one document.
+ * A whole story map, as one document (ADR 0003).
  *
- * The aggregate boundary was already drawn here — experiment-1's ADR 0004 chose
+ * The aggregate boundary was already drawn here — ADR 0004 chose
  * a single whole-map aggregate loaded and saved as a unit, and then spent a
  * five-query id ladder and a delete-and-reinsert-every-row `save()` taking it
  * apart to fit five tables. Embedded, `load()` is a `findOne` and `save()` is
@@ -71,7 +71,7 @@ export interface SessionDoc {
 
 /**
  * Membership is its own collection rather than a field on the map, for the
- * reason experiment-1's ADR 0016 gives: sharing and editing are different
+ * reason ADR 0015 gives: sharing and editing are different
  * operations that should not contend. Embedded here, adding an editor would
  * bump the map's version and lose a race against someone dragging a card.
  */

@@ -20,7 +20,7 @@ export default defineConfig({
 					// experiment-1 where they ran on Bun and had to be held in a second
 					// `tsconfig.bun.json` so that `bun-types`' globals could not leak
 					// into app code that runs on Node. Everything runs on Node here
-					// (ADR 0004), so `pnpm check` is a single pass again.
+					// (ADR 0017), so `pnpm check` is a single pass again.
 					config.include.push('../scripts/**/*.ts', '../demo/**/*.ts');
 				}
 			}

@@ -7,7 +7,7 @@
  * its own client rather than importing src/lib/server/db, whose
  * `$env/dynamic/private` import only resolves inside SvelteKit.
  *
- * It runs on Node through `tsx`, like everything else here (ADR 0004).
+ * It runs on Node through `tsx`, like everything else here (ADR 0017).
  */
 
 import { connectOrExplain, setting } from './mongo-env';
@@ -26,7 +26,7 @@ try {
 	// never opened must not leave it without its constraints.
 	await ensureIndexes(db);
 
-	// The seeded map needs an owner (ADR 0003), and the owner has to be a real
+	// The seeded map needs an owner (ADR 0015), and the owner has to be a real
 	// account: inventing a user document here would create a login nobody knows
 	// the password to. So the script asks for the address of an account that
 	// already exists.

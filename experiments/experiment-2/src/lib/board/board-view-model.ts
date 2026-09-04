@@ -52,7 +52,7 @@ export interface BoardViewModel {
 	 * The aggregate version this board was built from. It goes to the client and
 	 * comes back with every mutation, which is what lets a stale editor be
 	 * refused instead of silently overwriting whoever edited in the meantime
-	 * (ADR 0015 §3). Dropping it here was the whole of that bug.
+	 * (ADR 0014 §3). Dropping it here was the whole of that bug.
 	 */
 	version: number;
 	activities: { id: ActivityId; name: string; stepCount: number }[];

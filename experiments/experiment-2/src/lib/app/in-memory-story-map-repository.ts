@@ -7,7 +7,7 @@
  *
  * It enforces the same optimistic-concurrency rule as the real adapter — a save
  * whose `version` is stale is rejected rather than silently winning — and, since
- * ADR 0003, the same membership rules. A double that is more permissive than
+ * ADR 0015, the same membership rules. A double that is more permissive than
  * production turns a passing test into a false negative on exactly the
  * behaviour worth protecting, which is why both are held to the shared contract
  * in `story-map-repository-contract.ts`.

@@ -7,7 +7,7 @@ import type { ClientId, MapId } from '$lib/domain/ids';
 import { createEventStream, parseLastSeq } from '$lib/server/collab/sse';
 
 /**
- * The map's event stream (ADR 0015 §4). SSE downstream, ordinary POSTs upstream.
+ * The map's event stream (ADR 0014 §4). SSE downstream, ordinary POSTs upstream.
  *
  * Authorisation happens before subscribing, through the same use case the page
  * load uses — without it, anyone with a map id would learn whenever that map
@@ -28,7 +28,7 @@ export const GET: RequestHandler = async ({ params, url, request, locals }) => {
 	hub.observe(access.map.version);
 
 	// The client mints its own id per connection: it distinguishes two tabs of
-	// one account and is deliberately not an identity (ADR 0016 §6).
+	// one account and is deliberately not an identity (ADR 0015 §6).
 	const clientId = (url.searchParams.get('client') ?? crypto.randomUUID()) as ClientId;
 
 	return createEventStream(

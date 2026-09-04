@@ -2,14 +2,14 @@
  * Serialises async work per key: two calls with the same key run one after the
  * other, calls with different keys run concurrently.
  *
- * This exists for ADR 0015 §2. The critical section is a use case's whole
+ * This exists for ADR 0014 §2. The critical section is a use case's whole
  * `load → mutate → save`, not a single repository call, which is why it lives
  * here rather than as a decorator on `StoryMapRepository` — no port method
  * spans that section. It is also not in `deps.ts`: that wires concrete adapters
  * to ports, and a lock is neither an adapter nor a port.
  *
  * **Single-process only.** Two server instances would each have their own lock
- * and serialise nothing. ADR 0015 §2 promotes the single-process deployment
+ * and serialise nothing. ADR 0014 §2 promotes the single-process deployment
  * from an incidental fact to a correctness requirement precisely because of
  * this, and because the fractional ranks in `rank.ts` carry no actor entropy:
  * two genuinely concurrent inserts at one position produce byte-identical keys,

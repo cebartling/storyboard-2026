@@ -7,7 +7,7 @@ import { ConflictError, ForbiddenError, InvariantError } from '$lib/domain/error
  * failures into `fail(400, e.message)`.
  *
  * Lives at the route root rather than beside the board: the map list has the
- * same three failure modes once maps have owners (ADR 0016), and had been
+ * same three failure modes once maps have owners (ADR 0015), and had been
  * hand-rolling `fail(400)` instead.
  *
  * - `InvariantError` -> 400 with the domain's own message. These are written

@@ -1,7 +1,7 @@
 import { test as base, type Browser, type BrowserContext, type Page } from '@playwright/test';
 
 /**
- * Every page in this app now requires an account (ADR 0016), so every e2e test
+ * Every page in this app now requires an account (ADR 0015), so every e2e test
  * needs one before it can do anything at all.
  *
  * The user is registered **once per worker** rather than once per test: it goes

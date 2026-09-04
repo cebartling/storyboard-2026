@@ -24,15 +24,26 @@ from the repo root.
 | Experiment | Stack | Subject |
 | --- | --- | --- |
 | `experiments/experiment-1/` | SvelteKit 2 + Svelte 5 (runes), Tailwind CSS 4, Drizzle + SQLite, Vitest, Playwright | Jeff Patton's user story mapping technique as a vertical slice, with accounts and shared maps |
+| `experiments/experiment-2/` | The same, with MongoDB 7 (Docker Compose, single-node replica set) in place of Drizzle + SQLite | Whether experiment-1's ports actually insulated its domain from persistence |
+
+The two are deliberately near-identical above the storage layer — that is what makes the
+comparison mean anything. Where they differ outside storage, **experiment-2 is the
+authoritative reading**, because it is the later one. They also number their ADRs
+differently from 0003 on, so cite the experiment as well as the number.
 
 `experiment-1` runs on **Node** (app, tests, e2e) with **Bun** for its scripts (`demo/`,
 `scripts/seed.ts`). The dividing line is `better-sqlite3`, which segfaults Bun on connection
 — see that experiment's `CLAUDE.md` under "Runtimes" before moving anything across it.
+**`experiment-2` runs on Node throughout** and Bun cannot run it at all (its ADR 0017 has the
+evidence), so do not carry the Bun split across.
 
 ## experiment-1 quick reference
 
 Full command table, architecture constraints, and testing gotchas are in
 `experiments/experiment-1/CLAUDE.md` — that file governs, this is only enough to get moving.
+**experiment-2 has its own `CLAUDE.md` and its own commands**: it needs a running Docker
+daemon and `corepack pnpm db:up` before anything that touches a database, it has no
+migrations, and its `pnpm check` is a single pass. Do not run the table below against it.
 
 Run everything through `corepack pnpm` (the experiment pins `packageManager` in its
 `package.json`; a bare `pnpm` uses whatever is on PATH, and pnpm < 10 refuses the

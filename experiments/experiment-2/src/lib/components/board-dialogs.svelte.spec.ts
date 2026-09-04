@@ -164,7 +164,7 @@ describe('actionError', () => {
 		expect(actionError({ error: 42 })).toBeNull();
 	});
 
-	// ADR 0015 §3. Every mutation carries the version its editor was opened at,
+	// ADR 0014 §3. Every mutation carries the version its editor was opened at,
 	// so a stale editor is refused rather than silently overwriting whoever got
 	// there first.
 	describe('the version each form carries', () => {

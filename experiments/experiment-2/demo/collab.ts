@@ -47,7 +47,7 @@ async function walkthrough() {
 		const { page: bob } = await openWindow(browser, { left: width, top: 0, width, height });
 
 		// ------------------------------------------------------------------
-		console.log('\n1. Accounts — every page requires one (ADR 0016)');
+		console.log('\n1. Accounts — every page requires one (ADR 0015)');
 		// ------------------------------------------------------------------
 		await alice.goto('/');
 		await say(

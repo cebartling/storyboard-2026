@@ -8,7 +8,7 @@ import { addActivity, createStoryMap, moveActivity } from '$lib/domain/story-map
  * The authorisation rules every `StoryMapRepository` must obey, run against
  * both implementations.
  *
- * ADR 0003 puts enforcement in the adapters, because they are what hold the
+ * ADR 0015 puts enforcement in the adapters, because they are what hold the
  * membership rows. The honest cost of that choice is drift: a rule could end up
  * in the MongoDB adapter and not the in-memory double, and every use-case test
  * would keep passing while production behaved differently. This file is the

@@ -5,7 +5,7 @@ import { closeAllStreams } from './sse';
  * Ends every open event stream when the process is asked to stop, and runs
  * anything else that has to be released with them.
  *
- * ADR 0015 §4 says to hang this on `sveltekit:shutdown`. That cannot work:
+ * ADR 0014 §4 says to hang this on `sveltekit:shutdown`. That cannot work:
  * `@sveltejs/adapter-node` emits that event inside the callback of
  * `httpServer.close()`, and Node runs that callback only once every connection
  * has ended. An open SSE stream *is* a live connection, so the event arrives no

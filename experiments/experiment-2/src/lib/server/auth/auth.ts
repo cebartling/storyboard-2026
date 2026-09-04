@@ -6,7 +6,7 @@ import { collections, type Collections, type UserDoc } from '../db/collections';
 import { hashPassword, verifyPassword } from './password';
 
 /**
- * Accounts and sessions (experiment-1's ADR 0016, carried forward as ADR 0003).
+ * Accounts and sessions (ADR 0015).
  *
  * Deliberately not behind a port. ADR 0006 admits exactly two outbound ports
  * and gives the test for adding one: a port earns its place when it buys
@@ -121,7 +121,7 @@ export class Auth {
 	 *
 	 * Returning early for an unknown address would leave a timing channel that
 	 * says which addresses have accounts — and a wide one, since scrypt at the
-	 * cost ADR 0003 requires takes on the order of a tenth of a second. So a
+	 * cost ADR 0015 requires takes on the order of a tenth of a second. So a
 	 * missing user is verified against a fixed hash whose password nobody knows,
 	 * purely to spend the same time.
 	 *

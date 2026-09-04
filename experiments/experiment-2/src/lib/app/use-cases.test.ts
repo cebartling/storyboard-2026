@@ -11,7 +11,7 @@ import type {
 	StorySuggestion
 } from '$lib/domain/ports';
 
-/** Every use case now acts as somebody (ADR 0016). */
+/** Every use case now acts as somebody (ADR 0015). */
 import {
 	type ActivityId,
 	type MapId,
@@ -23,7 +23,7 @@ import {
 import { addActivity, addSlice, addStep, addStory, createStoryMap } from '$lib/domain/story-map';
 import { ConflictError, InvariantError } from '$lib/domain/errors';
 
-/** Every use case now acts as somebody (ADR 0016). */
+/** Every use case now acts as somebody (ADR 0015). */
 const caller: Caller = { userId: 'test-caller' as UserId };
 
 /**
@@ -246,7 +246,7 @@ describe('mutating use cases', () => {
 
 		it(`${name} rejects a stale version and writes nothing`, async () => {
 			// The client sends the version its editor was opened at. If the board
-			// has moved on since, this is the stale-editor case ADR 0015 §3 exists
+			// has moved on since, this is the stale-editor case ADR 0014 §3 exists
 			// for: refuse it rather than let it overwrite whoever got there first.
 			const ctx = await seeded();
 
@@ -364,7 +364,7 @@ describe('concurrent writers', () => {
 		// and the loser gets a ConflictError instead of silently clobbering the
 		// winner. Two editors on one board conflicting even when they touch
 		// different cards is the known cost of a single whole-map version
-		// (ADR 0014); ADR 0015 §5's notify-and-refetch is what keeps the loser's
+		// (ADR 0014); ADR 0014 §5's notify-and-refetch is what keeps the loser's
 		// next attempt from being stale for long.
 		const { repository, mapId } = await seededMap();
 		const gated = new GatedRepository(repository);
@@ -396,7 +396,7 @@ describe('concurrent writers', () => {
 		// concurrently. `rank.ts` wraps generateKeyBetween, which is deterministic
 		// and carries no actor entropy, so two inserts computed against identical
 		// state produce byte-identical keys — and the unique indexes turn a leaked
-		// duplicate into a 500 rather than a merge (ADR 0015, "Fractional ranks
+		// duplicate into a 500 rather than a merge (ADR 0014, "Fractional ranks
 		// collide"). Sequencing them means the survivor always reads committed
 		// state, whichever one that is.
 		const { repository, mapId } = await seededMap();

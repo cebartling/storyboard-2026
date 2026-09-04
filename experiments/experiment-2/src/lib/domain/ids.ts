@@ -15,18 +15,18 @@ export type SliceId = Brand<string, 'SliceId'>;
 export type StoryId = Brand<string, 'StoryId'>;
 
 /**
- * The person making a request (ADR 0016). Branded like the entity ids, which
- * is what stops ADR 0015 §6's presence client id — a different brand entirely —
+ * The person making a request (ADR 0015). Branded like the entity ids, which
+ * is what stops ADR 0014 §6's presence client id — a different brand entirely —
  * from ever being passed where an authenticated identity is expected.
  */
 export type UserId = Brand<string, 'UserId'>;
 
 /**
- * One browser tab's connection to a map's event stream (ADR 0015 §6).
+ * One browser tab's connection to a map's event stream (ADR 0014 §6).
  *
  * Branded so that "which tab is this" cannot be passed where "who is this" is
  * expected. `UserId` being branded already stops a `ClientId` masquerading as
- * an identity; this makes the protection run both ways, which is what ADR 0016
+ * an identity; this makes the protection run both ways, which is what ADR 0015
  * §6 says it does.
  *
  * It lives here beside the entity ids for the brand, and nothing else: it is

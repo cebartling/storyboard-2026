@@ -243,7 +243,7 @@ describe('StoryDndZone finalize handling', () => {
 		expect(renderedIds()).toEqual(items.map((i) => i.id));
 	});
 
-	// ADR 0015 Stage 1: a remote refetch mid-drag replaces the array
+	// ADR 0014 Stage 1: a remote refetch mid-drag replaces the array
 	// `svelte-dnd-action` is animating, and the card jumps out from under the
 	// pointer. The page suspends syncing while any zone is mid-drag, and needs
 	// this zone to say when that starts and stops.

@@ -7,12 +7,12 @@ import type { MapId } from '$lib/domain/ids';
 import { parseCursorBody } from '$lib/server/collab/cursor-body';
 
 /**
- * Where someone's pointer is (ADR 0015 §6). Ephemeral: published to the map's
+ * Where someone's pointer is (ADR 0014 §6). Ephemeral: published to the map's
  * hub and never written to SQLite, so losing it on reconnect is correct
  * behaviour rather than data loss.
  *
  * A POST rather than part of the stream because SSE is one-directional. The
- * cost ADR 0015 §4 names — a request per pointer move — is paid down by
+ * cost ADR 0014 §4 names — a request per pointer move — is paid down by
  * throttling on the client, not by batching here.
  */
 export const POST: RequestHandler = async ({ params, request, locals }) => {

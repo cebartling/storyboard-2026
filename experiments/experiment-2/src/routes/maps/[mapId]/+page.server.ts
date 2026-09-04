@@ -28,7 +28,7 @@ import { runAction } from '../../run-action';
 
 /**
  * Runs a board mutation and, if it succeeded, tells everyone watching the map
- * (ADR 0015 §5).
+ * (ADR 0014 §5).
  *
  * The broadcast lives here rather than in the use case because publishing from
  * the app layer would need a third outbound port, which ADR 0006 forbids. The
@@ -350,7 +350,7 @@ export const actions: Actions = {
 	/**
 	 * Share by email address rather than by user id: an id is not something a
 	 * person has, and asking for one would mean exposing a directory. Owner-only,
-	 * which the repository enforces — this route does not re-check it (ADR 0016).
+	 * which the repository enforces — this route does not re-check it (ADR 0015).
 	 */
 	shareMap: async ({ request, params, locals }) => {
 		const caller = requireCaller(locals);

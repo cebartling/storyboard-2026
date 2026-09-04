@@ -13,7 +13,7 @@ const KEY_BYTES = 64;
 const PREFIX = 'scrypt';
 
 /**
- * OWASP's minimum for scrypt, which is the standard ADR 0016 cites to justify
+ * OWASP's minimum for scrypt, which is the standard ADR 0015 cites to justify
  * choosing it. Node's own default is N=2^14 — eight times cheaper for an
  * attacker working offline against a leaked `users` table — so it has to be
  * given explicitly rather than relied upon.
@@ -25,7 +25,7 @@ const PREFIX = 'scrypt';
 const COST = { N: 131072, r: 8, p: 1, maxmem: 256 * 1024 * 1024 } as const;
 
 /**
- * Password hashing on `node:crypto` alone (ADR 0016).
+ * Password hashing on `node:crypto` alone (ADR 0015).
  *
  * No dependency: Node 24+ ships `scrypt`, `randomBytes` and `timingSafeEqual`,
  * which is everything the `sv add lucia` add-on installs three packages to

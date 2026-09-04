@@ -14,7 +14,7 @@ import type { StoryMap } from './story-map';
  * Start coarse (whole-map `save()`); revisit only if drags feel slow.
  *
  * Every method takes a `Caller`, which is the port-signature change ADR 0006
- * priced (finding A10) and ADR 0016 pays. Authorisation is enforced in the
+ * priced (finding A10) and ADR 0015 pays. Authorisation is enforced in the
  * adapters rather than the app layer because the adapters are what hold the
  * membership rows: one query answers "does this exist" and "may they" together,
  * and a non-member simply gets null. The cost of policy living in two
@@ -25,7 +25,7 @@ export type Role = 'owner' | 'editor';
 
 /**
  * Who is making the request. A value, not a service — the app layer never sees
- * a user record, only this (ADR 0016).
+ * a user record, only this (ADR 0015).
  */
 export interface Caller {
 	readonly userId: UserId;

@@ -42,7 +42,7 @@ export interface MapSync {
 	 * below it are already accounted for and are ignored.
 	 */
 	observe(version: number): void;
-	/** Hold refetches — used while a drag is in flight (ADR 0015 Stage 1). */
+	/** Hold refetches — used while a drag is in flight (ADR 0014 Stage 1). */
 	pause(): void;
 	resume(): void;
 	dispose(): void;
@@ -50,7 +50,7 @@ export interface MapSync {
 
 /**
  * Subscribes the board to its map's event stream and refetches when something
- * changes (ADR 0015 §5: notify-and-refetch, not diff broadcast).
+ * changes (ADR 0014 §5: notify-and-refetch, not diff broadcast).
  *
  * The reconnect logic leans on the browser first. An `EventSource` retries a
  * dropped connection by itself, sending `Last-Event-ID`, and the server's

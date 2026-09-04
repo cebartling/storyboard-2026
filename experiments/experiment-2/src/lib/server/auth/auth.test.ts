@@ -92,7 +92,7 @@ describe('Auth', () => {
 		it('takes as long to refuse an unknown address as a wrong password', async () => {
 			// Returning early for a missing user would answer "does this address
 			// have an account" by the clock — and loudly, since scrypt at the cost
-			// ADR 0003 requires takes on the order of a tenth of a second.
+			// ADR 0015 requires takes on the order of a tenth of a second.
 			await auth.register('ada@example.test', 'Ada', 'hunter2hunter2');
 			// Warm the decoy hash, which is computed once per process.
 			await auth.login('nobody@example.test', 'x');

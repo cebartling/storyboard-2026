@@ -6,7 +6,7 @@ import { DEMO_DB, dropDatabase, setting } from '../scripts/mongo-env';
  * The bits every demo needs: a server to point at, browsers to drive, and a way
  * to narrate what is happening.
  *
- * Everything runs on Node (ADR 0004): the demo itself through `tsx`, and the
+ * Everything runs on Node (ADR 0017): the demo itself through `tsx`, and the
  * `vite preview` server it spawns as a child process. Experiment-1 ran the demos
  * on Bun and had to keep the server on Node, because `better-sqlite3` segfaults
  * Bun; that split is gone, and so is the footgun in it.

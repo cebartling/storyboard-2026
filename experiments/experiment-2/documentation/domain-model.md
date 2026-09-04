@@ -72,12 +72,12 @@ overwrite each other.
 Because the counter covers the whole map rather than an entity, **two editors who touch
 entirely different cards still conflict** — the second one is rejected and their edit is
 lost. That is measured rather than assumed
-(`drizzle-story-map-repository.test.ts`, "rejects a second editor who changed a different
+(the repository contract's "rejects a second editor who changed a different
 story than the first"), and it is the constraint that makes real-time collaboration a
 re-modelling job rather than an addition. See the amendment to ADR 0004, and ADR 0014 for the
 decision that collaboration is in scope and this shape is therefore temporary.
 
-**Fixed, 2026-09-03 (ADR 0015 §3).** This used to describe the repository rather than what a
+**Fixed, 2026-09-03 (ADR 0014 §3).** This used to describe the repository rather than what a
 user experienced: the client was never given a version, so every request loaded and saved
 within itself and the compare-and-set window was one request rather than one editing
 session. Two people editing the same board overwrote each other silently.
@@ -87,13 +87,13 @@ version its editor was _opened_ at, and the use case compares before calling the
 stale editor gets a 409 that keeps what they typed and refreshes the board beneath them, so
 their next save is a knowing overwrite.
 
-Writes to one map are also serialised by an in-process lock (ADR 0015 §2), which is what
+Writes to one map are also serialised by an in-process lock (ADR 0014 §2), which is what
 stops two writers computing fractional ranks against the same state — `rank.ts` is
 deterministic and carries no actor entropy, so identical state yields identical keys. That
 makes the single-process deployment a correctness requirement rather than an incidental
 fact.
 
-**Access is separate from concurrency.** Maps have members (ADR 0016), and membership is
+**Access is separate from concurrency.** Maps have members (ADR 0015), and membership is
 deliberately _not_ part of the aggregate: `save()` rewrites every child row on each write,
 so members stored inside it would be rewritten on every drag.
 

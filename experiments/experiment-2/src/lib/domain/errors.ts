@@ -27,7 +27,7 @@ export class ConflictError extends Error {
 }
 
 /**
- * A caller who is authenticated but not permitted (ADR 0016).
+ * A caller who is authenticated but not permitted (ADR 0015).
  *
  * Deliberately distinct from `InvariantError`: "you may not do this" and "this
  * request does not make sense" carry different statuses and different remedies,

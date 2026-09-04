@@ -3,7 +3,7 @@ import { InMemoryStoryMapRepository } from './in-memory-story-map-repository';
 import { describeStoryMapRepositoryContract } from './story-map-repository-contract';
 
 // The double is held to exactly the same contract as the MongoDB adapter, so a
-// rule cannot quietly exist in one and not the other (ADR 0003).
+// rule cannot quietly exist in one and not the other (ADR 0015).
 describeStoryMapRepositoryContract('InMemoryStoryMapRepository', async () => ({
 	repository: new InMemoryStoryMapRepository(),
 	// Nothing to register: the in-memory store has no users collection, so any id

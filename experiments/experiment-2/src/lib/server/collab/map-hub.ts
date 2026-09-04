@@ -1,14 +1,14 @@
 import type { ClientId, MapId, UserId } from '$lib/domain/ids';
 
 /**
- * In-process fan-out for one story map (ADR 0015 §§5-7).
+ * In-process fan-out for one story map (ADR 0014 §§5-7).
  *
  * Pure TypeScript: no Kit, no database, no HTTP. That is what lets the replay
  * and presence rules be tested directly instead of through a stream.
  *
  * **Single process only.** Two server instances would each fan out to their own
  * subscribers and neither would see the other's writes — the same assumption
- * the per-map write lock rests on, and the one ADR 0015 §2 promotes to a
+ * the per-map write lock rests on, and the one ADR 0014 §2 promotes to a
  * correctness requirement.
  */
 
@@ -16,7 +16,7 @@ export interface Participant {
 	userId: UserId;
 	displayName: string;
 	/** Distinguishes two tabs of one account. Minted by the client per stream
-	 *  connection — never a cookie, never an identity (ADR 0016 §6). */
+	 *  connection — never a cookie, never an identity (ADR 0015 §6). */
 	clientId: ClientId;
 }
 
@@ -80,7 +80,7 @@ export class MapHub {
 	}
 
 	/**
-	 * Tells the hub what the persisted version is. ADR 0015 §7 implied a
+	 * Tells the hub what the persisted version is. ADR 0014 §7 implied a
 	 * hub-local counter; using the map's own version instead means a client can
 	 * compare what `load()` gave it against what the hub has, which a counter
 	 * that resets on restart could not support. Never lowers the sequence: a

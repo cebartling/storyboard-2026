@@ -24,7 +24,7 @@ export interface Deps {
 	storyMapRepository: StoryMapRepository;
 	aiAssistant: AiAssistant;
 	/**
-	 * Accounts and sessions (ADR 0003). Not an outbound port — see the docblock
+	 * Accounts and sessions (ADR 0015). Not an outbound port — see the docblock
 	 * on `Auth` for why — but it is process-scoped state wired once, which is
 	 * what this module is for.
 	 */

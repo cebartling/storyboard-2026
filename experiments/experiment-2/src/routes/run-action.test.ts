@@ -34,7 +34,7 @@ describe('runAction', () => {
 		expect(message).not.toMatch(/version|\b3\b|\b4\b/i);
 		// And the remedy is no longer "reload": the client refreshes the board
 		// itself and keeps what the user typed, so telling them to reload would
-		// be telling them to throw their own edit away (ADR 0015 §3, and §5 once
+		// be telling them to throw their own edit away (ADR 0014 §3, and §5 once
 		// the board refreshes on its own).
 		expect(message).not.toMatch(/reload/i);
 		expect(message).toMatch(/refreshed.*save again/i);
@@ -78,7 +78,7 @@ describe('runAction', () => {
 		// A 403, not a redirect: the caller is logged in and the answer is "not
 		// yours", which the dialog already knows how to render. Unlike the 500
 		// path, this message is written for the person who made the request, so
-		// it is safe — and useful — to show (ADR 0016).
+		// it is safe — and useful — to show (ADR 0015).
 		const result = await runAction('deleteMap', async () => {
 			throw new ForbiddenError('Only the owner can delete this map.');
 		});
