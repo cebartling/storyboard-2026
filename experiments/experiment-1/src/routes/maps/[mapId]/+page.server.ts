@@ -21,7 +21,7 @@ import type { ActivityId, MapId, SliceId, StepId, StoryId } from '$lib/domain/id
 
 import { buildBoardViewModel } from '$lib/board/board-view-model';
 import { optionalNeighbour, requireString, requireVersion } from './form-fields';
-import { runAction } from './run-action';
+import { runAction } from '../../run-action';
 
 export const load: PageServerLoad = async ({ params }) => {
 	const map = await loadMap(deps.storyMapRepository, params.mapId as MapId);

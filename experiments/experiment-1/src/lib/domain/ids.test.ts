@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { newId, type MapId } from './ids';
+import { newId, type MapId, type UserId } from './ids';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -33,5 +33,17 @@ describe('newId', () => {
 		await new Promise((resolve) => setTimeout(resolve, 5));
 		const second = newId<MapId>();
 		expect(first < second).toBe(true);
+	});
+});
+
+describe('UserId', () => {
+	it('is a distinct brand, so an entity id cannot stand in for a caller', () => {
+		const userId = newId<UserId>();
+		const mapId = newId<MapId>();
+
+		// @ts-expect-error a MapId is not a UserId, even though both are strings
+		const wrong: UserId = mapId;
+		expect(typeof wrong).toBe('string');
+		expect(userId).not.toBe(mapId);
 	});
 });

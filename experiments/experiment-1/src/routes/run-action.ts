@@ -1,13 +1,19 @@
 import { fail, type ActionFailure } from '@sveltejs/kit';
-import { ConflictError, InvariantError } from '$lib/domain/errors';
+import { ConflictError, ForbiddenError, InvariantError } from '$lib/domain/errors';
 
 /**
  * Runs one form action's body and turns anything it throws into the right
- * response, so the eleven actions in `+page.server.ts` share one policy
- * instead of each collapsing every failure into `fail(400, e.message)`.
+ * response, so every named action shares one policy instead of each collapsing
+ * failures into `fail(400, e.message)`.
+ *
+ * Lives at the route root rather than beside the board: the map list has the
+ * same three failure modes once maps have owners (ADR 0016), and had been
+ * hand-rolling `fail(400)` instead.
  *
  * - `InvariantError` -> 400 with the domain's own message. These are written
  *   for the person who made the request, so they are safe to show.
+ * - `ForbiddenError` -> 403, likewise with its own message. The caller is known
+ *   and simply not permitted, so a redirect to sign in would be misleading.
  * - `ConflictError` -> 409. Someone else changed the map between the version
  *   the user's editor was opened at and now; the internal version numbers are
  *   an operator detail, so the user gets the remedy instead. The remedy is
@@ -29,6 +35,9 @@ export async function runAction(
 	} catch (e) {
 		if (e instanceof InvariantError) {
 			return fail(400, { error: e.message });
+		}
+		if (e instanceof ForbiddenError) {
+			return fail(403, { error: e.message });
 		}
 		if (e instanceof ConflictError) {
 			return fail(409, {

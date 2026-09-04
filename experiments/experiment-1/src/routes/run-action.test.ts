@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { runAction } from './run-action';
-import { ConflictError, InvariantError } from '$lib/domain/errors';
+import { ConflictError, ForbiddenError, InvariantError } from '$lib/domain/errors';
 
 afterEach(() => {
 	vi.restoreAllMocks();
@@ -70,5 +70,20 @@ describe('runAction', () => {
 		});
 
 		expect(consoleError).not.toHaveBeenCalled();
+	});
+
+	it('maps ForbiddenError to a 403 with the message it was given', async () => {
+		// A 403, not a redirect: the caller is logged in and the answer is "not
+		// yours", which the dialog already knows how to render. Unlike the 500
+		// path, this message is written for the person who made the request, so
+		// it is safe — and useful — to show (ADR 0016).
+		const result = await runAction('deleteMap', async () => {
+			throw new ForbiddenError('Only the owner can delete this map.');
+		});
+
+		expect(result).toMatchObject({ status: 403 });
+		expect((result as { data: { error: string } }).data.error).toBe(
+			'Only the owner can delete this map.'
+		);
 	});
 });

@@ -15,6 +15,13 @@ export type SliceId = Brand<string, 'SliceId'>;
 export type StoryId = Brand<string, 'StoryId'>;
 
 /**
+ * The person making a request (ADR 0016). Branded like the entity ids, which
+ * is what stops ADR 0015 §6's presence client id — a different brand entirely —
+ * from ever being passed where an authenticated identity is expected.
+ */
+export type UserId = Brand<string, 'UserId'>;
+
+/**
  * Generates a UUIDv7: a time-ordered UUID (RFC 9562) — sorting by id sorts by
  * creation time *to the millisecond*, which is convenient for debugging and
  * for any future "recently created" listing.
