@@ -5,16 +5,13 @@ describe('participantColour', () => {
 	it('gives the same person the same colour every time', () => {
 		// The whole point: one person is one colour on every screen, so "the blue
 		// cursor" means something when said out loud.
+		//
+		// Note this covers determinism only. "Does not depend on join order" is
+		// not testable here — a pure function of an id cannot — and the place it
+		// could actually break is the components, which the specs for
+		// `PresenceList` and `RemoteCursors` check by asserting the colour comes
+		// from the user id rather than from a position in the array.
 		expect(participantColour('user-7')).toEqual(participantColour('user-7'));
-	});
-
-	it('does not depend on who is asking or on join order', () => {
-		// Join order differs per viewer. Keying on it would give one person a
-		// different colour on each screen.
-		const first = participantColour('user-a');
-		const afterOthers = ['user-b', 'user-c', 'user-d'].map(participantColour);
-		expect(participantColour('user-a')).toEqual(first);
-		expect(afterOthers).toHaveLength(3);
 	});
 
 	it('spreads people across the palette rather than clustering', () => {

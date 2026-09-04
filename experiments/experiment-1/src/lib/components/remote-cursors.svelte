@@ -17,10 +17,13 @@
 {#each cursors as cursor (cursor.clientId)}
 	<!-- By person, not by tab, so this matches their avatar in the header. -->
 	{@const colour = participantColour(cursor.userId)}
-	<!-- `pointer-events` is inline rather than a utility class because it is a
-	     correctness property, not styling: a cursor sits on top of the board, and
-	     if it ever took pointer events it would swallow drags near another
-	     person's pointer. That must not depend on a stylesheet being present. -->
+	<!-- `pointer-events` is inline, unlike the classes beside it, so the component
+	     spec can assert the computed value — component tests render without
+	     app.css, where a `pointer-events-none` class resolves to `auto`.
+	     Worth singling out rather than inlining everything because the failures
+	     differ in kind: a missing `absolute` is visibly broken, while a missing
+	     `pointer-events-none` silently swallows drags near another person's
+	     pointer. -->
 	<div
 		class="absolute z-20 flex items-start gap-1"
 		style="left: {cursor.x}px; top: {cursor.y}px; pointer-events: none;"
