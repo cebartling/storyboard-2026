@@ -66,7 +66,12 @@ export async function startServer(): Promise<DemoServer> {
 
 	console.log('Building the app…');
 	const child = spawn(
-		`rm -f ${DEMO_DB} ${DEMO_DB}-journal ${DEMO_DB}-wal ${DEMO_DB}-shm && vite build && vite preview`,
+		// `--strictPort`: without it vite quietly takes 4174 when 4173 is busy, and
+		// its stdout is ignored so nobody would see that. `waitForServer` would
+		// then get an answer from whatever *is* on 4173, and the demo would run
+		// against a stranger's server and database. Failing to bind is the honest
+		// outcome, and the early-exit check below turns it into a clear message.
+		`rm -f ${DEMO_DB} ${DEMO_DB}-journal ${DEMO_DB}-wal ${DEMO_DB}-shm && vite build && vite preview --strictPort`,
 		{
 			shell: true,
 			detached: true,
@@ -87,13 +92,22 @@ export async function startServer(): Promise<DemoServer> {
 		}
 	};
 
-	// Covers the paths a `finally` does not: Ctrl-C, and an uncaught throw.
-	const onSignal = () => {
+	// Covers the paths a `finally` does not: Ctrl-C, a kill, a closed terminal,
+	// and an uncaught throw.
+	//
+	// SIGHUP matters as much as the other two and is the one easy to forget: the
+	// server is spawned `detached`, so it sits in its own session and does *not*
+	// receive the terminal's hangup. Only this process does — and without a
+	// handler the default disposition kills it before `stop()` runs, leaving the
+	// server holding the port. Closing the terminal window is an ordinary way to
+	// abandon a demo.
+	const onSignal = (code: number) => () => {
 		stop();
-		process.exit(130);
+		process.exit(code);
 	};
-	process.once('SIGINT', onSignal);
-	process.once('SIGTERM', onSignal);
+	process.once('SIGINT', onSignal(130));
+	process.once('SIGTERM', onSignal(143));
+	process.once('SIGHUP', onSignal(129));
 	process.once('uncaughtException', (error) => {
 		stop();
 		throw error;
