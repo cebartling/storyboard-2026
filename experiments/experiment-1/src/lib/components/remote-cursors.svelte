@@ -15,7 +15,8 @@
 	`pointer-events-none` throughout: a cursor must never intercept a drag.
 -->
 {#each cursors as cursor (cursor.clientId)}
-	{@const colour = participantColour(cursor.clientId)}
+	<!-- By person, not by tab, so this matches their avatar in the header. -->
+	{@const colour = participantColour(cursor.userId)}
 	<div
 		class="pointer-events-none absolute z-20 flex items-start gap-1"
 		style="left: {cursor.x}px; top: {cursor.y}px;"

@@ -1,11 +1,15 @@
 export interface RemoteParticipant {
 	userId: string;
 	displayName: string;
-	clientId: string;
+	/** Every tab this person has open. Presence is per person; cursors and
+	 *  "is this me?" are per tab. */
+	clientIds: string[];
 }
 
 export interface RemoteCursor {
 	clientId: string;
+	/** Colour is keyed on the person, so a cursor matches its owner's avatar. */
+	userId: string;
 	displayName: string;
 	x: number;
 	y: number;
@@ -145,15 +149,18 @@ export function createMapSync(options: MapSyncOptions): MapSync {
 			participants = data.participants;
 			// Someone who has left cannot still have a pointer on the board — a
 			// stale cursor from a closed tab would otherwise sit there forever.
+			// Every tab counts, not just the first one a person opened: pruning
+			// against one id per person removed a colleague's second-window cursor
+			// every time anybody joined or left.
 			// A plain array rather than a Set: this list is a handful of people,
 			// and it is a throwaway local rather than reactive state.
-			const present = data.participants.map((p) => p.clientId);
+			const present = data.participants.flatMap((p) => p.clientIds);
 			cursors = cursors.filter((c) => present.includes(c.clientId));
 		});
 
 		source.addEventListener('cursor', (event) => {
 			const data = JSON.parse((event as MessageEvent).data) as
-				| { clientId: string; displayName: string; x: number; y: number }
+				| { clientId: string; userId: string; displayName: string; x: number; y: number }
 				| { clientId: string; x: null };
 			cursors = cursors.filter((c) => c.clientId !== data.clientId);
 			if (data.x !== null) cursors = [...cursors, data as RemoteCursor];

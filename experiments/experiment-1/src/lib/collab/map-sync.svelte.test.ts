@@ -161,30 +161,56 @@ describe('createMapSync', () => {
 			const { sync, source } = setup();
 
 			source().emit('presence', {
-				participants: [{ userId: 'u1', displayName: 'Alice', clientId: 'tab-1' }]
+				participants: [{ userId: 'u1', displayName: 'Alice', clientIds: ['tab-1'] }]
 			});
 
 			flushSync();
 			expect(sync.participants).toEqual([
-				{ userId: 'u1', displayName: 'Alice', clientId: 'tab-1' }
+				{ userId: 'u1', displayName: 'Alice', clientIds: ['tab-1'] }
 			]);
+			sync.dispose();
+		});
+
+		it('keeps the cursor of a second tab belonging to someone already present', () => {
+			// Presence lists one entry per person carrying all of their tabs.
+			// Pruning against one id per person removed a colleague's
+			// second-window cursor every time anybody joined or left.
+			const { sync, source } = setup();
+			source().emit('cursor', {
+				clientId: 'alice-tab-2',
+				userId: 'u1',
+				displayName: 'Alice',
+				x: 1,
+				y: 2
+			});
+
+			source().emit('presence', {
+				participants: [
+					{ userId: 'u1', displayName: 'Alice', clientIds: ['alice-tab-1', 'alice-tab-2'] }
+				]
+			});
+
+			flushSync();
+			expect(sync.cursors).toHaveLength(1);
 			sync.dispose();
 		});
 
 		it('replaces a cursor rather than accumulating one per move', () => {
 			const { sync, source } = setup();
 
-			source().emit('cursor', { clientId: 'other', displayName: 'Bob', x: 1, y: 2 });
-			source().emit('cursor', { clientId: 'other', displayName: 'Bob', x: 5, y: 6 });
+			source().emit('cursor', { clientId: 'other', userId: 'u2', displayName: 'Bob', x: 1, y: 2 });
+			source().emit('cursor', { clientId: 'other', userId: 'u2', displayName: 'Bob', x: 5, y: 6 });
 
 			flushSync();
-			expect(sync.cursors).toEqual([{ clientId: 'other', displayName: 'Bob', x: 5, y: 6 }]);
+			expect(sync.cursors).toEqual([
+				{ clientId: 'other', userId: 'u2', displayName: 'Bob', x: 5, y: 6 }
+			]);
 			sync.dispose();
 		});
 
 		it('clears a cursor when its owner leaves the board area', () => {
 			const { sync, source } = setup();
-			source().emit('cursor', { clientId: 'other', displayName: 'Bob', x: 1, y: 2 });
+			source().emit('cursor', { clientId: 'other', userId: 'u2', displayName: 'Bob', x: 1, y: 2 });
 
 			source().emit('cursor', { clientId: 'other', x: null });
 
@@ -197,7 +223,7 @@ describe('createMapSync', () => {
 			// Presence is the authority on who is here; a stale pointer left behind
 			// by a closed tab would sit on the board forever.
 			const { sync, source } = setup();
-			source().emit('cursor', { clientId: 'gone', displayName: 'Bob', x: 1, y: 2 });
+			source().emit('cursor', { clientId: 'gone', userId: 'u2', displayName: 'Bob', x: 1, y: 2 });
 
 			source().emit('presence', { participants: [] });
 

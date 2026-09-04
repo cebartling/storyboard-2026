@@ -157,6 +157,20 @@ describe('MapHub', () => {
 			expect(hub.participants()).toHaveLength(1);
 			expect(hub.subscriberCount).toBe(2);
 		});
+
+		it('carries every tab a person has open, not just the first', () => {
+			// Presence is per person, but cursors and "is this me?" are per tab.
+			// Listing only the first tab pruned the second tab's cursor whenever
+			// anyone joined or left, and made that tab show its own account as a
+			// stranger.
+			const hub = new MapHub();
+			hub.subscribe(recorder('tab-1', 'alice', 'Alice').subscriber, null);
+			hub.subscribe(recorder('tab-2', 'alice', 'Alice').subscriber, null);
+
+			expect(hub.participants()).toEqual([
+				{ userId: 'alice', displayName: 'Alice', clientIds: ['tab-1', 'tab-2'] }
+			]);
+		});
 	});
 
 	describe('cursors', () => {
@@ -170,7 +184,9 @@ describe('MapHub', () => {
 			hub.publishCursor(alice.subscriber, { x: 10, y: 20 });
 
 			expect(bob.events.filter((e) => e.type === 'cursor')).toEqual([
-				{ type: 'cursor', clientId: 'a', displayName: 'Alice', x: 10, y: 20 }
+				// `userId` rides along so the receiver can colour the cursor by
+				// person rather than by tab, matching the owner's avatar.
+				{ type: 'cursor', clientId: 'a', userId: 'alice', displayName: 'Alice', x: 10, y: 20 }
 			]);
 			// Echoing it back would fight the local pointer.
 			expect(alice.events.filter((e) => e.type === 'cursor')).toEqual([]);

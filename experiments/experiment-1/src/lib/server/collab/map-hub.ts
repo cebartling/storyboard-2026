@@ -20,13 +20,30 @@ export interface Participant {
 	clientId: string;
 }
 
+/**
+ * One person on the board, with every tab they have open.
+ *
+ * Presence is per *person* — a colleague with two windows is one colleague —
+ * but cursors and "is this me?" are per *tab*, so the list has to carry all of
+ * a person's client ids rather than whichever tab happened to connect first.
+ * Keeping only the first meant a second tab's cursor was pruned every time
+ * anyone joined or left, and that tab saw its own account listed as a stranger.
+ */
+export interface PresenceEntry {
+	userId: UserId;
+	displayName: string;
+	clientIds: string[];
+}
+
 export type HubEvent =
 	/** Something changed; the payload is a sequence number, never data (§5). */
 	| { type: 'change'; seq: number }
 	/** You are too far behind to replay — refetch. */
 	| { type: 'resync'; seq: number }
-	| { type: 'presence'; participants: Participant[] }
-	| { type: 'cursor'; clientId: string; displayName: string; x: number; y: number }
+	| { type: 'presence'; participants: PresenceEntry[] }
+	// `userId` travels with the cursor so the receiver can colour it by person:
+	// a cursor and its owner's avatar must not be different colours.
+	| { type: 'cursor'; clientId: string; userId: UserId; displayName: string; x: number; y: number }
 	| { type: 'cursor'; clientId: string; x: null };
 
 export interface Subscriber extends Participant {
@@ -87,7 +104,13 @@ export class MapHub {
 
 	publishCursor(from: Participant, cursor: { x: number; y: number } | null): void {
 		const event: HubEvent = cursor
-			? { type: 'cursor', clientId: from.clientId, displayName: from.displayName, ...cursor }
+			? {
+					type: 'cursor',
+					clientId: from.clientId,
+					userId: from.userId,
+					displayName: from.displayName,
+					...cursor
+				}
 			: { type: 'cursor', clientId: from.clientId, x: null };
 		// Everyone but the origin: a client already knows where its own pointer is,
 		// and echoing it back would fight the local cursor.
@@ -96,17 +119,20 @@ export class MapHub {
 		}
 	}
 
-	/** One entry per account, however many tabs they have open. */
-	participants(): Participant[] {
-		const byUser = new Map<UserId, Participant>();
+	/** One entry per account, carrying every tab that account has open. */
+	participants(): PresenceEntry[] {
+		const byUser = new Map<UserId, PresenceEntry>();
 		for (const subscriber of this.subscribers) {
-			if (!byUser.has(subscriber.userId)) {
-				byUser.set(subscriber.userId, {
-					userId: subscriber.userId,
-					displayName: subscriber.displayName,
-					clientId: subscriber.clientId
-				});
+			const existing = byUser.get(subscriber.userId);
+			if (existing) {
+				existing.clientIds.push(subscriber.clientId);
+				continue;
 			}
+			byUser.set(subscriber.userId, {
+				userId: subscriber.userId,
+				displayName: subscriber.displayName,
+				clientIds: [subscriber.clientId]
+			});
 		}
 		return [...byUser.values()];
 	}
