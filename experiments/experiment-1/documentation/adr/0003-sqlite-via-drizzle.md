@@ -38,3 +38,27 @@ revisiting (a real client-server database) before any multi-user or hosted use o
 experiment. Migrations being committed rather than pushed means schema evolution is
 visible in git history and reviewable, at the small cost of an explicit generate step
 whenever the schema changes.
+
+## Amendment, 2026-09-04: the repository is no longer tied to one driver
+
+This ADR names `better-sqlite3`, and the app still uses it. But `scripts/seed.ts` now runs
+under Bun, where `better-sqlite3` — a native addon — **segfaults on connection**, so the
+seed opens its own connection through `bun:sqlite` instead.
+
+`StoryMapRepository` and `Auth` therefore take `AppDatabase`
+(`src/lib/server/db/database.ts`), the base Drizzle SQLite type both drivers extend, rather
+than `BetterSQLite3Database`. The choice of driver is now the composition root's, which is
+where it belonged.
+
+That cost one substantive change. The compare-and-set added under ADR 0015 Stage 0 read the
+affected-row count of a conditional `UPDATE … WHERE version = ?` — and the affected-row
+count is precisely what the two drivers disagree on (`RunResult` against `void`). It is now
+a read-then-write inside the transaction, which is correct **only because the transaction is
+`{ behavior: 'immediate' }`**: the write lock is held from `BEGIN`, so nothing can commit in
+between. Under a deferred transaction the new form would be racy where the old one was not.
+The concurrency tests that hold a lock from a worker thread are what check this, and they
+passed unchanged through the rewrite.
+
+The "no concurrency path" caveat above is also softer than when it was written: ADR 0015
+Stage 0 added WAL and a busy timeout, and those pragmas now live in
+`src/lib/server/db/pragmas.ts` so both drivers apply the same set.
