@@ -1,0 +1,26 @@
+{
+	// The Bun half of the codebase: `scripts/` and `demo/`, which run under Bun
+	// rather than Node.
+	//
+	// A separate program on purpose. `bun-types` is a global declaration file, so
+	// including these directories in the app's program would make `Bun.*` visible
+	// to SvelteKit routes — where it would typecheck happily and then crash,
+	// because the app runs on Node. Keeping them apart means the type environment
+	// matches the runtime in both halves.
+	"extends": "./.svelte-kit/tsconfig.json",
+	"compilerOptions": {
+		"types": ["bun-types"],
+		"allowJs": true,
+		"checkJs": true,
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"resolveJsonModule": true,
+		"skipLibCheck": true,
+		"sourceMap": true,
+		"strict": true,
+		"moduleResolution": "bundler",
+		"noEmit": true
+	},
+	"include": ["scripts/**/*.ts", "demo/**/*.ts", "src/lib/server/db/pragmas.ts"],
+	"exclude": ["node_modules/**"]
+}

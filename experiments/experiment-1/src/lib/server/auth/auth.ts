@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { eq, lt } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { AppDatabase } from '../db/database';
 import { InvariantError } from '$lib/domain/errors';
 import { newId, type UserId } from '$lib/domain/ids';
 import * as schema from '../db/schema';
@@ -60,7 +60,7 @@ function decoyHash(): Promise<string> {
 }
 
 export class Auth {
-	constructor(private readonly db: BetterSQLite3Database<typeof schema>) {}
+	constructor(private readonly db: AppDatabase) {}
 
 	async register(email: string, displayName: string, password: string): Promise<AuthenticatedUser> {
 		const normalised = normaliseEmail(email);

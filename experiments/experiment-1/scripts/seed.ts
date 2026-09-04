@@ -6,15 +6,22 @@
  * repository and calls into the pure core, and holds no rules itself. It
  * builds its own Drizzle client rather than importing src/lib/server/db,
  * whose `$env/dynamic/private` import only resolves inside SvelteKit.
+ *
+ * **Runs on Bun**, which is why it opens its own connection through
+ * `bun:sqlite` rather than reusing `openDatabase`: `better-sqlite3` is a native
+ * addon that segfaults the Bun runtime on construction. The pragmas are shared
+ * with the app's connection so the two cannot drift. The repository and `Auth`
+ * accept either driver — see `AppDatabase`.
  */
 
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import { Database } from 'bun:sqlite';
+import { drizzle } from 'drizzle-orm/bun-sqlite';
+import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { loadEnv } from 'vite';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as schema from '../src/lib/server/db/schema';
-import { openDatabase } from '../src/lib/server/db/open';
+import { REQUIRED_PRAGMAS } from '../src/lib/server/db/pragmas';
 import { Auth } from '../src/lib/server/auth/auth';
 import { DrizzleStoryMapRepository } from '../src/lib/server/repository/drizzle-story-map-repository';
 import { buildRetailCommerceMap } from '../src/lib/seed/retail-commerce';
@@ -42,7 +49,8 @@ function databaseUrl(): string {
 // DATABASE_URL is otherwise ambiguous in the output, and every message below
 // should name the file actually written rather than the value configured.
 const file = path.resolve(root, databaseUrl());
-const client = openDatabase(file);
+const client = new Database(file);
+for (const pragma of REQUIRED_PRAGMAS) client.exec(`PRAGMA ${pragma}`);
 const db = drizzle(client, { schema });
 
 try {

@@ -13,25 +13,21 @@
 
 import { ConflictError, ForbiddenError } from '$lib/domain/errors';
 import { and, eq, inArray } from 'drizzle-orm';
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { AppDatabase } from '../db/database';
 import type { ActivityId, MapId, SliceId, StepId, StoryId, UserId } from '$lib/domain/ids';
 import type { Caller, MapAccess, MapSummary, Role, StoryMapRepository } from '$lib/domain/ports';
 import type { Activity, Slice, Step, Story, StoryMap } from '$lib/domain/story-map';
 import * as schema from '../db/schema';
 
 export class DrizzleStoryMapRepository implements StoryMapRepository {
-	constructor(private readonly db: BetterSQLite3Database<typeof schema>) {}
+	constructor(private readonly db: AppDatabase) {}
 
 	/**
 	 * The caller's role on a map, or null if they are not a member. One row, and
 	 * it answers both "does this exist" and "may they" — which is the reason
 	 * ADR 0016 puts authorisation here rather than in the app layer.
 	 */
-	private roleWithin(
-		tx: BetterSQLite3Database<typeof schema>,
-		mapId: MapId,
-		userId: UserId
-	): Role | null {
+	private roleWithin(tx: AppDatabase, mapId: MapId, userId: UserId): Role | null {
 		const row = tx
 			.select({ role: schema.mapMembers.role })
 			.from(schema.mapMembers)
@@ -67,7 +63,7 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 		});
 	}
 
-	private loadWithin(db: BetterSQLite3Database<typeof schema>, id: MapId): StoryMap | null {
+	private loadWithin(db: AppDatabase, id: MapId): StoryMap | null {
 		const mapRow = db.select().from(schema.maps).where(eq(schema.maps.id, id)).get();
 		if (!mapRow) return null;
 
@@ -156,47 +152,39 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 		// and SQLite reports SQLITE_BUSY_SNAPSHOT — which the busy handler never
 		// retries, so `busy_timeout` cannot save it (ADR 0015 Stage 0).
 		//
-		// This one happens to write first today, so it is safe either way; it is
-		// marked anyway so that adding a read at the top (an ownership check, say)
-		// cannot silently reintroduce the hazard. `delete()` below really does
-		// read first, and really does fail without this.
+		// **Required here, not precautionary.** This transaction reads the version
+		// and the caller's membership before it writes, so both of those reads
+		// depend on the lock already being held. `delete()` below is the same
+		// shape. (This comment used to say the method wrote first and was safe
+		// either way; that stopped being true when the compare-and-set became a
+		// read-then-write.)
 		this.db.transaction(
 			(tx) => {
-				// Membership is checked inside the same transaction as the write, so
-				// access revoked concurrently cannot be raced. This is the "read at
-				// the top" the comment above anticipated — the immediate BEGIN is
-				// what keeps it safe.
-				const existingRow = tx
-					.select({ id: schema.maps.id })
+				// Read the current version, then decide. This used to be a conditional
+				// `UPDATE ... WHERE version = ?` whose affected-row count said whether
+				// it matched. The count is unavailable through `AppDatabase`: Drizzle
+				// types its bun-sqlite driver's `.run()` as returning `void` where
+				// better-sqlite3's returns `RunResult`, so the shared supertype offers
+				// nothing to read. Note this is a *typing* gap and not a difference in
+				// behaviour — `bun:sqlite` does report `changes` at runtime — but the
+				// repository is written against the shared type, not against whichever
+				// driver happens to be underneath.
+				//
+				// Correct *only* because the transaction is immediate: the write lock
+				// is held from BEGIN, so nothing can commit between this read and the
+				// write below. Under a deferred transaction this form would be racy
+				// where the conditional UPDATE was not. The membership check below was
+				// already a read before a write, so this moves no boundary.
+				const existing = tx
+					.select({ version: schema.maps.version })
 					.from(schema.maps)
 					.where(eq(schema.maps.id, map.id))
 					.get();
-				if (existingRow && !this.roleWithin(tx, map.id, caller.userId)) {
-					throw new ForbiddenError('You do not have access to this story map.');
-				}
 
-				const update = tx
-					.update(schema.maps)
-					.set({ name: map.name, createdAt: map.createdAt, version: nextVersion })
-					.where(and(eq(schema.maps.id, map.id), eq(schema.maps.version, map.version)))
-					.run();
-
-				if (update.changes === 0) {
-					const existing = tx
-						.select({ version: schema.maps.version })
-						.from(schema.maps)
-						.where(eq(schema.maps.id, map.id))
-						.get();
-
-					if (existing) {
-						throw new ConflictError(
-							`Story map ${map.id} changed since it was loaded (expected version ${map.version}, current version ${existing.version})`
-						);
-					}
+				if (!existing) {
 					if (map.version !== 0) {
 						throw new ConflictError(`Story map ${map.id} no longer exists`);
 					}
-
 					tx.insert(schema.maps)
 						.values({
 							id: map.id,
@@ -210,6 +198,21 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 					// reach.
 					tx.insert(schema.mapMembers)
 						.values({ mapId: map.id, userId: caller.userId, role: 'owner' })
+						.run();
+				} else {
+					if (existing.version !== map.version) {
+						throw new ConflictError(
+							`Story map ${map.id} changed since it was loaded (expected version ${map.version}, current version ${existing.version})`
+						);
+					}
+					// Access revoked concurrently cannot be raced, for the same reason
+					// the version read above cannot: the lock is already held.
+					if (!this.roleWithin(tx, map.id, caller.userId)) {
+						throw new ForbiddenError('You do not have access to this story map.');
+					}
+					tx.update(schema.maps)
+						.set({ name: map.name, createdAt: map.createdAt, version: nextVersion })
+						.where(eq(schema.maps.id, map.id))
 						.run();
 				}
 

@@ -1,10 +1,17 @@
 /**
- * A stable colour per participant, so the same person is the same colour for
- * everyone looking at the board.
+ * A stable colour per person, so the same person is the same colour for
+ * everyone looking at the board — and their cursor matches their avatar.
  *
- * Derived from the client id rather than assigned in join order: order differs
- * per viewer, which would give one person a different colour on each screen and
- * make "the blue cursor" meaningless as a thing to say out loud.
+ * Keyed on the **user id**, not the client id and not join order. Join order
+ * differs per viewer, which would give one person a different colour on each
+ * screen and make "the blue cursor" meaningless as a thing to say out loud; the
+ * client id is per tab, so a colleague with two windows open would be two
+ * colours.
+ *
+ * Note this is a derived colour, not a profile setting: nobody picks it, and
+ * with eight of them two people can collide. It is a hint, not an identifier —
+ * the name is on the avatar and beside the cursor, and that is what actually
+ * tells people apart.
  */
 const PALETTE = [
 	{ bg: 'bg-sky-500', text: 'text-sky-500', ring: 'ring-sky-500' },

@@ -35,7 +35,7 @@ versions before 10 reject this directory's `pnpm-workspace.yaml` with
 | **Single canvas component test** | `corepack pnpm vitest run src/lib/components/board-viewport.svelte.spec.ts`                |
 | **Single e2e test**              | `corepack pnpm playwright test -g "drag story to slice"`                                   |
 | **Single canvas e2e test**       | `corepack pnpm playwright test -g "pan and zoom persist"`                                  |
-| Collaboration demo (headed)      | `corepack pnpm exec playwright test --config=playwright.demo.config.ts`                    |
+| Collaboration demo (headed)      | `corepack pnpm demo` (Bun)                                                                 |
 | Types                            | `corepack pnpm check`                                                                      |
 | Lint / format                    | `corepack pnpm lint` / `corepack pnpm format`                                              |
 | New migration                    | `corepack pnpm db:generate` (commit `drizzle/`)                                            |
@@ -45,8 +45,8 @@ versions before 10 reject this directory's `pnpm-workspace.yaml` with
 Migrations apply automatically at db-module load, so `corepack pnpm dev` and the e2e server
 self-migrate. E2e runs against a throwaway `e2e.db` and never touch `local.db`.
 
-`db:seed` runs `scripts/seed.ts` (under `tsx`, since the script is outside SvelteKit's
-build), which writes the sample retail commerce map from `src/lib/seed/` to `DATABASE_URL`.
+`db:seed` runs `scripts/seed.ts` (under **Bun** — see Runtimes below), which writes the
+sample retail commerce map from `src/lib/seed/` to `DATABASE_URL`.
 It appends a new map on every run rather than replacing one — nothing in the app depends on
 the seed, so no test or fixture breaks if you delete it.
 
@@ -153,11 +153,18 @@ write path or the stream — the amendments correct four things the code contrad
 **Single process is a correctness requirement, not an incidental fact** — two instances
 would each hold their own lock and their own hubs. Both `KeyedLock` and `MapHub` say so.
 
-`src/demo/collab-demo.ts` is a headed walkthrough of all of this — two windows side by side,
-each captioning what it is doing — for showing someone the feature rather than testing it. It
-runs under `playwright.demo.config.ts` against its own `demo.db`, and is deliberately outside
-both suites: `testMatch` does not overlap, and it asserts too loosely to be a regression test.
-If you change a selector the e2e suite uses, check the demo still runs.
+`demo/collab.ts` is a headed walkthrough of all of this — two windows side by side, each
+captioning what it is doing — for showing someone the feature rather than testing it. Run it
+with `corepack pnpm demo`. It lives outside `src/` because it is neither shipped nor tested,
+it runs against its own `demo.db`, and it is deliberately outside both suites — vitest's
+globs are `src/`-anchored and Playwright's `testMatch` is `**/*.e2e.{ts,js}`, so do not name
+anything in `demo/` with an `.e2e.ts` suffix.
+
+It keeps **its own copy** of the board helpers in `demo/board.ts`. That duplication is
+deliberate: the e2e suite wants to be fast and assert hard, the demo wants to be legible and
+pause where a person needs to look, and sharing one set meant a selector change made for the
+suite silently broke the demo. Change markup and you change both — the suite is the one that
+must not break, and it keeps its own helpers.
 
 Testing collaboration: `collab.svelte.e2e.ts` drives two browser contexts through the auth
 fixture's `newUser`. The one rule that keeps it from flaking is to wait for both boards to
@@ -165,6 +172,35 @@ report `data-collab-state="connected"` before mutating anything. Do not use
 `context.setOffline` to simulate a drop — it leaves an open stream connected but blocks the
 refetch, and SvelteKit answers a failed load with a full-page navigation; route-abort the
 `**/events*` requests instead.
+
+## Runtimes: Node for the app, Bun for the scripts
+
+Two runtimes, on purpose, and the split is not arbitrary:
+
+- **Node** runs the app, the dev server, the preview server, vitest and the Playwright e2e
+  suite. Nothing about the product depends on Bun.
+- **Bun** runs `demo/` and `scripts/seed.ts` — scripts, which Bun executes as TypeScript with
+  no build step.
+
+The line between them is `better-sqlite3`, a native addon that **segfaults Bun on
+construction** (`require()` succeeds, `new Database()` crashes; the same code is fine under
+Node). So anything holding a database connection in-process stays on Node — with one
+exception: the seed script opens its own connection through `bun:sqlite`, which is why
+`StoryMapRepository` and `Auth` take the driver-agnostic `AppDatabase` rather than
+`BetterSQLite3Database`.
+
+Two consequences worth knowing before changing any of this:
+
+- **`save()` must not read an affected-row count.** Drizzle types the two drivers'
+  writes differently (`RunResult` against `void`), so the shared `AppDatabase` type offers
+  nothing to read — a typing gap, not a behavioural one; `bun:sqlite` does report `changes`
+  at runtime. That is why the compare-and-set is a read-then-write, and why it depends on
+  `{ behavior: 'immediate' }` for correctness. See the comment on it.
+- **The demo's preview server runs under Node**, spawned as a child process by
+  `demo/harness.ts`. Only the driving script is Bun. Do not "simplify" that.
+
+Connection pragmas live in `src/lib/server/db/pragmas.ts` so both drivers apply the same
+ones; ADR 0015 Stage 0 made them load-bearing and two lists could drift.
 
 ## Not built (deliberately)
 

@@ -25,6 +25,10 @@ from the repo root.
 | --- | --- | --- |
 | `experiments/experiment-1/` | SvelteKit 2 + Svelte 5 (runes), Tailwind CSS 4, Drizzle + SQLite, Vitest, Playwright | Jeff Patton's user story mapping technique as a vertical slice, with accounts and shared maps |
 
+`experiment-1` runs on **Node** (app, tests, e2e) with **Bun** for its scripts (`demo/`,
+`scripts/seed.ts`). The dividing line is `better-sqlite3`, which segfaults Bun on connection
+— see that experiment's `CLAUDE.md` under "Runtimes" before moving anything across it.
+
 ## experiment-1 quick reference
 
 Full command table, architecture constraints, and testing gotchas are in
