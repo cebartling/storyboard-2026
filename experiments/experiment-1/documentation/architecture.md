@@ -55,6 +55,14 @@ Two things sit beside that picture rather than inside it:
   `locals.user`, and `requireCaller(locals)` is the single place a `Caller` is constructed.
 - **`src/lib/app/keyed-lock.ts`** — the per-map write lock (ADR 0015 §2). Neither adapter nor
   port; it serialises a use case's whole `load → mutate → save`, which no port method spans.
+- **`src/lib/server/collab/`** — the per-map event hubs and the SSE stream (ADR 0015 Stage 1),
+  wired in `deps.ts` alongside the adapters. Not a port: nothing in `src/lib/domain/` or
+  `src/lib/app/` knows it exists, and the broadcast is published from the route after an
+  action succeeds — publishing from a use case would need a third outbound port, which
+  ADR 0006 declines. Its client half is `src/lib/collab/`.
+
+Both the write lock and the hubs are single-instance module state, which makes the
+single-process deployment a correctness requirement rather than a convenience.
 
 Note that authorisation is enforced **in the adapters**, not in the use cases: they hold the
 membership rows, so one query answers "does this exist" and "may they" together. The cost is

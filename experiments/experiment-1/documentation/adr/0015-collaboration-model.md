@@ -223,6 +223,18 @@ succeeds, with `seq = expectedVersion + 1` — exact, under the write lock and t
 compare-and-set. Publishing from the use case would need a third outbound port, which
 ADR 0006 forbids.
 
+**A mutation is broadcast to the client that caused it, and must not be.** Not addressed at
+all in §5, and it is not cosmetic: the submitting client has already refetched as part of
+its own submission, so the echo re-renders the board a second time for every local edit —
+and mid-drag that second render detaches the card from under the pointer. Mutations
+therefore carry the tab's `clientId`, and the hub skips that subscriber while still
+buffering the change for replay. Suppressing by sequence number alone does not work: the
+echo arrives before the submission's own refetch has finished.
+
+**§7's reconnection cannot be left to the browser.** An `EventSource` that loses its network
+can sit in `CONNECTING` indefinitely after connectivity returns. The client reconnects
+itself on any error, carrying its position in the URL as well as in `Last-Event-ID`.
+
 **§2 slightly overstates what the write lock buys.** It says the second of two concurrent
 inserts "sees the first's rank". Once §3's version round-trip is in place that cannot
 happen: the second writer holds the version its editor was opened at and is refused before

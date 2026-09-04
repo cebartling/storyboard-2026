@@ -128,12 +128,40 @@ auth identity.
 `local.db` have no members and are invisible until adopted; the SQL is in
 `documentation/architecture.md`.
 
+## Real-time collaboration (ADR 0015)
+
+Stages 0 and 1 are both built. Read the ADR **and its amendments block** before touching the
+write path or the stream — the amendments correct four things the code contradicted.
+
+- Writes are serialised per map by `src/lib/app/keyed-lock.ts`, and every mutation carries
+  the version its editor was _opened_ at. A stale editor gets a 409 that keeps what they
+  typed and refreshes the board beneath them.
+- `src/lib/server/collab/` is the fan-out: a per-map hub, and an SSE stream authorised
+  through the same use case the page load uses. The notification is a sequence number, never
+  a payload — clients react by calling `invalidateAll()`.
+- **Every mutation must carry `clientId`.** The hub skips the tab that caused a change,
+  because it has already refetched; without it the board re-renders twice per local edit and
+  a drag loses its card mid-flight. `board-dialogs.svelte` sets it from the submit function,
+  and the drag path sets it on the POST.
+- `src/lib/collab/map-sync.svelte.ts` is the client. It suspends refetching while any drag
+  is in progress (queued, not dropped), and reconnects itself rather than trusting the
+  browser's own retry.
+- An open dialog is told when its subject changes or is deleted underneath it
+  (`src/lib/board/dialog-subject.ts`).
+
+**Single process is a correctness requirement, not an incidental fact** — two instances
+would each hold their own lock and their own hubs. Both `KeyedLock` and `MapHub` say so.
+
+Testing collaboration: `collab.svelte.e2e.ts` drives two browser contexts through the auth
+fixture's `newUser`. The one rule that keeps it from flaking is to wait for both boards to
+report `data-collab-state="connected"` before mutating anything. Do not use
+`context.setOffline` to simulate a drop — it leaves an open stream connected but blocks the
+refetch, and SvelteKit answers a failed load with a full-page navigation; route-abort the
+`**/events*` requests instead.
+
 ## Not built (deliberately)
 
-Real-time collaboration (ADR 0015 Stage 1) and AI calls. Stage 0 **is** built: versions
-round-trip, writes to a map are serialised, and the SQLite connection is WAL with a busy
-timeout — read ADR 0015 before adding a domain mutation or touching the write path, and note
-its amendments block, which corrects three things the code contradicted. The `AiAssistant`
-port exists with a null implementation so AI plugs in without rework — its contract style
-(domain snapshots in, structured suggestions out) is the commitment; its method list is
-provisional.
+AI calls, and ADR 0015's Stage 2 (fine-grained effects), which stays deferred. The
+`AiAssistant` port exists with a null implementation so AI plugs in without rework — its
+contract style (domain snapshots in, structured suggestions out) is the commitment; its
+method list is provisional.

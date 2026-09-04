@@ -53,8 +53,10 @@ stops where it does.
 
 The app requires an account (ADR 0016): every repository method takes a `Caller`, maps have
 owners and editors, and both repository implementations are held to one shared contract
-test. ADR 0015 is the collaboration design — its Stage 0 (version round-trip, per-map write
-lock, WAL) is built; the SSE transport is not.
+test. ADR 0015 is the collaboration design, and both its stages are built — versions
+round-trip, writes are serialised per map, and boards stay in sync over SSE with presence
+and live cursors. Both rest on a single-process deployment, which is a correctness
+requirement rather than a convenience.
 
 ## Working agreements
 
