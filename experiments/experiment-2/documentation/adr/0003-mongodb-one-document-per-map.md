@@ -54,6 +54,47 @@ that image's entrypoint to set the `GLIBC_TUNABLES=glibc.pthread.rseq=0` workaro
 entrypoint implements. Nothing in this experiment needs a MongoDB 8 feature, so 7 is pinned
 and the finding is recorded in `compose.yaml` so nobody spends the afternoon again.
 
+## The result, measured
+
+The experiment's question was whether [ADR 0006](./0006-hexagonal-lite.md)'s two outbound
+ports really insulated the domain from persistence, or only appeared to. Comparing the two
+experiments file by file across `src/lib/domain/`, `src/lib/app/`, `src/lib/board/`,
+`src/lib/canvas/`, `src/lib/collab/`, `src/lib/components/`, `src/lib/seed/` and
+`src/routes/`, and ignoring the ADR renumbering this experiment introduced:
+
+**71 of 80 files are byte-identical.** The port itself did not change, and the 17-case
+contract test passed against the new adapter before a single case was added to it.
+
+The nine that changed, in full, because the ones that had to change are the finding:
+
+| File                                                                             | Change                                                                      |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `src/hooks.server.ts`, `routes/logout`, `routes/register`, `routes/maps/[mapId]` | One `await` each. `Auth` was synchronous only because better-sqlite3 is.    |
+| `domain/story-map.ts`                                                            | `inRankOrder` added — the read-path guarantee `ORDER BY rank` used to make. |
+| `app/in-memory-story-map-repository.ts`                                          | Two behaviours corrected, both found by new contract cases.                 |
+| `app/story-map-repository-contract.ts` (+ its in-memory binding)                 | Four cases added, all pinning drift that already existed.                   |
+| `routes/run-action.test.ts`                                                      | A fixture error string, `SQLITE_IOERR` → a Mongo error.                     |
+| `canvas/camera-math.ts`                                                          | One word in a comment.                                                      |
+
+**The seam held.** The domain's rank math, the move and slice semantics, every use case,
+every component, the whole collaboration layer and every route body came across untouched.
+
+**And it was not free of findings.** Four divergences surfaced, every one of them by running
+the contract test against a third implementation rather than by reading the code:
+
+1. **Rank order** (above) — the only one that was a live bug, and it was caught by the e2e
+   suite, not by reasoning.
+2. **Membership before version.** experiment-1's two implementations checked in opposite
+   orders, so a stranger holding a stale copy was told to refresh a map they may not touch.
+3. **`listSummaries` ordering**, which only one of them sorted.
+4. **`save()` deciding "new or existing?" by looking for the map** rather than at the
+   version, which let a stale tab silently resurrect a deleted map, owned by whoever still
+   had it open.
+
+None of these were caused by the move. All four had been sitting in experiment-1, passing
+its whole suite. A contract test only prevents the drift it asks about, and these are what
+it was not asking.
+
 ## Consequences
 
 **The adapter shrinks to the shape the aggregate always had.** `load()` is a `findOne`;

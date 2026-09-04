@@ -69,6 +69,17 @@ membership rows, so one query answers "does this exist" and "may they" together.
 that policy lives in two implementations, which is why both are held to
 `src/lib/app/story-map-repository-contract.ts`.
 
+## Did the ports work? (measured, not asserted)
+
+`experiment-2` replaced the entire persistence layer. Across `src/lib/domain/`,
+`src/lib/app/`, `src/lib/board/`, `src/lib/canvas/`, `src/lib/collab/`,
+`src/lib/components/`, `src/lib/seed/` and `src/routes/`, **71 of 80 files are
+byte-identical to experiment-1**. The nine that changed were four `await`s (`Auth` was
+synchronous only because better-sqlite3 is), one new domain function (`inRankOrder`), the
+in-memory double and its contract test, one test fixture's error string, and one word in a
+comment. ADR 0003 lists them, and lists the four pre-existing divergences the exercise
+turned up.
+
 ## The two outbound ports, and why only two
 
 1. **`StoryMapRepository`** — loads and saves a whole `StoryMap` aggregate. This is the
