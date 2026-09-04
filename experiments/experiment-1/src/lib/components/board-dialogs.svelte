@@ -13,7 +13,8 @@
 		| { kind: 'addSlice' }
 		| { kind: 'editSlice'; sliceId: string; name: string }
 		| { kind: 'addStory'; stepId: string; sliceId: string | null; scopeLabel: string }
-		| { kind: 'editStory'; storyId: string; title: string; description: string | null };
+		| { kind: 'editStory'; storyId: string; title: string; description: string | null }
+		| { kind: 'shareMap'; mapName: string };
 
 	/** Reads the `{ error }` payload `run-action.ts` puts in every `fail()`. */
 	export function actionError(data: unknown): string | null {
@@ -29,7 +30,8 @@
 		addSlice: 'Add slice',
 		editSlice: 'Edit slice',
 		addStory: 'Add story',
-		editStory: 'Edit story'
+		editStory: 'Edit story',
+		shareMap: 'Share map'
 	};
 </script>
 
@@ -407,6 +409,26 @@
 			<input type="hidden" name="version" value={openedAtVersion} />
 			<input type="hidden" name="storyId" value={dialog.storyId} />
 			<button type="submit" class="btn btn-danger" disabled={submitting}>Delete story</button>
+		</form>
+	{:else if dialog?.kind === 'shareMap'}
+		<!-- No version input: sharing changes who may reach the map, not the
+		     board, so it neither reads nor advances the aggregate (ADR 0016). -->
+		<form method="POST" action="?/shareMap" use:enhance={submit} class="flex flex-col gap-3">
+			<p class="text-ink-muted text-sm">
+				People you add can edit <strong>{dialog.mapName}</strong> but cannot delete or share it.
+			</p>
+			<div class="flex flex-col gap-1">
+				<label class="field-label" for="share-email">Email address</label>
+				<input
+					id="share-email"
+					name="email"
+					type="email"
+					class="input"
+					placeholder="them@example.com"
+					required
+				/>
+			</div>
+			<button type="submit" class="btn btn-primary self-start" disabled={submitting}>Share</button>
 		</form>
 	{/if}
 </Modal>

@@ -15,12 +15,14 @@ import {
 	moveStory,
 	renameActivity,
 	renameSlice,
-	renameStep
+	renameStep,
+	shareMap
 } from '$lib/app/use-cases';
 import type { ActivityId, MapId, SliceId, StepId, StoryId } from '$lib/domain/ids';
 
 import { buildBoardViewModel } from '$lib/board/board-view-model';
 import { optionalNeighbour, requireString, requireVersion } from './form-fields';
+import { InvariantError } from '$lib/domain/errors';
 import { requireCaller } from '$lib/server/auth/require-caller';
 import { runAction } from '../../run-action';
 
@@ -284,6 +286,30 @@ export const actions: Actions = {
 				beforeId,
 				afterId
 			);
+		});
+	},
+
+	/**
+	 * Share by email address rather than by user id: an id is not something a
+	 * person has, and asking for one would mean exposing a directory. Owner-only,
+	 * which the repository enforces — this route does not re-check it (ADR 0016).
+	 */
+	shareMap: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
+		const form = await request.formData();
+		return runAction('shareMap', async () => {
+			const email = requireString(form.get('email'), 'Email address');
+			const invitee = deps.auth.findUserByEmail(email);
+			if (!invitee) {
+				// Named plainly: this is a map the caller already owns, and the
+				// address is one they typed, so there is nothing to leak by saying
+				// that nobody has registered it.
+				throw new InvariantError(`No account for ${email}. They need to register first.`);
+			}
+			if (invitee.id === caller.userId) {
+				throw new InvariantError('You already own this map.');
+			}
+			await shareMap(deps.storyMapRepository, caller, params.mapId as MapId, invitee.id);
 		});
 	}
 };

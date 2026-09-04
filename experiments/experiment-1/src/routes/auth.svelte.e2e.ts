@@ -1,5 +1,5 @@
 import { expect, test } from '../e2e/auth-fixture';
-import { createMap } from './maps/[mapId]/board-helpers';
+import { addActivity, createMap } from './maps/[mapId]/board-helpers';
 
 // ADR 0016. These are the tests that make "multi-user" mean something: a map
 // belongs to somebody, and somebody else cannot see it.
@@ -99,4 +99,80 @@ test("someone else's map is neither listed nor reachable by its URL", async ({
 	// one that does not, or map ids become enumerable.
 	await outsider.goto(url);
 	await expect(outsider.getByText(/No story map with id/)).toBeVisible();
+});
+
+test('an owner shares a map; the editor can edit it but not delete or share it', async ({
+	page,
+	newUser,
+	browser
+}) => {
+	const name = `Shared ${Date.now()}`;
+	await createMap(page, name);
+	const url = page.url();
+	await addActivity(page, 'Browse');
+
+	const { page: editor, email } = await newUser(browser);
+
+	// The owner shares by email address — an id is not something a person has.
+	await page.getByTestId('share-map').click();
+	const shareDialog = page.getByTestId('board-dialog');
+	await shareDialog.getByLabel('Email address').fill(email);
+	await shareDialog.getByRole('button', { name: 'Share' }).click();
+	await expect(shareDialog).toBeHidden();
+
+	// The editor now sees it in their list and can change the board.
+	await editor.goto('/');
+	await expect(editor.getByText(name)).toBeVisible();
+	await editor.goto(url);
+	await addActivity(editor, 'Checkout');
+	await expect(editor.getByText('Checkout')).toBeVisible();
+
+	// ...and the owner sees their work.
+	await page.reload();
+	await expect(page.getByText('Checkout')).toBeVisible();
+
+	// But an editor gets neither destructive control.
+	await expect(editor.getByTestId('share-map')).toHaveCount(0);
+	await editor.goto('/');
+	await expect(editor.getByRole('button', { name: `Delete ${name}` })).toHaveCount(0);
+	await expect(editor.getByTestId('shared-badge')).toBeVisible();
+});
+
+test('an editor who forges a delete is refused by the server, not just by the UI', async ({
+	page,
+	newUser,
+	browser
+}) => {
+	// Hiding a control is presentation; the rule has to hold when the request is
+	// made anyway.
+	const name = `Forged ${Date.now()}`;
+	await createMap(page, name);
+	const url = page.url();
+	const mapId = url.split('/maps/')[1];
+
+	const { page: editor, email } = await newUser(browser);
+	await page.getByTestId('share-map').click();
+	const shareDialog = page.getByTestId('board-dialog');
+	await shareDialog.getByLabel('Email address').fill(email);
+	await shareDialog.getByRole('button', { name: 'Share' }).click();
+	await expect(shareDialog).toBeHidden();
+
+	await editor.goto('/');
+	const result = await editor.evaluate(async (id) => {
+		const body = new FormData();
+		body.set('mapId', id);
+		const response = await fetch('?/deleteMap', { method: 'POST', body });
+		// A form action's result travels inside a 200 envelope when the request
+		// does not carry SvelteKit's own action header, so the refusal is in the
+		// body rather than the HTTP status.
+		return JSON.parse(await response.text()) as { type: string; status: number; data: string };
+	}, mapId);
+
+	expect(result.type).toBe('failure');
+	expect(result.status).toBe(403);
+	expect(result.data).toContain('Only the owner can delete');
+
+	// And the map is still there for its owner.
+	await page.goto(url);
+	await expect(page.getByRole('heading', { name })).toBeVisible();
 });

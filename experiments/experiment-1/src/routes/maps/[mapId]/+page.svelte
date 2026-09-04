@@ -187,6 +187,18 @@
 			<button type="button" class="btn btn-quiet" onclick={() => (dialog = { kind: 'addSlice' })}>
 				Add slice
 			</button>
+			{#if data.role === 'owner'}
+				<!-- Owner-only, and absent rather than disabled for an editor: the
+				     server refuses it either way (ADR 0016). -->
+				<button
+					type="button"
+					class="btn btn-quiet"
+					data-testid="share-map"
+					onclick={() => (dialog = { kind: 'shareMap', mapName: data.board.name })}
+				>
+					Share
+				</button>
+			{/if}
 		</div>
 	</div>
 
