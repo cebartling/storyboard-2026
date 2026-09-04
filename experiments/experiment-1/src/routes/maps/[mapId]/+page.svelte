@@ -1,7 +1,13 @@
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
+	import { createMapSync, type MapSync } from '$lib/collab/map-sync.svelte';
+	import { subjectStatus } from '$lib/board/dialog-subject';
+	import { SvelteSet } from 'svelte/reactivity';
+	import { trailingThrottle } from '$lib/collab/throttle';
+	import PresenceList from '$lib/components/presence-list.svelte';
+	import RemoteCursors from '$lib/components/remote-cursors.svelte';
 	import BoardDialogs, {
 		actionError,
 		type BoardDialog
@@ -36,6 +42,120 @@
 	// parent with `originDropZone.closest('dialog')`, so a modal wrapping the
 	// board would relocate the mirror (see ADR 0010).
 	let dialog = $state<BoardDialog | null>(null);
+
+	// Whether what the open dialog is editing still looks the way it did when it
+	// opened. Derived from the live board, so a remote change reaches the dialog
+	// the moment the refetch lands (ADR 0015 Stage 1).
+	const subject = $derived(dialog ? subjectStatus(dialog, data.board) : null);
+
+	// ---------------------------------------------------------------------
+	// Live collaboration (ADR 0015 Stage 1)
+	// ---------------------------------------------------------------------
+
+	// This tab. Minted here, per page, and sent as a query parameter — never a
+	// cookie and never an identity, so it cannot become the thing auth is
+	// grafted onto (ADR 0015 §6, ADR 0016 §6).
+	const clientId = crypto.randomUUID();
+
+	let sync = $state<MapSync | null>(null);
+
+	$effect(() => {
+		// Keyed on the map id alone: `invalidateAll()` replaces `data` on every
+		// remote change, and re-reading `data.board.version` here would tear the
+		// stream down and rebuild it each time. `untrack` keeps the starting
+		// version out of the dependency set.
+		const id = data.board.id;
+		const started = createMapSync({
+			mapId: id,
+			initialSeq: untrack(() => data.board.version),
+			clientId,
+			refetch: invalidateAll
+		});
+		sync = started;
+		return () => {
+			started.dispose();
+			sync = null;
+		};
+	});
+
+	// Keep the sync in step with what is actually rendered. A mutation this tab
+	// made is broadcast back to it like any other, and the submission has already
+	// refetched — telling the sync what version we are showing is what stops that
+	// echo from causing a second, pointless re-render.
+	$effect(() => {
+		sync?.observe(data.board.version);
+	});
+
+	// A cross-zone drag fires `consider` on every zone the pointer crosses, so
+	// this is a set of zone keys rather than a boolean — a boolean would be
+	// cleared by the first zone the pointer left while the drag was still going.
+	const draggingZones = new SvelteSet<string>();
+
+	function setDragging(zoneKey: string, dragging: boolean) {
+		if (dragging) draggingZones.add(zoneKey);
+		else draggingZones.delete(zoneKey);
+
+		// A refetch mid-drag replaces the array `svelte-dnd-action` is animating
+		// and the card jumps out from under the pointer. Held rather than dropped:
+		// a remote change during a three-second drag would otherwise stay invisible
+		// until the next unrelated event.
+		if (draggingZones.size > 0) sync?.pause();
+		else sync?.resume();
+	}
+
+	// A POST per pointer move would be wasteful, which ADR 0015 §4 names as the
+	// one real cost of the SSE/POST split. 50ms is 20 updates a second — smooth
+	// enough to read as a live pointer, and an order of magnitude fewer requests
+	// than a raw pointermove stream.
+	const CURSOR_INTERVAL_MS = 50;
+	/** Below this, the pointer has not meaningfully moved. */
+	const CURSOR_EPSILON_PX = 2;
+
+	let lastSent: { x: number; y: number } | null = null;
+
+	const sendCursor = trailingThrottle<{ x: number; y: number } | null>((point) => {
+		void fetch(`/maps/${data.board.id}/cursor`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(point ? { clientId, ...point } : { clientId, x: null }),
+			// The page may be unloading when the pointer leaves; without this the
+			// browser is free to drop the request and leave a stale cursor behind.
+			keepalive: true
+		}).catch(() => {
+			// A dropped cursor update is not worth surfacing: the next pointer move
+			// supersedes it, and presence still says who is here.
+		});
+	}, CURSOR_INTERVAL_MS);
+
+	function handlePointerWorld(point: { x: number; y: number } | null) {
+		if (!point) {
+			lastSent = null;
+			sendCursor(null);
+			return;
+		}
+		if (
+			lastSent &&
+			Math.abs(point.x - lastSent.x) < CURSOR_EPSILON_PX &&
+			Math.abs(point.y - lastSent.y) < CURSOR_EPSILON_PX
+		) {
+			return;
+		}
+		lastSent = point;
+		sendCursor(point);
+	}
+
+	$effect(() => {
+		// A hidden tab has no pointer on the board, and leaving a cursor parked
+		// there tells everyone else someone is looking when they are not.
+		const onVisibility = () => {
+			if (document.visibilityState === 'hidden') handlePointerWorld(null);
+		};
+		document.addEventListener('visibilitychange', onVisibility);
+		return () => {
+			document.removeEventListener('visibilitychange', onVisibility);
+			sendCursor.cancel();
+		};
+	});
 
 	// The board's banner is cleared when an editor opens, the same way
 	// `BoardDialogs` clears its own error on that transition. Only a drag reset
@@ -144,6 +264,7 @@
 		boardError = null;
 		const body = new FormData();
 		body.set('version', String(data.board.version));
+		body.set('clientId', clientId);
 		body.set('storyId', detail.storyId);
 		body.set('stepId', detail.stepId);
 		body.set('sliceId', detail.sliceId ?? '');
@@ -177,6 +298,7 @@
 		</div>
 
 		<div class="flex flex-wrap items-end gap-2">
+			<PresenceList participants={sync?.participants ?? []} selfClientId={clientId} />
 			<button
 				type="button"
 				class="btn btn-primary"
@@ -213,11 +335,12 @@
 		<div class="pointer-events-auto absolute bottom-4 left-4 z-40">
 			<BoardMinimap {camera} model={minimapModel} />
 		</div>
-		<BoardViewport bind:this={boardViewport} {camera}>
+		<BoardViewport bind:this={boardViewport} {camera} onPointerWorld={handlePointerWorld}>
 			<div
 				class="bg-line grid min-w-max gap-px"
 				data-testid="board"
 				data-board-version={data.board.version}
+				data-collab-state={sync?.state ?? 'connecting'}
 				style="grid-template-columns: max-content repeat({data.board
 					.totalColumns}, minmax(240px, 1fr)); grid-template-rows: auto auto repeat({data.board.rows
 					.length}, minmax(140px, auto)); --board-sticky-header-height: {stickyHeaderHeight}px;"
@@ -363,17 +486,25 @@
 							sliceId={cell.sliceId}
 							onMove={handleMove}
 							onEditStory={handleEditStory}
+							onDragStateChange={(dragging) =>
+								setDragging(`${cell.stepId}:${cell.sliceId ?? 'unsliced'}`, dragging)}
 						/>
 					</div>
 				{/each}
 			</div>
+			{#snippet overlay()}
+				<RemoteCursors cursors={sync?.cursors ?? []} />
+			{/snippet}
 		</BoardViewport>
 	</div>
 </div>
 
 <BoardDialogs
 	{dialog}
+	{subject}
 	boardVersion={data.board.version}
+	{clientId}
+	onReplaceSubject={(replacement) => (dialog = replacement)}
 	onClose={async (outcome) => {
 		dialog = null;
 		// A delete removes the trigger the dialog would have restored focus to,

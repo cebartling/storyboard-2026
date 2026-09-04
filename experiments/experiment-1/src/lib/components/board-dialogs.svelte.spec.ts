@@ -20,6 +20,7 @@ async function open(dialog: BoardDialog, boardVersion = 3) {
 	const result = render(BoardDialogs, {
 		dialog,
 		boardVersion,
+		clientId: 'test-tab',
 		onClose: () => {},
 		onLateFailure: () => {}
 	});

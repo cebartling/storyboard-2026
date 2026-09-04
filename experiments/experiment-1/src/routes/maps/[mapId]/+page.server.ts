@@ -41,6 +41,7 @@ import { runAction } from '../../run-action';
 async function runAndPublish(
 	label: string,
 	mapId: MapId,
+	form: FormData,
 	// Returns the version it was called with, so that parsing the field stays
 	// inside `runAction`'s error handling — hoisting it out would turn a
 	// malformed request into a 500 instead of a 400.
@@ -51,7 +52,13 @@ async function runAndPublish(
 		expectedVersion = await body();
 	});
 	if (!failure && expectedVersion !== null) {
-		deps.collab.hubFor(mapId).publishChange(expectedVersion + 1);
+		// The submitting tab identifies itself so the hub can skip it: it has
+		// already refetched as part of this submission. Optional, and untrusted —
+		// the worst a forged value does is deny that tab one notification.
+		const origin = form.get('clientId');
+		deps.collab
+			.hubFor(mapId)
+			.publishChange(expectedVersion + 1, typeof origin === 'string' ? origin : undefined);
 	}
 	return failure;
 }
@@ -77,7 +84,7 @@ export const actions: Actions = {
 	addActivity: async ({ request, params, locals }) => {
 		const caller = requireCaller(locals);
 		const form = await request.formData();
-		return runAndPublish('addActivity', params.mapId as MapId, async () => {
+		return runAndPublish('addActivity', params.mapId as MapId, form, async () => {
 			const expectedVersion = requireVersion(form.get('version'));
 			const name = requireString(form.get('name'), 'Activity name');
 			await addActivity(
@@ -94,7 +101,7 @@ export const actions: Actions = {
 	renameActivity: async ({ request, params, locals }) => {
 		const caller = requireCaller(locals);
 		const form = await request.formData();
-		return runAndPublish('renameActivity', params.mapId as MapId, async () => {
+		return runAndPublish('renameActivity', params.mapId as MapId, form, async () => {
 			const expectedVersion = requireVersion(form.get('version'));
 			const activityId = requireString(form.get('activityId'), 'activityId') as ActivityId;
 			const name = requireString(form.get('name'), 'Activity name');
@@ -113,7 +120,7 @@ export const actions: Actions = {
 	deleteActivity: async ({ request, params, locals }) => {
 		const caller = requireCaller(locals);
 		const form = await request.formData();
-		return runAndPublish('deleteActivity', params.mapId as MapId, async () => {
+		return runAndPublish('deleteActivity', params.mapId as MapId, form, async () => {
 			const expectedVersion = requireVersion(form.get('version'));
 			const activityId = requireString(form.get('activityId'), 'activityId') as ActivityId;
 			await deleteActivity(
@@ -130,7 +137,7 @@ export const actions: Actions = {
 	addStep: async ({ request, params, locals }) => {
 		const caller = requireCaller(locals);
 		const form = await request.formData();
-		return runAndPublish('addStep', params.mapId as MapId, async () => {
+		return runAndPublish('addStep', params.mapId as MapId, form, async () => {
 			const expectedVersion = requireVersion(form.get('version'));
 			const activityId = requireString(form.get('activityId'), 'activityId') as ActivityId;
 			const name = requireString(form.get('name'), 'Step name');
@@ -149,7 +156,7 @@ export const actions: Actions = {
 	renameStep: async ({ request, params, locals }) => {
 		const caller = requireCaller(locals);
 		const form = await request.formData();
-		return runAndPublish('renameStep', params.mapId as MapId, async () => {
+		return runAndPublish('renameStep', params.mapId as MapId, form, async () => {
 			const expectedVersion = requireVersion(form.get('version'));
 			const stepId = requireString(form.get('stepId'), 'stepId') as StepId;
 			const name = requireString(form.get('name'), 'Step name');
@@ -168,7 +175,7 @@ export const actions: Actions = {
 	deleteStep: async ({ request, params, locals }) => {
 		const caller = requireCaller(locals);
 		const form = await request.formData();
-		return runAndPublish('deleteStep', params.mapId as MapId, async () => {
+		return runAndPublish('deleteStep', params.mapId as MapId, form, async () => {
 			const expectedVersion = requireVersion(form.get('version'));
 			const stepId = requireString(form.get('stepId'), 'stepId') as StepId;
 			await deleteStep(
@@ -185,7 +192,7 @@ export const actions: Actions = {
 	createSlice: async ({ request, params, locals }) => {
 		const caller = requireCaller(locals);
 		const form = await request.formData();
-		return runAndPublish('createSlice', params.mapId as MapId, async () => {
+		return runAndPublish('createSlice', params.mapId as MapId, form, async () => {
 			const expectedVersion = requireVersion(form.get('version'));
 			const name = requireString(form.get('name'), 'Slice name');
 			await createSlice(
@@ -202,7 +209,7 @@ export const actions: Actions = {
 	renameSlice: async ({ request, params, locals }) => {
 		const caller = requireCaller(locals);
 		const form = await request.formData();
-		return runAndPublish('renameSlice', params.mapId as MapId, async () => {
+		return runAndPublish('renameSlice', params.mapId as MapId, form, async () => {
 			const expectedVersion = requireVersion(form.get('version'));
 			const sliceId = requireString(form.get('sliceId'), 'sliceId') as SliceId;
 			const name = requireString(form.get('name'), 'Slice name');
@@ -221,7 +228,7 @@ export const actions: Actions = {
 	deleteSlice: async ({ request, params, locals }) => {
 		const caller = requireCaller(locals);
 		const form = await request.formData();
-		return runAndPublish('deleteSlice', params.mapId as MapId, async () => {
+		return runAndPublish('deleteSlice', params.mapId as MapId, form, async () => {
 			const expectedVersion = requireVersion(form.get('version'));
 			const sliceId = requireString(form.get('sliceId'), 'sliceId') as SliceId;
 			await deleteSlice(
@@ -238,7 +245,7 @@ export const actions: Actions = {
 	addStory: async ({ request, params, locals }) => {
 		const caller = requireCaller(locals);
 		const form = await request.formData();
-		return runAndPublish('addStory', params.mapId as MapId, async () => {
+		return runAndPublish('addStory', params.mapId as MapId, form, async () => {
 			const expectedVersion = requireVersion(form.get('version'));
 			const stepId = requireString(form.get('stepId'), 'stepId') as StepId;
 			const title = requireString(form.get('title'), 'Story title');
@@ -261,7 +268,7 @@ export const actions: Actions = {
 	editStory: async ({ request, params, locals }) => {
 		const caller = requireCaller(locals);
 		const form = await request.formData();
-		return runAndPublish('editStory', params.mapId as MapId, async () => {
+		return runAndPublish('editStory', params.mapId as MapId, form, async () => {
 			const expectedVersion = requireVersion(form.get('version'));
 			const storyId = requireString(form.get('storyId'), 'storyId') as StoryId;
 			const title = requireString(form.get('title'), 'Story title');
@@ -291,7 +298,7 @@ export const actions: Actions = {
 	deleteStory: async ({ request, params, locals }) => {
 		const caller = requireCaller(locals);
 		const form = await request.formData();
-		return runAndPublish('deleteStory', params.mapId as MapId, async () => {
+		return runAndPublish('deleteStory', params.mapId as MapId, form, async () => {
 			const expectedVersion = requireVersion(form.get('version'));
 			const storyId = requireString(form.get('storyId'), 'storyId') as StoryId;
 			await deleteStory(
@@ -308,7 +315,7 @@ export const actions: Actions = {
 	moveStory: async ({ request, params, locals }) => {
 		const caller = requireCaller(locals);
 		const form = await request.formData();
-		return runAndPublish('moveStory', params.mapId as MapId, async () => {
+		return runAndPublish('moveStory', params.mapId as MapId, form, async () => {
 			const expectedVersion = requireVersion(form.get('version'));
 			const storyId = requireString(form.get('storyId'), 'storyId') as StoryId;
 			const stepId = requireString(form.get('stepId'), 'stepId') as StepId;

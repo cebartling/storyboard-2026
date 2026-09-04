@@ -208,18 +208,31 @@ describe('createMapSync', () => {
 	});
 
 	describe('reconnection', () => {
-		it('leaves a transient drop to the browser, which retries by itself', async () => {
+		it('reconnects itself rather than trusting the browser to recover', async () => {
+			// A stuck EventSource left in CONNECTING does not reliably come back
+			// after a real network drop, and "has the browser given up yet" is not a
+			// state worth reasoning about. The position travels in the URL, so a
+			// fresh connection resumes exactly where the old one stopped.
 			const { sync, source } = setup({ baseDelayMs: 5 });
-			const first = source();
 
-			first.fail({ closedByBrowser: false });
-
-			await new Promise((resolve) => setTimeout(resolve, 30));
-			// No new EventSource: the browser is still retrying the existing one, and
-			// racing it would open two streams.
-			expect(FakeEventSource.instances).toHaveLength(1);
+			source().fail({ closedByBrowser: false });
 			flushSync();
 			expect(sync.state).toBe('reconnecting');
+
+			await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(2));
+			sync.dispose();
+		});
+
+		it('does not open a second connection while one attempt is already pending', async () => {
+			const { sync, source } = setup({ baseDelayMs: 20 });
+
+			source().fail();
+			source().fail();
+			source().fail();
+
+			await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(2));
+			await new Promise((resolve) => setTimeout(resolve, 40));
+			expect(FakeEventSource.instances.length).toBeLessThanOrEqual(3);
 			sync.dispose();
 		});
 
@@ -246,6 +259,44 @@ describe('createMapSync', () => {
 			await new Promise((resolve) => setTimeout(resolve, 30));
 			expect(FakeEventSource.instances).toHaveLength(1);
 			expect(first.closed).toBe(true);
+		});
+	});
+
+	describe('ignoring its own echo', () => {
+		it('does not refetch for a change it has already seen', async () => {
+			// A mutation is broadcast to everyone including whoever made it — the
+			// server does not know which connection caused it. The originating tab
+			// has already refetched as part of its own submission.
+			const { sync, refetch, source } = setup();
+			sync.observe(4);
+
+			source().emit('change', { seq: 4 });
+
+			await new Promise((resolve) => setTimeout(resolve, 10));
+			expect(refetch).not.toHaveBeenCalled();
+			sync.dispose();
+		});
+
+		it('still refetches for a change that is genuinely newer', async () => {
+			const { sync, refetch, source } = setup();
+			sync.observe(4);
+
+			source().emit('change', { seq: 5 });
+
+			await vi.waitFor(() => expect(refetch).toHaveBeenCalledTimes(1));
+			sync.dispose();
+		});
+
+		it('never moves its position backwards', async () => {
+			const { sync, source } = setup();
+			source().emit('change', { seq: 9 });
+			flushSync();
+
+			sync.observe(4);
+
+			flushSync();
+			expect(sync.seq).toBe(9);
+			sync.dispose();
 		});
 	});
 });

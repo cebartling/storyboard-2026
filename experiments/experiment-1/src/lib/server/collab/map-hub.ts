@@ -66,11 +66,23 @@ export class MapHub {
 		if (version > this.currentSeq) this.currentSeq = version;
 	}
 
-	publishChange(seq: number): void {
+	/**
+	 * `originClientId` is the connection that caused the change, if it is one of
+	 * ours. It is skipped, because it has already refetched as part of its own
+	 * submission — telling it again would re-render the board a second time for
+	 * every local edit, which is both wasteful and, mid-drag, enough to pull an
+	 * element out from under the pointer.
+	 *
+	 * The change still goes into the buffer, so a reconnecting client replays it
+	 * correctly however it was caused.
+	 */
+	publishChange(seq: number, originClientId?: string): void {
 		this.observe(seq);
 		this.buffer.push(seq);
 		if (this.buffer.length > this.bufferSize) this.buffer.shift();
-		this.broadcast({ type: 'change', seq });
+		for (const subscriber of this.subscribers) {
+			if (subscriber.clientId !== originClientId) subscriber.send({ type: 'change', seq });
+		}
 	}
 
 	publishCursor(from: Participant, cursor: { x: number; y: number } | null): void {

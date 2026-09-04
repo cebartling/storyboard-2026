@@ -40,6 +40,33 @@ describe('MapHub', () => {
 
 			expect(Object.keys(alice.changes()[0])).toEqual(['type', 'seq']);
 		});
+
+		it('skips the tab that caused the change, which has already refetched', () => {
+			// Otherwise every local edit re-renders the board twice — and mid-drag
+			// the second render pulls the card out from under the pointer.
+			const hub = new MapHub();
+			const alice = recorder('a');
+			const bob = recorder('b');
+			hub.subscribe(alice.subscriber, null);
+			hub.subscribe(bob.subscriber, null);
+
+			hub.publishChange(4, 'a');
+
+			expect(alice.changes()).toEqual([]);
+			expect(bob.changes()).toEqual([{ type: 'change', seq: 4 }]);
+		});
+
+		it('still buffers a change it skipped, so a reconnect replays it correctly', () => {
+			const hub = new MapHub();
+			const alice = recorder('a');
+			hub.subscribe(alice.subscriber, null);
+			hub.publishChange(1, 'a');
+
+			const late = recorder('late');
+			hub.subscribe(late.subscriber, 0);
+
+			expect(late.changes()).toEqual([{ type: 'change', seq: 1 }]);
+		});
 	});
 
 	describe('catching up on connect', () => {

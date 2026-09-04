@@ -242,4 +242,80 @@ describe('StoryDndZone finalize handling', () => {
 		await rerender({ items });
 		expect(renderedIds()).toEqual(items.map((i) => i.id));
 	});
+
+	// ADR 0015 Stage 1: a remote refetch mid-drag replaces the array
+	// `svelte-dnd-action` is animating, and the card jumps out from under the
+	// pointer. The page suspends syncing while any zone is mid-drag, and needs
+	// this zone to say when that starts and stops.
+	describe('drag state reporting', () => {
+		it('reports a drag starting on the first consider and ending on finalize', async () => {
+			const states: boolean[] = [];
+			render(StoryDndZone, {
+				items: [{ id: 's1', title: 'A', description: null }],
+				stepId: 'step-1',
+				sliceId: null,
+				zoneLabel: 'cell',
+				onMove: () => {},
+				onEditStory: () => {},
+				onDragStateChange: (dragging: boolean) => states.push(dragging)
+			});
+			const zone = page.getByTestId('cell-step-1-unsliced').element();
+
+			zone.dispatchEvent(
+				new CustomEvent('consider', {
+					detail: { items: [{ id: 's1', title: 'A', description: null }], info: {} }
+				})
+			);
+			await tick();
+			expect(states).toEqual([true]);
+
+			// Repeated considers are the ordinary case during one drag; only the
+			// transition is worth reporting.
+			zone.dispatchEvent(
+				new CustomEvent('consider', {
+					detail: { items: [{ id: 's1', title: 'A', description: null }], info: {} }
+				})
+			);
+			await tick();
+			expect(states).toEqual([true]);
+
+			zone.dispatchEvent(
+				new CustomEvent('finalize', {
+					detail: {
+						items: [{ id: 's1', title: 'A', description: null }],
+						info: { trigger: 'droppedIntoZone', id: 's1' }
+					}
+				})
+			);
+			await tick();
+			expect(states).toEqual([true, false]);
+		});
+
+		it('reports the end of a drag that left this zone for another', async () => {
+			// The origin zone of a cross-zone drag sees DROPPED_INTO_ANOTHER, not
+			// DROPPED_INTO_ZONE. It still has to say the drag is over, or syncing
+			// stays suspended for the rest of the session.
+			const states: boolean[] = [];
+			render(StoryDndZone, {
+				items: [{ id: 's1', title: 'A', description: null }],
+				stepId: 'step-9',
+				sliceId: null,
+				zoneLabel: 'cell',
+				onMove: () => {},
+				onEditStory: () => {},
+				onDragStateChange: (dragging: boolean) => states.push(dragging)
+			});
+			const zone = page.getByTestId('cell-step-9-unsliced').element();
+
+			zone.dispatchEvent(new CustomEvent('consider', { detail: { items: [], info: {} } }));
+			zone.dispatchEvent(
+				new CustomEvent('finalize', {
+					detail: { items: [], info: { trigger: 'droppedIntoAnother', id: 's1' } }
+				})
+			);
+			await tick();
+
+			expect(states).toEqual([true, false]);
+		});
+	});
 });

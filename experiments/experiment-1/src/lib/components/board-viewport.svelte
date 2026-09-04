@@ -7,7 +7,28 @@
 	import type { Snippet } from 'svelte';
 	import type { Camera } from '$lib/canvas/camera.svelte';
 
-	let { camera, children }: { camera: Camera; children: Snippet } = $props();
+	let {
+		camera,
+		children,
+		overlay,
+		onPointerWorld
+	}: {
+		camera: Camera;
+		children: Snippet;
+		/**
+		 * Rendered inside the zoomed world, after `children`. Collaborators'
+		 * cursors live here so that CSS `zoom` and native scrolling apply to them
+		 * for free — and never inside a dnd zone, which would put them under
+		 * `svelte-dnd-action`'s drag mirror (ADR 0010).
+		 */
+		overlay?: Snippet;
+		/**
+		 * The pointer's position in unzoomed world coordinates, or null when it
+		 * leaves. Both ends of the cursor wire use this space, so the receiver
+		 * needs no camera maths at all.
+		 */
+		onPointerWorld?: (point: { x: number; y: number } | null) => void;
+	} = $props();
 
 	let viewportEl: HTMLDivElement | undefined = $state();
 
@@ -226,7 +247,20 @@
 		};
 	}
 
+	function reportWorldPointer(e: PointerEvent) {
+		if (!onPointerWorld || !worldEl) return;
+		// `getBoundingClientRect()` is reported post-`zoom`, so dividing by the
+		// zoom converts back to the world's own pixels — the same units the
+		// receiving end positions cursors in.
+		const rect = worldEl.getBoundingClientRect();
+		onPointerWorld({
+			x: (e.clientX - rect.left) / camera.zoom,
+			y: (e.clientY - rect.top) / camera.zoom
+		});
+	}
+
 	function onPointerMove(e: PointerEvent) {
+		reportWorldPointer(e);
 		if (!panState || panState.pointerId !== e.pointerId || !viewportEl) return;
 
 		const dx = e.clientX - panState.startClientX;
@@ -357,15 +391,17 @@
 	onpointermove={onPointerMove}
 	onpointerup={endPan}
 	onpointercancel={endPan}
+	onpointerleave={() => onPointerWorld?.(null)}
 	onauxclick={onAuxClick}
 >
 	<div
 		bind:this={worldEl}
 		data-testid="board-world"
-		class="min-w-max p-16"
+		class="relative min-w-max p-16"
 		style="zoom: {camera.zoom}"
 	>
 		{@render children()}
+		{@render overlay?.()}
 	</div>
 	<!--
 		Room to scroll the last row clear of the overlays the board route pins to

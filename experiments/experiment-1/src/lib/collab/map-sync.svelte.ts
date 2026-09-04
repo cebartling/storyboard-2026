@@ -31,6 +31,11 @@ export interface MapSync {
 	readonly seq: number;
 	readonly participants: RemoteParticipant[];
 	readonly cursors: RemoteCursor[];
+	/**
+	 * Tell the sync which version the page is now showing. Notifications at or
+	 * below it are already accounted for and are ignored.
+	 */
+	observe(version: number): void;
 	/** Hold refetches — used while a drag is in flight (ADR 0015 Stage 1). */
 	pause(): void;
 	resume(): void;
@@ -88,6 +93,12 @@ export function createMapSync(options: MapSyncOptions): MapSync {
 		refetching = true;
 		try {
 			await refetch();
+		} catch {
+			// A refetch can fail for reasons that have nothing to do with the board
+			// — a flaky network, a server restart. Swallowing it here keeps a
+			// transient failure from becoming an unhandled rejection; the next
+			// notification, or the reconnect that follows, brings the board up to
+			// date.
 		} finally {
 			refetching = false;
 			if (pending && !paused && !disposed) {
@@ -111,7 +122,13 @@ export function createMapSync(options: MapSyncOptions): MapSync {
 
 		source.addEventListener('change', (event) => {
 			const data = JSON.parse((event as MessageEvent).data) as { seq: number };
-			seq = Math.max(seq, data.seq);
+			// Every mutation is broadcast to everyone, including whoever made it —
+			// the server has no idea which connection caused it. The client that did
+			// has already refetched as part of its own submission, so without this
+			// the board would re-render twice for every local edit, which is both
+			// wasteful and enough to detach an element mid-drag.
+			if (data.seq <= seq) return;
+			seq = data.seq;
 			void sync();
 		});
 
@@ -144,26 +161,30 @@ export function createMapSync(options: MapSyncOptions): MapSync {
 
 		source.onerror = () => {
 			if (disposed) return;
-			// readyState CONNECTING means the browser is already retrying by itself,
-			// which handles the ordinary transient drop. Only a CLOSED source needs
-			// us to do anything.
-			if (source && source.readyState !== 2) {
-				state = 'reconnecting';
-				return;
-			}
 			state = 'reconnecting';
+			// Always reconnect ourselves rather than deferring to the browser's own
+			// retry. Leaving a stuck `EventSource` in CONNECTING to recover on its
+			// own does not survive a real network drop — after the connection is
+			// restored it can sit there indefinitely — and "did the browser give up
+			// yet" is not a state worth reasoning about. Since the position travels
+			// in the URL as well as in `Last-Event-ID`, a fresh connection resumes
+			// from exactly where the old one stopped.
 			scheduleReconnect();
 		};
 	}
 
 	function scheduleReconnect(): void {
+		if (reconnectTimer) return; // one attempt in flight at a time
 		source?.close();
 		source = null;
 		attempt += 1;
 		const backoff = Math.min(baseDelayMs * 2 ** (attempt - 1), maxDelayMs);
 		// Jitter, so a server restart does not bring every client back at once.
 		const delay = backoff + Math.random() * 250;
-		reconnectTimer = setTimeout(connect, delay);
+		reconnectTimer = setTimeout(() => {
+			reconnectTimer = null;
+			connect();
+		}, delay);
 	}
 
 	connect();
@@ -180,6 +201,9 @@ export function createMapSync(options: MapSyncOptions): MapSync {
 		},
 		get cursors() {
 			return cursors;
+		},
+		observe(version: number) {
+			if (version > seq) seq = version;
 		},
 		pause() {
 			paused = true;
