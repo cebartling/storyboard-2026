@@ -170,43 +170,16 @@ test("another editor's presence is visible on the board", async ({ page, newUser
 	await expect(page.getByTestId('presence').locator('li')).toHaveCount(2);
 });
 
-test('a dropped stream reconnects and catches up, without a reload', async ({
-	page,
-	newUser,
-	browser
-}) => {
-	await createMap(page, `Collab ${Date.now()}`);
-	await addActivity(page, 'Browse');
-	const url = page.url();
-
-	const { page: other, email } = await newUser(browser);
-	await shareWith(page, email);
-	await other.goto(url);
-	await bothConnected(page, other);
-
-	// Cut the event stream specifically, rather than taking the whole context
-	// offline. `setOffline` leaves an already-open stream connected but blocks
-	// the refetch it triggers, and SvelteKit answers a failed load with a
-	// full-page navigation — so the test would be measuring the browser's
-	// offline page rather than reconnection.
-	await other.route('**/events*', (route) => route.abort());
-	await other.evaluate(() => {
-		// Force the open stream to error now, instead of waiting for a heartbeat
-		// to notice: `route` only affects connections made from here on.
-		window.dispatchEvent(new Event('offline'));
-	});
-
-	await addStep(page, 'Search products');
-	await expect(other.getByTestId('board')).toHaveAttribute('data-collab-state', 'reconnecting', {
-		timeout: 15_000
-	});
-
-	// Restore it, and the client catches up on its own — no reload anywhere in
-	// this test.
-	await other.unroute('**/events*');
-
-	await expect(other.getByTestId('board')).toHaveAttribute('data-collab-state', 'connected', {
-		timeout: 20_000
-	});
-	await expect(other.getByText('Search products')).toBeVisible({ timeout: 20_000 });
-});
+// There is deliberately no end-to-end reconnection test here. Severing an
+// established EventSource from Playwright is not possible: `route.abort` only
+// affects connections opened after it is installed, and CDP's offline emulation
+// leaves an already-running stream connected. An earlier version of this file
+// appeared to test reconnection, but it only passed because of a bug — the page
+// rebuilt its stream on every refetch, so aborting `/events` caught the
+// *replacement* connection rather than the original.
+//
+// The behaviour is covered where the precondition can actually be created:
+// `src/lib/collab/map-sync.svelte.test.ts` drives the client through an error
+// into a backed-off reconnect and asserts it resumes from its last position,
+// and `src/lib/server/collab/map-hub.test.ts` covers replay past `lastSeq` and
+// the resync a client too far behind receives.

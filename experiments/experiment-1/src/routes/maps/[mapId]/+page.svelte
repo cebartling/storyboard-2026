@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { tick, untrack } from 'svelte';
+	import { tick } from 'svelte';
 	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
-	import { createMapSync, type MapSync } from '$lib/collab/map-sync.svelte';
+	import { useMapSync } from '$lib/collab/map-sync-lifecycle.svelte';
 	import { subjectStatus } from '$lib/board/dialog-subject';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { trailingThrottle } from '$lib/collab/throttle';
@@ -57,26 +57,16 @@
 	// grafted onto (ADR 0015 §6, ADR 0016 §6).
 	const clientId = crypto.randomUUID();
 
-	let sync = $state<MapSync | null>(null);
-
-	$effect(() => {
-		// Keyed on the map id alone: `invalidateAll()` replaces `data` on every
-		// remote change, and re-reading `data.board.version` here would tear the
-		// stream down and rebuild it each time. `untrack` keeps the starting
-		// version out of the dependency set.
-		const id = data.board.id;
-		const started = createMapSync({
-			mapId: id,
-			initialSeq: untrack(() => data.board.version),
-			clientId,
-			refetch: invalidateAll
-		});
-		sync = started;
-		return () => {
-			started.dispose();
-			sync = null;
-		};
+	// Connects on arrival and reconnects only when the map itself changes — see
+	// `useMapSync` for why reading the id straight out of `data` inside an effect
+	// silently reconnected on every refetch.
+	const mapSync = useMapSync({
+		mapId: () => data.board.id,
+		version: () => data.board.version,
+		clientId,
+		refetch: invalidateAll
 	});
+	const sync = $derived(mapSync.current);
 
 	// Keep the sync in step with what is actually rendered. A mutation this tab
 	// made is broadcast back to it like any other, and the submission has already
