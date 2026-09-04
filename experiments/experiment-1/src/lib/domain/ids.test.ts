@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { newId, type MapId, type UserId } from './ids';
+import { newId, type ClientId, type MapId, type UserId } from './ids';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -45,5 +45,23 @@ describe('UserId', () => {
 		const wrong: UserId = mapId;
 		expect(typeof wrong).toBe('string');
 		expect(userId).not.toBe(mapId);
+	});
+});
+
+describe('ClientId', () => {
+	it('cannot be passed where an identity is expected, or the reverse', () => {
+		// ADR 0015 §6 requires that presence identity never becomes authentication
+		// identity, and ADR 0016 §6 claims the type checker enforces it in both
+		// directions. This is that claim, written down where it can fail.
+		const clientId = newId<ClientId>();
+		const userId = newId<UserId>();
+
+		// @ts-expect-error which tab this is does not say who is using it
+		const asUser: UserId = clientId;
+		// @ts-expect-error and who someone is does not identify one of their tabs
+		const asClient: ClientId = userId;
+
+		expect(typeof asUser).toBe('string');
+		expect(typeof asClient).toBe('string');
 	});
 });

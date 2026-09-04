@@ -18,7 +18,7 @@ import {
 	renameStep,
 	shareMap
 } from '$lib/app/use-cases';
-import type { ActivityId, MapId, SliceId, StepId, StoryId } from '$lib/domain/ids';
+import type { ActivityId, ClientId, MapId, SliceId, StepId, StoryId } from '$lib/domain/ids';
 
 import { buildBoardViewModel } from '$lib/board/board-view-model';
 import { optionalNeighbour, requireString, requireVersion } from './form-fields';
@@ -55,12 +55,18 @@ async function runAndPublish(
 		// The submitting tab identifies itself so the hub can skip it: it has
 		// already refetched as part of this submission. Optional, and untrusted —
 		// the worst a forged value does is deny that tab one notification.
+		// Untrusted, and cast rather than validated on purpose: the worst a forged
+		// value does is deny that tab one notification it was going to refetch for
+		// anyway. It never reaches a use case or the repository.
 		const origin = form.get('clientId');
 		// `watching`, not `hubFor`: nobody may be on this board, and creating a hub
 		// to broadcast into an empty room leaves it behind for the process lifetime.
 		deps.collab
 			.watching(mapId)
-			?.publishChange(expectedVersion + 1, typeof origin === 'string' ? origin : undefined);
+			?.publishChange(
+				expectedVersion + 1,
+				typeof origin === 'string' ? (origin as ClientId) : undefined
+			);
 	}
 	return failure;
 }

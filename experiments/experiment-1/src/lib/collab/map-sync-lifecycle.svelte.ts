@@ -1,4 +1,5 @@
 import { untrack } from 'svelte';
+import type { ClientId } from '$lib/domain/ids';
 import { createMapSync, type MapSync, type MapSyncOptions } from './map-sync.svelte';
 
 export interface MapSyncLifecycleOptions {
@@ -7,7 +8,7 @@ export interface MapSyncLifecycleOptions {
 	mapId: () => string;
 	/** The version the page is currently showing. Read once, at connect. */
 	version: () => number;
-	clientId: string;
+	clientId: ClientId;
 	refetch: () => Promise<void>;
 	/** Injected by tests; defaults to the real thing. */
 	create?: (options: MapSyncOptions) => MapSync;

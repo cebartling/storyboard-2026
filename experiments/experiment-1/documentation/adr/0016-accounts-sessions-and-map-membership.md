@@ -129,9 +129,15 @@ is the identity §6 said did not exist. Two tabs of one account are told apart b
 `clientId` the client mints per event-stream connection and sends as a query parameter.
 
 Three mechanisms keep it from becoming authentication, which is what §6 asked for expressed
-as types rather than discipline: it is never a cookie, so it never reaches `Locals`; it will
-carry its own brand, so the type checker refuses it where a `UserId` is expected; and
+as types rather than discipline: it is never a cookie, so it never reaches `Locals`; it
+carries its own brand — `ClientId` in `src/lib/domain/ids.ts` — so the type checker refuses
+it where a `UserId` is expected _and_ refuses a `UserId` where a tab is expected; and
 `Caller` is constructed in exactly one place, `requireCaller(locals)`, from `locals.user`.
+
+The brand is bidirectional on purpose. `UserId`'s brand alone would stop a client id
+masquerading as an identity, but not the reverse, and "one person's tabs" is exactly the
+distinction presence and cursors turn on. `ids.test.ts` asserts both directions with
+`@ts-expect-error`, so the claim above fails the build rather than the reader.
 
 ## Consequences
 

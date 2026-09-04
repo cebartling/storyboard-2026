@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type { UserId } from '$lib/domain/ids';
+import type { ClientId, UserId } from '$lib/domain/ids';
 import { MapHub, type Participant } from './map-hub';
 import { closeAllStreams, createEventStream, openStreamCount, parseLastSeq } from './sse';
 
 const viewer: Participant = {
 	userId: 'alice' as UserId,
 	displayName: 'Alice',
-	clientId: 'tab-1'
+	clientId: 'tab-1' as ClientId
 };
 
 /** Reads whatever the stream has produced so far without waiting for it to end
@@ -68,7 +68,7 @@ describe('createEventStream', () => {
 		const hub = new MapHub();
 		const response = createEventStream(hub, viewer, null);
 		hub.publishCursor(
-			{ userId: 'bob' as UserId, displayName: 'Bob', clientId: 'other' },
+			{ userId: 'bob' as UserId, displayName: 'Bob', clientId: 'other' as ClientId },
 			{ x: 1, y: 2 }
 		);
 
@@ -105,7 +105,7 @@ describe('createEventStream', () => {
 	it('closeAllStreams ends every open stream', async () => {
 		const hub = new MapHub();
 		createEventStream(hub, viewer, null);
-		createEventStream(hub, { ...viewer, clientId: 'tab-2' }, null);
+		createEventStream(hub, { ...viewer, clientId: 'tab-2' as ClientId }, null);
 		expect(openStreamCount()).toBe(2);
 
 		closeAllStreams();

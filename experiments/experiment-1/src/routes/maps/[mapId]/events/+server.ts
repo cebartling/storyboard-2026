@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { deps } from '$lib/server/deps';
 import { requireCaller } from '$lib/server/auth/require-caller';
 import { loadMap } from '$lib/app/use-cases';
-import type { MapId } from '$lib/domain/ids';
+import type { ClientId, MapId } from '$lib/domain/ids';
 import { createEventStream, parseLastSeq } from '$lib/server/collab/sse';
 
 /**
@@ -29,7 +29,7 @@ export const GET: RequestHandler = async ({ params, url, request, locals }) => {
 
 	// The client mints its own id per connection: it distinguishes two tabs of
 	// one account and is deliberately not an identity (ADR 0016 §6).
-	const clientId = url.searchParams.get('client') ?? crypto.randomUUID();
+	const clientId = (url.searchParams.get('client') ?? crypto.randomUUID()) as ClientId;
 
 	return createEventStream(
 		hub,

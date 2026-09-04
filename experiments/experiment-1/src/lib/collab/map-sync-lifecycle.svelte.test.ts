@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, type Mock } from 'vitest';
 import { flushSync } from 'svelte';
+import type { ClientId } from '$lib/domain/ids';
 import type { MapSync, MapSyncOptions } from './map-sync.svelte';
 import { useMapSync } from './map-sync-lifecycle.svelte';
 
@@ -25,7 +26,7 @@ describe('useMapSync', () => {
 			useMapSync({
 				mapId: () => board.current.id,
 				version: () => board.current.version,
-				clientId: 'tab-1',
+				clientId: 'tab-1' as ClientId,
 				refetch: async () => {},
 				create
 			});
@@ -51,7 +52,7 @@ describe('useMapSync', () => {
 			useMapSync({
 				mapId: () => board.current.id,
 				version: () => board.current.version,
-				clientId: 'tab-1',
+				clientId: 'tab-1' as ClientId,
 				refetch: async () => {},
 				create
 			});
@@ -81,7 +82,7 @@ describe('useMapSync', () => {
 			useMapSync({
 				mapId: () => board.current.id,
 				version: () => board.current.version,
-				clientId: 'tab-1',
+				clientId: 'tab-1' as ClientId,
 				refetch: async () => {},
 				create
 			});
@@ -111,7 +112,7 @@ describe('useMapSync', () => {
 			useMapSync({
 				mapId: () => board.current.id,
 				version: () => board.current.version,
-				clientId: 'tab-1',
+				clientId: 'tab-1' as ClientId,
 				refetch: async () => {},
 				create
 			});
@@ -131,7 +132,7 @@ describe('useMapSync', () => {
 			lifecycle = useMapSync({
 				mapId: () => board.current.id,
 				version: () => board.current.version,
-				clientId: 'tab-1',
+				clientId: 'tab-1' as ClientId,
 				refetch: async () => {},
 				create: () => fakeSync()
 			});

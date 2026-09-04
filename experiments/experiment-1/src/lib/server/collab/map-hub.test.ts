@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { MapId, UserId } from '$lib/domain/ids';
+import type { ClientId, MapId, UserId } from '$lib/domain/ids';
 import { CollabHubs, MapHub, type HubEvent, type Subscriber } from './map-hub';
 
 function recorder(clientId: string, userId = clientId, displayName = clientId) {
 	const events: HubEvent[] = [];
 	const subscriber: Subscriber = {
-		clientId,
+		clientId: clientId as ClientId,
 		userId: userId as UserId,
 		displayName,
 		send: (event) => events.push(event)
@@ -50,7 +50,7 @@ describe('MapHub', () => {
 			hub.subscribe(alice.subscriber, null);
 			hub.subscribe(bob.subscriber, null);
 
-			hub.publishChange(4, 'a');
+			hub.publishChange(4, 'a' as ClientId);
 
 			expect(alice.changes()).toEqual([]);
 			expect(bob.changes()).toEqual([{ type: 'change', seq: 4 }]);
@@ -60,7 +60,7 @@ describe('MapHub', () => {
 			const hub = new MapHub();
 			const alice = recorder('a');
 			hub.subscribe(alice.subscriber, null);
-			hub.publishChange(1, 'a');
+			hub.publishChange(1, 'a' as ClientId);
 
 			const late = recorder('late');
 			hub.subscribe(late.subscriber, 0);

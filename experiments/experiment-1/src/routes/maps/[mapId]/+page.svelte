@@ -3,6 +3,7 @@
 	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { useMapSync } from '$lib/collab/map-sync-lifecycle.svelte';
+	import type { ClientId } from '$lib/domain/ids';
 	import { subjectStatus } from '$lib/board/dialog-subject';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { trailingThrottle } from '$lib/collab/throttle';
@@ -55,7 +56,7 @@
 	// This tab. Minted here, per page, and sent as a query parameter — never a
 	// cookie and never an identity, so it cannot become the thing auth is
 	// grafted onto (ADR 0015 §6, ADR 0016 §6).
-	const clientId = crypto.randomUUID();
+	const clientId = crypto.randomUUID() as ClientId;
 
 	// Connects on arrival and reconnects only when the map itself changes — see
 	// `useMapSync` for why reading the id straight out of `data` inside an effect

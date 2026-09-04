@@ -1,15 +1,17 @@
+import type { ClientId, UserId } from '$lib/domain/ids';
+
 export interface RemoteParticipant {
-	userId: string;
+	userId: UserId;
 	displayName: string;
 	/** Every tab this person has open. Presence is per person; cursors and
 	 *  "is this me?" are per tab. */
-	clientIds: string[];
+	clientIds: ClientId[];
 }
 
 export interface RemoteCursor {
-	clientId: string;
+	clientId: ClientId;
 	/** Colour is keyed on the person, so a cursor matches its owner's avatar. */
-	userId: string;
+	userId: UserId;
 	displayName: string;
 	x: number;
 	y: number;
@@ -20,7 +22,7 @@ export interface MapSyncOptions {
 	/** The version `load()` gave the page — the client's starting position. */
 	initialSeq: number;
 	/** This tab. Not an identity; it only separates two tabs of one account. */
-	clientId: string;
+	clientId: ClientId;
 	refetch: () => Promise<void>;
 	/** Injected so tests can drive the stream without a server. */
 	EventSourceCtor?: typeof EventSource;
@@ -126,11 +128,11 @@ export function createMapSync(options: MapSyncOptions): MapSync {
 
 		source.addEventListener('change', (event) => {
 			const data = JSON.parse((event as MessageEvent).data) as { seq: number };
-			// Every mutation is broadcast to everyone, including whoever made it —
-			// the server has no idea which connection caused it. The client that did
-			// has already refetched as part of its own submission, so without this
-			// the board would re-render twice for every local edit, which is both
-			// wasteful and enough to detach an element mid-drag.
+			// The hub already skips the tab that caused a change, so this is not the
+			// main defence against re-rendering twice for a local edit. It covers
+			// what the skip cannot: a replayed change after a reconnect, and the
+			// race where a notification lands before the page has told us the
+			// version it is now showing.
 			if (data.seq <= seq) return;
 			seq = data.seq;
 			void sync();
@@ -160,8 +162,8 @@ export function createMapSync(options: MapSyncOptions): MapSync {
 
 		source.addEventListener('cursor', (event) => {
 			const data = JSON.parse((event as MessageEvent).data) as
-				| { clientId: string; userId: string; displayName: string; x: number; y: number }
-				| { clientId: string; x: null };
+				| { clientId: ClientId; userId: UserId; displayName: string; x: number; y: number }
+				| { clientId: ClientId; x: null };
 			cursors = cursors.filter((c) => c.clientId !== data.clientId);
 			if (data.x !== null) cursors = [...cursors, data as RemoteCursor];
 		});

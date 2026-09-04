@@ -22,6 +22,19 @@ export type StoryId = Brand<string, 'StoryId'>;
 export type UserId = Brand<string, 'UserId'>;
 
 /**
+ * One browser tab's connection to a map's event stream (ADR 0015 §6).
+ *
+ * Branded so that "which tab is this" cannot be passed where "who is this" is
+ * expected. `UserId` being branded already stops a `ClientId` masquerading as
+ * an identity; this makes the protection run both ways, which is what ADR 0016
+ * §6 says it does.
+ *
+ * It lives here beside the entity ids for the brand, and nothing else: it is
+ * never persisted, never in a cookie, and no domain function takes one.
+ */
+export type ClientId = Brand<string, 'ClientId'>;
+
+/**
  * Generates a UUIDv7: a time-ordered UUID (RFC 9562) — sorting by id sorts by
  * creation time *to the millisecond*, which is convenient for debugging and
  * for any future "recently created" listing.

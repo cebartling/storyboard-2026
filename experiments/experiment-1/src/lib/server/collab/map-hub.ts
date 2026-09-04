@@ -1,4 +1,4 @@
-import type { MapId, UserId } from '$lib/domain/ids';
+import type { ClientId, MapId, UserId } from '$lib/domain/ids';
 
 /**
  * In-process fan-out for one story map (ADR 0015 §§5-7).
@@ -17,7 +17,7 @@ export interface Participant {
 	displayName: string;
 	/** Distinguishes two tabs of one account. Minted by the client per stream
 	 *  connection — never a cookie, never an identity (ADR 0016 §6). */
-	clientId: string;
+	clientId: ClientId;
 }
 
 /**
@@ -32,7 +32,7 @@ export interface Participant {
 export interface PresenceEntry {
 	userId: UserId;
 	displayName: string;
-	clientIds: string[];
+	clientIds: ClientId[];
 }
 
 export type HubEvent =
@@ -43,8 +43,15 @@ export type HubEvent =
 	| { type: 'presence'; participants: PresenceEntry[] }
 	// `userId` travels with the cursor so the receiver can colour it by person:
 	// a cursor and its owner's avatar must not be different colours.
-	| { type: 'cursor'; clientId: string; userId: UserId; displayName: string; x: number; y: number }
-	| { type: 'cursor'; clientId: string; x: null };
+	| {
+			type: 'cursor';
+			clientId: ClientId;
+			userId: UserId;
+			displayName: string;
+			x: number;
+			y: number;
+	  }
+	| { type: 'cursor'; clientId: ClientId; x: null };
 
 export interface Subscriber extends Participant {
 	send(event: HubEvent): void;
@@ -93,7 +100,7 @@ export class MapHub {
 	 * The change still goes into the buffer, so a reconnecting client replays it
 	 * correctly however it was caused.
 	 */
-	publishChange(seq: number, originClientId?: string): void {
+	publishChange(seq: number, originClientId?: ClientId): void {
 		this.observe(seq);
 		this.buffer.push(seq);
 		if (this.buffer.length > this.bufferSize) this.buffer.shift();

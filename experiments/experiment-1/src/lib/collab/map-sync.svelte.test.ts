@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { flushSync } from 'svelte';
+import type { ClientId } from '$lib/domain/ids';
 import { createMapSync } from './map-sync.svelte';
 
 /**
@@ -45,7 +46,7 @@ function setup(overrides: Partial<Parameters<typeof createMapSync>[0]> = {}) {
 	const sync = createMapSync({
 		mapId: 'm1',
 		initialSeq: 3,
-		clientId: 'tab-1',
+		clientId: 'tab-1' as ClientId,
 		refetch,
 		EventSourceCtor: FakeEventSource as unknown as typeof EventSource,
 		...overrides

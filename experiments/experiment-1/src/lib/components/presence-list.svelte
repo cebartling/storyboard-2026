@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { tooltip } from '$lib/actions/tooltip';
 	import { initials, participantColour } from '$lib/collab/participant-colour';
+	import type { ClientId } from '$lib/domain/ids';
 	import type { RemoteParticipant } from '$lib/collab/map-sync.svelte';
 
 	let {
@@ -9,7 +10,7 @@
 	}: {
 		participants: RemoteParticipant[];
 		/** This tab, so the viewer can be marked and listed first. */
-		selfClientId: string;
+		selfClientId: ClientId;
 	} = $props();
 
 	// Matched against every tab the person has open, not just their first: with
