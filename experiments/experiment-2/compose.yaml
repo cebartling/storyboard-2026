@@ -1,0 +1,59 @@
+# MongoDB for experiment-2.
+#
+# ## Why 7 and not 8
+#
+# MongoDB 8 will not start on this machine. Docker Desktop's Linux VM runs
+# kernel 7.0.12-linuxkit, and MongoDB 8 hard-refuses any kernel >= 6.19:
+#
+#   "MongoDB cannot start: Linux kernel versions 6.19 and newer has a known
+#    incompatibility with this version of MongoDB."
+#   https://jira.mongodb.org/browse/SERVER-121912   (tcmalloc / glibc rseq)
+#
+# Verified as unavoidable rather than assumed: mongo:8, mongo:8.0.29,
+# mongo:8.3.8 and mongodb/mongodb-community-server:8.0-ubi9 all refuse, as does
+# bypassing that image's entrypoint and setting the `GLIBC_TUNABLES=
+# glibc.pthread.rseq=0` workaround its own entrypoint implements. The check is
+# compiled into `mongod`, not into any wrapper.
+#
+# Nothing this experiment needs is 8-only — replica sets, multi-document
+# transactions, partial unique indexes and findOneAndUpdate are all in 7. So the
+# version is pinned here, in one place: when Docker Desktop ships a kernel below
+# 6.19, or MongoDB fixes SERVER-121912, this is a one-line change.
+#
+# ## Why a replica set
+#
+# Not a preference. MongoDB only offers multi-document transactions on a replica
+# set, and this app needs exactly one — creating a map and its owner membership
+# row together, so there is never an instant where a map exists that nobody can
+# reach. A standalone mongod answers that transaction with "Transaction numbers
+# are only allowed on a replica set member", which is a confusing way to find
+# this out.
+services:
+  mongo:
+    image: mongo:7
+    container_name: storyboard-experiment-2-mongo
+    command: ['mongod', '--replSet', 'rs0', '--bind_ip_all']
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      # Initiate the replica set on first start, then report healthy only once
+      # this node has actually become PRIMARY. Waiting for the port to open is
+      # not enough: a member that has not finished electing itself rejects
+      # writes, and that failure surfaces later looking like something else.
+      test: |
+        mongosh --quiet --eval '
+          try { rs.status() } catch (e) {
+            if (e.codeName === "NotYetInitialized") { rs.initiate({_id:"rs0",members:[{_id:0,host:"localhost:27017"}]}) }
+          }
+          rs.status().myState === 1 || quit(1)
+        '
+      interval: 2s
+      timeout: 10s
+      # Generous: a first run has to pull the image and elect a primary.
+      retries: 30
+      start_period: 5s
+
+volumes:
+  mongo-data:
