@@ -257,4 +257,25 @@ describe('CollabHubs', () => {
 
 		expect(hubs.size).toBe(0);
 	});
+
+	it('does not create a hub for a map nobody is watching', () => {
+		// A broadcast with no subscribers has nowhere to go, and creating a hub to
+		// deliver it leaves an empty one behind forever: `onEmpty` fires from
+		// `unsubscribe`, which never happens for a hub nobody subscribed to.
+		const hubs = new CollabHubs();
+
+		hubs.watching('m1' as MapId)?.publishChange(1);
+
+		expect(hubs.size).toBe(0);
+	});
+
+	it('hands publishers the live hub when someone is watching', () => {
+		const hubs = new CollabHubs();
+		const alice = recorder('a');
+		hubs.hubFor('m1' as MapId).subscribe(alice.subscriber, null);
+
+		hubs.watching('m1' as MapId)?.publishChange(3);
+
+		expect(alice.changes()).toEqual([{ type: 'change', seq: 3 }]);
+	});
 });

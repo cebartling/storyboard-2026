@@ -186,6 +186,21 @@ export class CollabHubs {
 
 	constructor(private readonly bufferSize = DEFAULT_BUFFER) {}
 
+	/**
+	 * The hub for a map **only if somebody is watching it**.
+	 *
+	 * Publishers use this rather than `hubFor`, because a broadcast with no
+	 * subscribers has nowhere to go and creating a hub to deliver it leaves an
+	 * empty one behind forever — `onEmpty` fires from `unsubscribe`, which never
+	 * happens for a hub nobody subscribed to. The page's unload cursor POST is
+	 * sent with `keepalive`, so it routinely arrives after the last stream has
+	 * closed and would otherwise resurrect the hub it just emptied.
+	 */
+	watching(mapId: MapId): MapHub | undefined {
+		return this.hubs.get(mapId);
+	}
+
+	/** Creates the hub if it does not exist. For subscribers only. */
 	hubFor(mapId: MapId): MapHub {
 		const existing = this.hubs.get(mapId);
 		if (existing) return existing;

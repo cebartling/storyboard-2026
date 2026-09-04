@@ -56,9 +56,11 @@ async function runAndPublish(
 		// already refetched as part of this submission. Optional, and untrusted —
 		// the worst a forged value does is deny that tab one notification.
 		const origin = form.get('clientId');
+		// `watching`, not `hubFor`: nobody may be on this board, and creating a hub
+		// to broadcast into an empty room leaves it behind for the process lifetime.
 		deps.collab
-			.hubFor(mapId)
-			.publishChange(expectedVersion + 1, typeof origin === 'string' ? origin : undefined);
+			.watching(mapId)
+			?.publishChange(expectedVersion + 1, typeof origin === 'string' ? origin : undefined);
 	}
 	return failure;
 }

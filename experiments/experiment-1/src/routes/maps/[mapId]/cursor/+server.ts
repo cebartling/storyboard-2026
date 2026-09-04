@@ -25,9 +25,12 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	const body = parseCursorBody(await request.json().catch(() => null));
 	if (body === undefined) error(400, 'Expected {x, y} or {x: null}.');
 
+	// `watching`, not `hubFor`: this POST is sent with `keepalive`, so it often
+	// lands after the sender's own stream has closed and the hub has been
+	// dropped — recreating it would leave an empty hub behind for good.
 	deps.collab
-		.hubFor(mapId)
-		.publishCursor(
+		.watching(mapId)
+		?.publishCursor(
 			{ userId: caller.userId, displayName: locals.user!.displayName, clientId: body.clientId },
 			body.cursor
 		);
