@@ -35,6 +35,7 @@ versions before 10 reject this directory's `pnpm-workspace.yaml` with
 | **Single canvas component test** | `corepack pnpm vitest run src/lib/components/board-viewport.svelte.spec.ts`                |
 | **Single e2e test**              | `corepack pnpm playwright test -g "drag story to slice"`                                   |
 | **Single canvas e2e test**       | `corepack pnpm playwright test -g "pan and zoom persist"`                                  |
+| Collaboration demo (headed)      | `corepack pnpm exec playwright test --config=playwright.demo.config.ts`                    |
 | Types                            | `corepack pnpm check`                                                                      |
 | Lint / format                    | `corepack pnpm lint` / `corepack pnpm format`                                              |
 | New migration                    | `corepack pnpm db:generate` (commit `drizzle/`)                                            |
@@ -151,6 +152,12 @@ write path or the stream — the amendments correct four things the code contrad
 
 **Single process is a correctness requirement, not an incidental fact** — two instances
 would each hold their own lock and their own hubs. Both `KeyedLock` and `MapHub` say so.
+
+`src/demo/collab-demo.ts` is a headed walkthrough of all of this — two windows side by side,
+each captioning what it is doing — for showing someone the feature rather than testing it. It
+runs under `playwright.demo.config.ts` against its own `demo.db`, and is deliberately outside
+both suites: `testMatch` does not overlap, and it asserts too loosely to be a regression test.
+If you change a selector the e2e suite uses, check the demo still runs.
 
 Testing collaboration: `collab.svelte.e2e.ts` drives two browser contexts through the auth
 fixture's `newUser`. The one rule that keeps it from flaking is to wait for both boards to
