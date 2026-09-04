@@ -18,6 +18,9 @@ export default defineConfig({
 				config: (config) => {
 					config.include.push('../drizzle.config.ts');
 					config.include.push('../scripts/**/*.ts');
+					// Demos live outside src/ because they are neither shipped nor
+					// tested; this is the only thing that keeps them typechecked.
+					config.include.push('../demo/**/*.ts');
 				}
 			}
 		})
