@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryStoryMapRepository } from './in-memory-story-map-repository';
 import * as useCases from './use-cases';
 import { suggestStoriesForStep } from './use-cases';
-import type { AiAssistant, StepSnapshot, StorySuggestion } from '$lib/domain/ports';
+import type {
+	AiAssistant,
+	StepSnapshot,
+	StoryMapRepository,
+	StorySuggestion
+} from '$lib/domain/ports';
 import type { ActivityId, MapId, SliceId, StepId, StoryId } from '$lib/domain/ids';
 import { addActivity, addSlice, addStep, addStory, createStoryMap } from '$lib/domain/story-map';
 import { InvariantError } from '$lib/domain/errors';
@@ -230,5 +235,81 @@ describe('deleteMap', () => {
 		await useCases.deleteMap(repository, mapId);
 
 		await expect(useCases.deleteMap(repository, mapId)).resolves.toBeUndefined();
+	});
+});
+
+describe('concurrent writers', () => {
+	/**
+	 * Wraps a repository so `load()` can be held open, which is what lets a test
+	 * interleave two writers deterministically rather than hoping the event loop
+	 * cooperates.
+	 */
+	class GatedRepository implements StoryMapRepository {
+		private gates: Array<() => void> = [];
+
+		constructor(private readonly inner: StoryMapRepository) {}
+
+		/** Releases every load currently waiting, in the order they arrived. */
+		openGates(): void {
+			const waiting = this.gates;
+			this.gates = [];
+			for (const open of waiting) open();
+		}
+
+		get waiting(): number {
+			return this.gates.length;
+		}
+
+		async load(id: MapId) {
+			await new Promise<void>((resolve) => this.gates.push(resolve));
+			return this.inner.load(id);
+		}
+		save = (map: Parameters<StoryMapRepository['save']>[0]) => this.inner.save(map);
+		listSummaries = () => this.inner.listSummaries();
+		delete = (id: MapId) => this.inner.delete(id);
+	}
+
+	async function seededMap() {
+		const map = createStoryMap('Retail');
+		const repository = new InMemoryStoryMapRepository([map]);
+		return { repository, mapId: map.id };
+	}
+
+	it('lets two concurrent adds to the same map both persist, and the second sees the first', async () => {
+		// Without a per-map lock this is a lost update: both callers load version
+		// n, the first saves n+1, and the second either conflicts or — with no
+		// version held anywhere — silently overwrites. Under ADR 0015 §2 the two
+		// become sequential, so both activities survive and their fractional ranks
+		// differ, which is the collision `rank.ts` cannot prevent on its own.
+		const { repository, mapId } = await seededMap();
+		const gated = new GatedRepository(repository);
+
+		const first = useCases.addActivity(gated, mapId, 'Browse');
+		const second = useCases.addActivity(gated, mapId, 'Checkout');
+
+		// Both callers are inside the use case. Release whatever load is pending,
+		// repeatedly, until both finish — under the lock the second load only
+		// happens after the first save, so the gates open one at a time and the
+		// lock, not the event loop, decides the interleaving.
+		const both = Promise.all([first, second]);
+		let settled = false;
+		void both.then(
+			() => (settled = true),
+			() => (settled = true)
+		);
+		while (!settled) {
+			gated.openGates();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		}
+
+		const [a, b] = await both;
+
+		const saved = await repository.load(mapId);
+		expect(saved?.activities.map((activity) => activity.name).sort()).toEqual([
+			'Browse',
+			'Checkout'
+		]);
+		expect(saved?.version).toBe(2);
+		expect(a.rank).not.toBe(b.rank);
 	});
 });
