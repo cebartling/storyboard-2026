@@ -40,6 +40,15 @@ export class DrizzleStoryMapRepository implements StoryMapRepository {
 		return row?.role ?? null;
 	}
 
+	/**
+	 * Authorisation without the aggregate. One indexed row, where `load` would
+	 * run five queries and rebuild the whole board to answer the same question —
+	 * which matters on the cursor path, the busiest endpoint in the app.
+	 */
+	async roleOf(caller: Caller, id: MapId): Promise<Role | null> {
+		return this.db.transaction((tx) => this.roleWithin(tx, id, caller.userId));
+	}
+
 	async load(caller: Caller, id: MapId): Promise<MapAccess | null> {
 		// One transaction for five reads. In-process this is already safe —
 		// better-sqlite3 is synchronous, so nothing interleaves — but the seed

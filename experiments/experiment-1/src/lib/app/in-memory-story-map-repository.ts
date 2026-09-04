@@ -32,14 +32,20 @@ export class InMemoryStoryMapRepository implements StoryMapRepository {
 		}
 	}
 
-	private roleOf(mapId: MapId, userId: UserId): Role | null {
+	private memberRole(mapId: MapId, userId: UserId): Role | null {
 		return this.members.get(mapId)?.get(userId) ?? null;
+	}
+
+	async roleOf(caller: Caller, id: MapId): Promise<Role | null> {
+		// Null for a map that does not exist as well as for one that is not the
+		// caller's — the same conflation `load` makes.
+		return this.maps.has(id) ? this.memberRole(id, caller.userId) : null;
 	}
 
 	async load(caller: Caller, id: MapId): Promise<MapAccess | null> {
 		const map = this.maps.get(id);
 		if (!map) return null;
-		const role = this.roleOf(id, caller.userId);
+		const role = this.memberRole(id, caller.userId);
 		// A non-member gets the same answer as for a map that does not exist.
 		if (!role) return null;
 		// A copy, so a caller mutating what it loaded cannot reach back into
@@ -51,7 +57,7 @@ export class InMemoryStoryMapRepository implements StoryMapRepository {
 	async save(caller: Caller, map: StoryMap): Promise<StoryMap> {
 		const current = this.maps.get(map.id);
 		if (current) {
-			if (!this.roleOf(map.id, caller.userId)) {
+			if (!this.memberRole(map.id, caller.userId)) {
 				throw new ForbiddenError('You do not have access to this story map.');
 			}
 			if (current.version !== map.version) {
@@ -70,13 +76,13 @@ export class InMemoryStoryMapRepository implements StoryMapRepository {
 
 	async listSummaries(caller: Caller): Promise<MapSummary[]> {
 		return [...this.maps.values()].flatMap((map) => {
-			const role = this.roleOf(map.id, caller.userId);
+			const role = this.memberRole(map.id, caller.userId);
 			return role ? [{ id: map.id, name: map.name, createdAt: map.createdAt, role }] : [];
 		});
 	}
 
 	async delete(caller: Caller, id: MapId): Promise<void> {
-		const role = this.roleOf(id, caller.userId);
+		const role = this.memberRole(id, caller.userId);
 		// Silent for a non-member: the operation is idempotent for a caller who
 		// cannot tell whether the map was ever there.
 		if (!role) return;
@@ -88,7 +94,7 @@ export class InMemoryStoryMapRepository implements StoryMapRepository {
 	}
 
 	async addMember(caller: Caller, id: MapId, userId: UserId, role: 'editor'): Promise<void> {
-		if (this.roleOf(id, caller.userId) !== 'owner') {
+		if (this.memberRole(id, caller.userId) !== 'owner') {
 			throw new ForbiddenError('Only the owner can share this story map.');
 		}
 		const members = this.members.get(id);

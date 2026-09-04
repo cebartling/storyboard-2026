@@ -90,6 +90,35 @@ export function describeStoryMapRepositoryContract(
 			);
 		});
 
+		describe('roleOf', () => {
+			it("reports the caller's role without loading the board", async () => {
+				const harness = await createHarness();
+				const { owner, map } = await ownedMap(harness);
+
+				expect(await harness.repository.roleOf(owner, map.id)).toBe('owner');
+			});
+
+			it('reports an editor as an editor', async () => {
+				const harness = await createHarness();
+				const { owner, map } = await ownedMap(harness);
+				const editor = await harness.createUser();
+				await harness.repository.addMember(owner, map.id, editor.userId, 'editor');
+
+				expect(await harness.repository.roleOf(editor, map.id)).toBe('editor');
+			});
+
+			it('is null for a non-member, exactly as for a map that does not exist', async () => {
+				// Same conflation `load` makes: an outsider must not be able to tell
+				// the two apart.
+				const harness = await createHarness();
+				const { map } = await ownedMap(harness);
+				const stranger = await harness.createUser();
+
+				expect(await harness.repository.roleOf(stranger, map.id)).toBeNull();
+				expect(await harness.repository.roleOf(stranger, 'no-such-map' as MapId)).toBeNull();
+			});
+		});
+
 		describe('membership', () => {
 			it('lets an owner add an editor, who can then load and save', async () => {
 				const harness = await createHarness();

@@ -19,6 +19,7 @@ import type {
 	Caller,
 	MapAccess,
 	MapSummary,
+	Role,
 	StoryMapRepository,
 	StorySuggestion
 } from '$lib/domain/ports';
@@ -79,6 +80,18 @@ export async function loadMap(
 	id: MapId
 ): Promise<MapAccess | null> {
 	return repository.load(caller, id);
+}
+
+/**
+ * The caller's role on a map, without loading it. For authorising an action that
+ * does not need the board — the cursor endpoint, which runs at pointer rate.
+ */
+export async function roleOf(
+	repository: StoryMapRepository,
+	caller: Caller,
+	mapId: MapId
+): Promise<Role | null> {
+	return repository.roleOf(caller, mapId);
 }
 
 /** Shares a map with another account as an editor. Owner-only; the repository

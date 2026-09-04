@@ -2,7 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { deps } from '$lib/server/deps';
 import { requireCaller } from '$lib/server/auth/require-caller';
-import { loadMap } from '$lib/app/use-cases';
+import { roleOf } from '$lib/app/use-cases';
 import type { MapId } from '$lib/domain/ids';
 import { parseCursorBody } from '$lib/server/collab/cursor-body';
 
@@ -19,8 +19,11 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	const caller = requireCaller(locals);
 	const mapId = params.mapId as MapId;
 
-	const access = await loadMap(deps.storyMapRepository, caller, mapId);
-	if (!access) error(404, `No story map with id ${params.mapId}`);
+	// `roleOf`, not `loadMap`: this fires up to twenty times a second per tab and
+	// needs only a yes or no, where loading the aggregate would rebuild the whole
+	// board from five queries and throw it away.
+	const role = await roleOf(deps.storyMapRepository, caller, mapId);
+	if (!role) error(404, `No story map with id ${params.mapId}`);
 
 	const body = parseCursorBody(await request.json().catch(() => null));
 	if (body === undefined) error(400, 'Expected {x, y} or {x: null}.');

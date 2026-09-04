@@ -59,6 +59,16 @@ export interface StoryMapRepository {
 	 */
 	save(caller: Caller, map: StoryMap): Promise<StoryMap>;
 	listSummaries(caller: Caller): Promise<MapSummary[]>;
+	/**
+	 * The caller's role on a map, or null if the map is missing or they are not a
+	 * member — the same conflation `load` makes, and for the same reason.
+	 *
+	 * Exists because authorising an action does not always need the aggregate.
+	 * The cursor endpoint fires up to twenty times a second per tab and wants
+	 * only a yes or no; going through `load` for that rebuilds the whole board
+	 * from five queries to throw it away.
+	 */
+	roleOf(caller: Caller, id: MapId): Promise<Role | null>;
 	/** Owner only. A no-op when the map is missing or the caller is not a member. */
 	delete(caller: Caller, id: MapId): Promise<void>;
 	/** Owner only, and idempotent for someone who is already a member. */

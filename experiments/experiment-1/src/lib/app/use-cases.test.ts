@@ -349,6 +349,7 @@ describe('concurrent writers', () => {
 			this.inner.listSummaries(...args);
 		delete: StoryMapRepository['delete'] = (...args) => this.inner.delete(...args);
 		addMember: StoryMapRepository['addMember'] = (...args) => this.inner.addMember(...args);
+		roleOf: StoryMapRepository['roleOf'] = (...args) => this.inner.roleOf(...args);
 	}
 
 	async function seededMap() {
