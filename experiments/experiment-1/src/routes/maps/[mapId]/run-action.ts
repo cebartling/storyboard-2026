@@ -8,9 +8,11 @@ import { ConflictError, InvariantError } from '$lib/domain/errors';
  *
  * - `InvariantError` -> 400 with the domain's own message. These are written
  *   for the person who made the request, so they are safe to show.
- * - `ConflictError` -> 409. Someone else changed the map between our load and
- *   our save; the internal version numbers are an operator detail, so the user
- *   gets the remedy instead.
+ * - `ConflictError` -> 409. Someone else changed the map between the version
+ *   the user's editor was opened at and now; the internal version numbers are
+ *   an operator detail, so the user gets the remedy instead. The remedy is
+ *   deliberately not "reload": the client refreshes the board itself and keeps
+ *   what the user typed, so a reload would only throw their own edit away.
  * - anything else -> 500, logged server-side with the action's label. The
  *   message is never shown: it can carry driver or filesystem detail.
  *
@@ -30,7 +32,8 @@ export async function runAction(
 		}
 		if (e instanceof ConflictError) {
 			return fail(409, {
-				error: 'Someone else changed this map while you were editing. Reload to see their changes.'
+				error:
+					'Someone else changed this map while you were editing. The board has been refreshed — check your change against it, then save again.'
 			});
 		}
 		console.error(`action ${label} failed`, e);

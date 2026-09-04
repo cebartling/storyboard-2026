@@ -42,7 +42,7 @@
 	// (ADR 0008) — only the submission path changed: `use:enhance` instead of
 	// a full-page navigation, because navigating away would tear down the
 	// dialog the user is standing in.
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import type { SubmitFunction } from '@sveltejs/kit';
@@ -143,6 +143,19 @@
 			// re-enable Save and Delete for a whole round trip while the dialog
 			// is still open, which is long enough to click twice.
 			if (result.type === 'failure') {
+				if (result.status === 409) {
+					// A stale editor (ADR 0015 §3). Refresh the board so the user is
+					// looking at what the other person actually did, and re-snapshot
+					// the version so their next Save is a knowing overwrite rather
+					// than another rejection. What they typed is deliberately left
+					// alone — it is the one thing that cannot be recovered.
+					await invalidateAll();
+					// `boardVersion` is a prop fed from `load()`; let the refetch's
+					// new value reach it before re-snapshotting, or we would capture
+					// the version we already know is stale.
+					await tick();
+					openedAtVersion = boardVersion;
+				}
 				report(actionError(result.data) ?? 'Something went wrong. Please try again.');
 				return;
 			}

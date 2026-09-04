@@ -28,9 +28,16 @@ describe('runAction', () => {
 		});
 
 		expect(result).toMatchObject({ status: 409 });
+		const message = (result as { data: { error: string } }).data.error;
 		// The internal version numbers are an operator detail, not something to
 		// put in front of the user — but the remedy has to be stated.
-		expect((result as { data: { error: string } }).data.error).toMatch(/reload/i);
+		expect(message).not.toMatch(/version|\b3\b|\b4\b/i);
+		// And the remedy is no longer "reload": the client refreshes the board
+		// itself and keeps what the user typed, so telling them to reload would
+		// be telling them to throw their own edit away (ADR 0015 §3, and §5 once
+		// the board refreshes on its own).
+		expect(message).not.toMatch(/reload/i);
+		expect(message).toMatch(/refreshed.*save again/i);
 	});
 
 	it('maps an unexpected fault to a 500 with a generic message', async () => {

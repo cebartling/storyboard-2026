@@ -643,8 +643,15 @@ test("an editor open across someone else's change is refused instead of overwrit
 	await editor.getByRole('button', { name: 'Save' }).click();
 	await expect(editor.locator('p.error')).toContainText('changed this map while you were editing');
 
-	// And Bob's edit is still the one on the board.
+	// Her work is still in the field. Telling her to reload would have been
+	// telling her to throw it away, which is why the message no longer does.
+	await expect(editor.getByLabel('Story title')).toHaveValue("Alice's title");
+
+	// The board behind her has been refreshed to Bob's version, so saving again
+	// is now a knowing overwrite rather than a second rejection.
+	await editor.getByRole('button', { name: 'Save' }).click();
+	await expect(editor).toBeHidden();
 	await page.reload();
-	await expect(page.getByText("Bob's title")).toBeVisible();
-	await expect(page.getByText("Alice's title")).toHaveCount(0);
+	await expect(page.getByText("Alice's title")).toBeVisible();
+	await expect(page.getByText("Bob's title")).toHaveCount(0);
 });
