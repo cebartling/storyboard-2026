@@ -36,7 +36,7 @@ versions before 10 reject this directory's `pnpm-workspace.yaml` with
 | **Single e2e test**              | `corepack pnpm playwright test -g "drag story to slice"`                                   |
 | **Single canvas e2e test**       | `corepack pnpm playwright test -g "pan and zoom persist"`                                  |
 | Collaboration demo (headed)      | `corepack pnpm demo` (Bun)                                                                 |
-| Types                            | `corepack pnpm check`                                                                      |
+| Types                            | `corepack pnpm check` (**two passes** — app, then Bun scripts)                             |
 | Lint / format                    | `corepack pnpm lint` / `corepack pnpm format`                                              |
 | New migration                    | `corepack pnpm db:generate` (commit `drizzle/`)                                            |
 | Inspect DB                       | `corepack pnpm db:studio`                                                                  |
@@ -198,6 +198,18 @@ Two consequences worth knowing before changing any of this:
   `{ behavior: 'immediate' }` for correctness. See the comment on it.
 - **The demo's preview server runs under Node**, spawned as a child process by
   `demo/harness.ts`. Only the driving script is Bun. Do not "simplify" that.
+- **`pnpm check` runs two `svelte-check` passes, and the second is not redundant.**
+  `tsconfig.json` covers the app; `tsconfig.bun.json` covers `scripts/` and `demo/`. Those
+  two directories need `bun-types`, which is a _global_ declaration file — putting them in
+  the app's program makes `Bun.*` visible to SvelteKit routes, which run on Node, so
+  Bun-only code there would typecheck cleanly and then crash. Splitting the programs makes
+  the type environment match the runtime in each half.
+
+  If the second pass ever looks like duplicated work, check before deleting it: put
+  `export const v: string = Bun.version;` in a file under `src/lib/` and run
+  `corepack pnpm check`. It must fail with "Cannot find name 'Bun'". The same line under
+  `scripts/` must pass. (This was found by a self-review, after a comment claimed the
+  `bun-types` reference was scoped to a single file. It was not.)
 
 Connection pragmas live in `src/lib/server/db/pragmas.ts` so both drivers apply the same
 ones; ADR 0015 Stage 0 made them load-bearing and two lists could drift.
