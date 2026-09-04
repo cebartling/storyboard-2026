@@ -46,6 +46,21 @@ request-flow trace.
                                               into use cases
 ```
 
+Two things sit beside that picture rather than inside it:
+
+- **`src/lib/server/auth/`** — accounts and sessions (ADR 0016). Not an outbound port: one
+  implementation, one consumer, already testable against a temp SQLite file, so under
+  ADR 0006's own test a port would be ceremony. The layers above it see a `Caller`, which is
+  a value, never a user record. `src/hooks.server.ts` resolves the session cookie into
+  `locals.user`, and `requireCaller(locals)` is the single place a `Caller` is constructed.
+- **`src/lib/app/keyed-lock.ts`** — the per-map write lock (ADR 0015 §2). Neither adapter nor
+  port; it serialises a use case's whole `load → mutate → save`, which no port method spans.
+
+Note that authorisation is enforced **in the adapters**, not in the use cases: they hold the
+membership rows, so one query answers "does this exist" and "may they" together. The cost is
+that policy lives in two implementations, which is why both are held to
+`src/lib/app/story-map-repository-contract.ts`.
+
 ## The two outbound ports, and why only two
 
 1. **`StoryMapRepository`** — loads and saves a whole `StoryMap` aggregate. This is the
@@ -155,3 +170,24 @@ full vertical slice through a real browser against the running SvelteKit app (it
 `e2e.db`), covering the one scenario that matters end to end — create map, add
 activity/step/story, drag to reorder, drag onto a slice, reload, and confirm order and
 slice membership persisted.
+
+## Adopting maps created before accounts existed
+
+ADR 0016 gives every map an owner, and the migration deliberately does not invent one — a
+fabricated `map_members` row would point at a user id nobody can log in as. Maps in a
+developer's `local.db` from before that change therefore have no members and do not appear
+in any list.
+
+`e2e.db` is deleted on every run and needs nothing. To adopt the old maps in `local.db`,
+register an account in the app, then (via `corepack pnpm db:studio`, or `sqlite3 local.db`):
+
+```sql
+INSERT INTO map_members (map_id, user_id, role)
+SELECT id, (SELECT id FROM users WHERE email = 'you@example.com'), 'owner'
+FROM maps
+WHERE id NOT IN (SELECT map_id FROM map_members);
+```
+
+This lives here rather than in a script because `local.db` is a development artefact
+(ADR 0003) and the decision of who should own an orphaned map is not one a migration can
+make.

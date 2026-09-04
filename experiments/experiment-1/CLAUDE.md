@@ -39,7 +39,7 @@ versions before 10 reject this directory's `pnpm-workspace.yaml` with
 | Lint / format                    | `corepack pnpm lint` / `corepack pnpm format`                                              |
 | New migration                    | `corepack pnpm db:generate` (commit `drizzle/`)                                            |
 | Inspect DB                       | `corepack pnpm db:studio`                                                                  |
-| Seed sample data                 | `corepack pnpm db:seed`                                                                    |
+| Seed sample data                 | `corepack pnpm db:seed <owner-email>` (account must exist)                                 |
 
 Migrations apply automatically at db-module load, so `corepack pnpm dev` and the e2e server
 self-migrate. E2e runs against a throwaway `e2e.db` and never touch `local.db`.
@@ -108,13 +108,32 @@ Drags need `mouse.down()` → several `mouse.move(x, y, { steps: 5 })` waypoints
 waits → `mouse.up()`, then a settle before asserting. See the e2e spec beside
 `src/routes/maps/[mapId]/`.
 
+## Authentication and access (ADR 0016)
+
+Every page except `/login` and `/register` requires an account; `src/hooks.server.ts`
+redirects anonymous requests and populates `locals.user`. Maps have members
+(`map_members`): the creator is the `owner`, who may delete and share; anyone they share
+with is an `editor`, who may change the board but not delete or share it. A non-member gets
+`null` from `load()` and a 404 from the route — the same answer as for a map that does not
+exist, so ids cannot be probed for.
+
+**Every `StoryMapRepository` method takes a `Caller` first**, and the adapters enforce
+access, not the app layer. Both adapters are held to
+`src/lib/app/story-map-repository-contract.ts`: put a new access rule there, or it is
+enforced nowhere. `requireCaller(locals)` is the only place a `Caller` is constructed —
+keep it that way, because it is what stops ADR 0015's presence identity from becoming the
+auth identity.
+
+`corepack pnpm db:seed <owner-email>` needs an account that already exists. Maps in an old
+`local.db` have no members and are invisible until adopted; the SQL is in
+`documentation/architecture.md`.
+
 ## Not built (deliberately)
 
-Real-time collaboration, authentication, and AI calls. Collaboration is **in scope for the
-product** and simply not built yet (ADR 0014) — which matters, because the single-aggregate
-shape means two editors on different cards already conflict. ADR 0015 is the design; read it
-before adding a domain mutation or touching the write path. Note it also records a live bug
-it fixes: today the client holds no version, so two people editing one board overwrite each
-other silently. The `AiAssistant` port exists with a
-null implementation so AI plugs in without rework — its contract style (domain snapshots
-in, structured suggestions out) is the commitment; its method list is provisional.
+Real-time collaboration (ADR 0015 Stage 1) and AI calls. Stage 0 **is** built: versions
+round-trip, writes to a map are serialised, and the SQLite connection is WAL with a busy
+timeout — read ADR 0015 before adding a domain mutation or touching the write path, and note
+its amendments block, which corrects three things the code contradicted. The `AiAssistant`
+port exists with a null implementation so AI plugs in without rework — its contract style
+(domain snapshots in, structured suggestions out) is the commitment; its method list is
+provisional.
