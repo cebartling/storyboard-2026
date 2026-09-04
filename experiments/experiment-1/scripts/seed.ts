@@ -14,10 +14,6 @@
  * accept either driver — see `AppDatabase`.
  */
 
-// Bun's own module types. Referenced here rather than added to `types` in
-// tsconfig, so it applies to this script and does not reshape the app's global
-// type environment.
-/// <reference types="bun-types" />
 import { Database } from 'bun:sqlite';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';

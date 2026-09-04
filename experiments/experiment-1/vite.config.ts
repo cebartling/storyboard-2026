@@ -17,10 +17,12 @@ export default defineConfig({
 			typescript: {
 				config: (config) => {
 					config.include.push('../drizzle.config.ts');
-					config.include.push('../scripts/**/*.ts');
-					// Demos live outside src/ because they are neither shipped nor
-					// tested; this is the only thing that keeps them typechecked.
-					config.include.push('../demo/**/*.ts');
+					// `scripts/` and `demo/` are deliberately NOT added here. They run
+					// on Bun and need `bun-types`, which is a global declaration file —
+					// pulling them into this program would make `Bun.*` visible to app
+					// code that runs on Node, where it would typecheck and then crash.
+					// They have their own program: `tsconfig.bun.json`, run by
+					// `pnpm check` as a second pass.
 				}
 			}
 		})
