@@ -10,7 +10,7 @@ import type {
 } from '$lib/domain/ports';
 import type { ActivityId, MapId, SliceId, StepId, StoryId } from '$lib/domain/ids';
 import { addActivity, addSlice, addStep, addStory, createStoryMap } from '$lib/domain/story-map';
-import { InvariantError } from '$lib/domain/errors';
+import { ConflictError, InvariantError } from '$lib/domain/errors';
 
 /**
  * Records what the use case handed the port. The point of ADR 0007's contract
@@ -136,37 +136,69 @@ describe('mutating use cases', () => {
 	type Case = { name: string; run: (ctx: Awaited<ReturnType<typeof seeded>>) => Promise<unknown> };
 
 	const cases: Case[] = [
-		{ name: 'addActivity', run: (c) => useCases.addActivity(c.repository, c.mapId, 'Checkout') },
-		{ name: 'addStep', run: (c) => useCases.addStep(c.repository, c.mapId, c.activityId, 'Pay') },
-		{ name: 'createSlice', run: (c) => useCases.createSlice(c.repository, c.mapId, 'Release 2') },
-		{ name: 'addStory', run: (c) => useCases.addStory(c.repository, c.mapId, c.stepId, 'Filter') },
+		{
+			name: 'addActivity',
+			run: (c) => useCases.addActivity(c.repository, c.mapId, c.version, 'Checkout')
+		},
+		{
+			name: 'addStep',
+			run: (c) => useCases.addStep(c.repository, c.mapId, c.version, c.activityId, 'Pay')
+		},
+		{
+			name: 'createSlice',
+			run: (c) => useCases.createSlice(c.repository, c.mapId, c.version, 'Release 2')
+		},
+		{
+			name: 'addStory',
+			run: (c) => useCases.addStory(c.repository, c.mapId, c.version, c.stepId, 'Filter')
+		},
 		{
 			name: 'renameActivity',
-			run: (c) => useCases.renameActivity(c.repository, c.mapId, c.activityId, 'Discover')
+			run: (c) =>
+				useCases.renameActivity(c.repository, c.mapId, c.version, c.activityId, 'Discover')
 		},
 		{
 			name: 'renameStep',
-			run: (c) => useCases.renameStep(c.repository, c.mapId, c.stepId, 'Find')
+			run: (c) => useCases.renameStep(c.repository, c.mapId, c.version, c.stepId, 'Find')
 		},
 		{
 			name: 'renameSlice',
-			run: (c) => useCases.renameSlice(c.repository, c.mapId, c.sliceId, 'MVP')
+			run: (c) => useCases.renameSlice(c.repository, c.mapId, c.version, c.sliceId, 'MVP')
 		},
 		{
 			name: 'editStory',
-			run: (c) => useCases.editStory(c.repository, c.mapId, c.storyId, { title: 'Search by SKU' })
+			run: (c) =>
+				useCases.editStory(c.repository, c.mapId, c.version, c.storyId, { title: 'Search by SKU' })
 		},
 		{
 			name: 'deleteActivity',
-			run: (c) => useCases.deleteActivity(c.repository, c.mapId, c.activityId)
+			run: (c) => useCases.deleteActivity(c.repository, c.mapId, c.version, c.activityId)
 		},
-		{ name: 'deleteStep', run: (c) => useCases.deleteStep(c.repository, c.mapId, c.stepId) },
-		{ name: 'deleteSlice', run: (c) => useCases.deleteSlice(c.repository, c.mapId, c.sliceId) },
-		{ name: 'deleteStory', run: (c) => useCases.deleteStory(c.repository, c.mapId, c.storyId) },
+		{
+			name: 'deleteStep',
+			run: (c) => useCases.deleteStep(c.repository, c.mapId, c.version, c.stepId)
+		},
+		{
+			name: 'deleteSlice',
+			run: (c) => useCases.deleteSlice(c.repository, c.mapId, c.version, c.sliceId)
+		},
+		{
+			name: 'deleteStory',
+			run: (c) => useCases.deleteStory(c.repository, c.mapId, c.version, c.storyId)
+		},
 		{
 			name: 'moveStory',
 			run: (c) =>
-				useCases.moveStory(c.repository, c.mapId, c.storyId, c.stepId, c.sliceId, null, null)
+				useCases.moveStory(
+					c.repository,
+					c.mapId,
+					c.version,
+					c.storyId,
+					c.stepId,
+					c.sliceId,
+					null,
+					null
+				)
 		}
 	];
 
@@ -187,6 +219,18 @@ describe('mutating use cases', () => {
 
 			await expect(run({ ...ctx, mapId: 'missing-map' as MapId })).rejects.toThrow(InvariantError);
 		});
+
+		it(`${name} rejects a stale version and writes nothing`, async () => {
+			// The client sends the version its editor was opened at. If the board
+			// has moved on since, this is the stale-editor case ADR 0015 §3 exists
+			// for: refuse it rather than let it overwrite whoever got there first.
+			const ctx = await seeded();
+
+			await expect(run({ ...ctx, version: ctx.version + 1 })).rejects.toThrow(ConflictError);
+
+			const after = (await ctx.repository.load(ctx.mapId))!;
+			expect(after.version).toBe(ctx.version);
+		});
 	}
 
 	// The one use case with logic of its own beyond delegation: a partial edit
@@ -194,7 +238,7 @@ describe('mutating use cases', () => {
 	// description where `undefined` means "not supplied".
 	it('editStory applies only the fields it was given', async () => {
 		const ctx = await seeded();
-		await useCases.editStory(ctx.repository, ctx.mapId, ctx.storyId, {
+		await useCases.editStory(ctx.repository, ctx.mapId, ctx.version, ctx.storyId, {
 			description: 'Accepts partial words'
 		});
 
@@ -246,6 +290,9 @@ describe('concurrent writers', () => {
 	 */
 	class GatedRepository implements StoryMapRepository {
 		private gates: Array<() => void> = [];
+		private inFlightLoads = 0;
+		/** How many times a load began while another was still open. */
+		overlappingLoads = 0;
 
 		constructor(private readonly inner: StoryMapRepository) {}
 
@@ -261,8 +308,14 @@ describe('concurrent writers', () => {
 		}
 
 		async load(id: MapId) {
-			await new Promise<void>((resolve) => this.gates.push(resolve));
-			return this.inner.load(id);
+			if (this.inFlightLoads > 0) this.overlappingLoads += 1;
+			this.inFlightLoads += 1;
+			try {
+				await new Promise<void>((resolve) => this.gates.push(resolve));
+				return await this.inner.load(id);
+			} finally {
+				this.inFlightLoads -= 1;
+			}
 		}
 		save = (map: Parameters<StoryMapRepository['save']>[0]) => this.inner.save(map);
 		listSummaries = () => this.inner.listSummaries();
@@ -275,41 +328,63 @@ describe('concurrent writers', () => {
 		return { repository, mapId: map.id };
 	}
 
-	it('lets two concurrent adds to the same map both persist, and the second sees the first', async () => {
-		// Without a per-map lock this is a lost update: both callers load version
-		// n, the first saves n+1, and the second either conflicts or — with no
-		// version held anywhere — silently overwrites. Under ADR 0015 §2 the two
-		// become sequential, so both activities survive and their fractional ranks
-		// differ, which is the collision `rank.ts` cannot prevent on its own.
+	it('rejects the second of two concurrent writers rather than letting either overwrite the other', async () => {
+		// Both callers hold the version the board had when their editor opened.
+		// The lock makes them sequential; the version check then decides who wins,
+		// and the loser gets a ConflictError instead of silently clobbering the
+		// winner. Two editors on one board conflicting even when they touch
+		// different cards is the known cost of a single whole-map version
+		// (ADR 0014); ADR 0015 §5's notify-and-refetch is what keeps the loser's
+		// next attempt from being stale for long.
 		const { repository, mapId } = await seededMap();
 		const gated = new GatedRepository(repository);
 
-		const first = useCases.addActivity(gated, mapId, 'Browse');
-		const second = useCases.addActivity(gated, mapId, 'Checkout');
+		const first = useCases.addActivity(gated, mapId, 0, 'Browse');
+		const second = useCases.addActivity(gated, mapId, 0, 'Checkout');
 
-		// Both callers are inside the use case. Release whatever load is pending,
-		// repeatedly, until both finish — under the lock the second load only
-		// happens after the first save, so the gates open one at a time and the
-		// lock, not the event loop, decides the interleaving.
-		const both = Promise.all([first, second]);
+		const outcomes = Promise.allSettled([first, second]);
 		let settled = false;
-		void both.then(
-			() => (settled = true),
-			() => (settled = true)
-		);
+		void outcomes.then(() => (settled = true));
 		while (!settled) {
 			gated.openGates();
 			await new Promise((resolve) => setTimeout(resolve, 0));
 		}
 
-		const [a, b] = await both;
+		const results = await outcomes;
+		const rejected = results.filter((r) => r.status === 'rejected');
+		expect(rejected).toHaveLength(1);
+		expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(ConflictError);
 
+		// Exactly one activity landed, and the map advanced exactly one version.
 		const saved = await repository.load(mapId);
-		expect(saved?.activities.map((activity) => activity.name).sort()).toEqual([
-			'Browse',
-			'Checkout'
-		]);
-		expect(saved?.version).toBe(2);
-		expect(a.rank).not.toBe(b.rank);
+		expect(saved?.activities).toHaveLength(1);
+		expect(saved?.version).toBe(1);
+	});
+
+	it('serialises writers, so no two ever compute a rank against the same state', async () => {
+		// The lock is what stops both callers reaching the domain's rank maths
+		// concurrently. `rank.ts` wraps generateKeyBetween, which is deterministic
+		// and carries no actor entropy, so two inserts computed against identical
+		// state produce byte-identical keys — and the unique indexes turn a leaked
+		// duplicate into a 500 rather than a merge (ADR 0015, "Fractional ranks
+		// collide"). Sequencing them means the survivor always reads committed
+		// state, whichever one that is.
+		const { repository, mapId } = await seededMap();
+		const gated = new GatedRepository(repository);
+
+		const first = useCases.addActivity(gated, mapId, 0, 'Browse');
+		const second = useCases.addActivity(gated, mapId, 0, 'Checkout');
+		const outcomes = Promise.allSettled([first, second]);
+		let settled = false;
+		void outcomes.then(() => (settled = true));
+		while (!settled) {
+			gated.openGates();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		}
+		await outcomes;
+
+		// The two loads never overlapped: the second began only after the first
+		// had saved, which is the property the lock exists to provide.
+		expect(gated.overlappingLoads).toBe(0);
 	});
 });

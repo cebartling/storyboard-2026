@@ -15,7 +15,7 @@
 
 import type { ActivityId, MapId, SliceId, StepId, StoryId } from '$lib/domain/ids';
 import type { AiAssistant, StoryMapRepository, StorySuggestion } from '$lib/domain/ports';
-import { InvariantError } from '$lib/domain/errors';
+import { ConflictError, InvariantError } from '$lib/domain/errors';
 import { KeyedLock } from './keyed-lock';
 import * as domain from '$lib/domain/story-map';
 import {
@@ -59,10 +59,25 @@ export async function loadMap(repository: StoryMapRepository, id: MapId): Promis
 	return repository.load(id);
 }
 
-async function loadOrThrow(repository: StoryMapRepository, id: MapId): Promise<StoryMap> {
+async function loadOrThrow(
+	repository: StoryMapRepository,
+	id: MapId,
+	expectedVersion?: number
+): Promise<StoryMap> {
 	const map = await repository.load(id);
 	if (!map) {
 		throw new InvariantError(`No story map with id ${id}`);
+	}
+	// The compare-and-set in `save()` only spans one request, which is not the
+	// window that matters: a user holds an open editor for far longer than that.
+	// Comparing the version the client was *given* against what is stored now is
+	// what turns a stale editor into a 409 instead of a silent overwrite
+	// (ADR 0015 §3). Checked before the domain function runs, so nothing is
+	// computed against state we already know is stale.
+	if (expectedVersion !== undefined && map.version !== expectedVersion) {
+		throw new ConflictError(
+			`Story map ${id} changed since it was loaded (expected version ${expectedVersion}, current version ${map.version})`
+		);
 	}
 	return map;
 }
@@ -80,18 +95,25 @@ const mapWriteLock = new KeyedLock<MapId>();
 /**
  * The shape every board mutation has: load the aggregate, apply one pure domain
  * function, save. Wrapping the whole of it — not just the save — is the point.
- * The compare-and-set in `save()` only rejects the loser of a race; running the
- * three steps under a per-map lock means there is no race to lose, so two
- * concurrent inserts at the same position become two sequential ones and the
- * second sees the first's rank.
+ *
+ * Note what the lock does and does not buy, because ADR 0015 §2 overstates it
+ * slightly. It says the second of two concurrent inserts "sees the first's
+ * rank"; once §3's version round-trip is in place that cannot happen, because
+ * the second writer is holding the version its editor opened at and is rejected
+ * before it reaches the domain at all. What the lock actually guarantees is
+ * that no two writers ever compute ranks against the same state — which matters
+ * because `rank.ts` is deterministic with no actor entropy, so identical state
+ * yields byte-identical keys — and that a retry always runs against committed
+ * state rather than contending at the SQLite level.
  */
 async function mutate<T>(
 	repository: StoryMapRepository,
 	mapId: MapId,
+	expectedVersion: number,
 	apply: (map: StoryMap) => { map: StoryMap; result: T }
 ): Promise<T> {
 	return mapWriteLock.run(mapId, async () => {
-		const map = await loadOrThrow(repository, mapId);
+		const map = await loadOrThrow(repository, mapId, expectedVersion);
 		const { map: updated, result } = apply(map);
 		await repository.save(updated);
 		return result;
@@ -105,9 +127,10 @@ async function mutate<T>(
 export async function addActivity(
 	repository: StoryMapRepository,
 	mapId: MapId,
+	expectedVersion: number,
 	name: string
 ): Promise<Activity> {
-	return mutate(repository, mapId, (map) => {
+	return mutate(repository, mapId, expectedVersion, (map) => {
 		const { map: updated, activity } = domain.addActivity(map, name);
 		return { map: updated, result: activity };
 	});
@@ -116,10 +139,11 @@ export async function addActivity(
 export async function addStep(
 	repository: StoryMapRepository,
 	mapId: MapId,
+	expectedVersion: number,
 	activityId: ActivityId,
 	name: string
 ): Promise<Step> {
-	return mutate(repository, mapId, (map) => {
+	return mutate(repository, mapId, expectedVersion, (map) => {
 		const { map: updated, step } = domain.addStep(map, activityId, name);
 		return { map: updated, result: step };
 	});
@@ -128,9 +152,10 @@ export async function addStep(
 export async function createSlice(
 	repository: StoryMapRepository,
 	mapId: MapId,
+	expectedVersion: number,
 	name: string
 ): Promise<Slice> {
-	return mutate(repository, mapId, (map) => {
+	return mutate(repository, mapId, expectedVersion, (map) => {
 		const { map: updated, slice } = domain.addSlice(map, name);
 		return { map: updated, result: slice };
 	});
@@ -139,11 +164,12 @@ export async function createSlice(
 export async function addStory(
 	repository: StoryMapRepository,
 	mapId: MapId,
+	expectedVersion: number,
 	stepId: StepId,
 	title: string,
 	options: { description?: string | null; sliceId?: SliceId | null } = {}
 ): Promise<Story> {
-	return mutate(repository, mapId, (map) => {
+	return mutate(repository, mapId, expectedVersion, (map) => {
 		const { map: updated, story } = domain.addStory(map, stepId, title, options);
 		return { map: updated, result: story };
 	});
@@ -156,10 +182,11 @@ export async function addStory(
 export async function renameActivity(
 	repository: StoryMapRepository,
 	mapId: MapId,
+	expectedVersion: number,
 	activityId: ActivityId,
 	name: string
 ): Promise<void> {
-	await mutate(repository, mapId, (map) => ({
+	await mutate(repository, mapId, expectedVersion, (map) => ({
 		map: domain.renameActivity(map, activityId, name),
 		result: undefined
 	}));
@@ -168,10 +195,11 @@ export async function renameActivity(
 export async function renameStep(
 	repository: StoryMapRepository,
 	mapId: MapId,
+	expectedVersion: number,
 	stepId: StepId,
 	name: string
 ): Promise<void> {
-	await mutate(repository, mapId, (map) => ({
+	await mutate(repository, mapId, expectedVersion, (map) => ({
 		map: domain.renameStep(map, stepId, name),
 		result: undefined
 	}));
@@ -180,10 +208,11 @@ export async function renameStep(
 export async function renameSlice(
 	repository: StoryMapRepository,
 	mapId: MapId,
+	expectedVersion: number,
 	sliceId: SliceId,
 	name: string
 ): Promise<void> {
-	await mutate(repository, mapId, (map) => ({
+	await mutate(repository, mapId, expectedVersion, (map) => ({
 		map: domain.renameSlice(map, sliceId, name),
 		result: undefined
 	}));
@@ -192,12 +221,13 @@ export async function renameSlice(
 export async function editStory(
 	repository: StoryMapRepository,
 	mapId: MapId,
+	expectedVersion: number,
 	storyId: StoryId,
 	changes: { title?: string; description?: string | null }
 ): Promise<void> {
 	const trimmedChanges =
 		changes.title !== undefined ? { ...changes, title: changes.title } : changes;
-	await mutate(repository, mapId, (map) => ({
+	await mutate(repository, mapId, expectedVersion, (map) => ({
 		map: domain.editStory(map, storyId, trimmedChanges),
 		result: undefined
 	}));
@@ -210,9 +240,10 @@ export async function editStory(
 export async function deleteActivity(
 	repository: StoryMapRepository,
 	mapId: MapId,
+	expectedVersion: number,
 	activityId: ActivityId
 ): Promise<void> {
-	await mutate(repository, mapId, (map) => ({
+	await mutate(repository, mapId, expectedVersion, (map) => ({
 		map: domain.deleteActivity(map, activityId),
 		result: undefined
 	}));
@@ -221,9 +252,10 @@ export async function deleteActivity(
 export async function deleteStep(
 	repository: StoryMapRepository,
 	mapId: MapId,
+	expectedVersion: number,
 	stepId: StepId
 ): Promise<void> {
-	await mutate(repository, mapId, (map) => ({
+	await mutate(repository, mapId, expectedVersion, (map) => ({
 		map: domain.deleteStep(map, stepId),
 		result: undefined
 	}));
@@ -232,9 +264,10 @@ export async function deleteStep(
 export async function deleteSlice(
 	repository: StoryMapRepository,
 	mapId: MapId,
+	expectedVersion: number,
 	sliceId: SliceId
 ): Promise<void> {
-	await mutate(repository, mapId, (map) => ({
+	await mutate(repository, mapId, expectedVersion, (map) => ({
 		map: domain.deleteSlice(map, sliceId),
 		result: undefined
 	}));
@@ -243,9 +276,10 @@ export async function deleteSlice(
 export async function deleteStory(
 	repository: StoryMapRepository,
 	mapId: MapId,
+	expectedVersion: number,
 	storyId: StoryId
 ): Promise<void> {
-	await mutate(repository, mapId, (map) => ({
+	await mutate(repository, mapId, expectedVersion, (map) => ({
 		map: domain.deleteStory(map, storyId),
 		result: undefined
 	}));
@@ -266,13 +300,14 @@ export async function deleteStory(
 export async function moveStory(
 	repository: StoryMapRepository,
 	mapId: MapId,
+	expectedVersion: number,
 	storyId: StoryId,
 	toStepId: StepId,
 	toSliceId: SliceId | null,
 	beforeId: string | null,
 	afterId: string | null
 ): Promise<void> {
-	await mutate(repository, mapId, (map) => ({
+	await mutate(repository, mapId, expectedVersion, (map) => ({
 		map: domain.moveStory(map, storyId, toStepId, toSliceId, beforeId, afterId),
 		result: undefined
 	}));

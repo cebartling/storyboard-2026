@@ -48,6 +48,13 @@ export interface CellVM {
 export interface BoardViewModel {
 	id: MapId;
 	name: string;
+	/**
+	 * The aggregate version this board was built from. It goes to the client and
+	 * comes back with every mutation, which is what lets a stale editor be
+	 * refused instead of silently overwriting whoever edited in the meantime
+	 * (ADR 0015 §3). Dropping it here was the whole of that bug.
+	 */
+	version: number;
 	activities: { id: ActivityId; name: string; stepCount: number }[];
 	slices: { id: SliceId; name: string }[];
 	activityHeaders: ActivityHeaderVM[];
@@ -118,6 +125,7 @@ export function buildBoardViewModel(map: StoryMap): BoardViewModel {
 	return {
 		id: map.id,
 		name: map.name,
+		version: map.version,
 		activities: map.activities.map((a) => ({ id: a.id, name: a.name, stepCount: a.steps.length })),
 		slices: map.slices.map((s) => ({ id: s.id, name: s.name })),
 		activityHeaders,

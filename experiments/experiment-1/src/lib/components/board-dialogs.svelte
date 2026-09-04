@@ -42,6 +42,7 @@
 	// (ADR 0008) — only the submission path changed: `use:enhance` instead of
 	// a full-page navigation, because navigating away would tear down the
 	// dialog the user is standing in.
+	import { untrack } from 'svelte';
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import type { SubmitFunction } from '@sveltejs/kit';
@@ -49,10 +50,13 @@
 
 	let {
 		dialog,
+		boardVersion,
 		onClose,
 		onLateFailure
 	}: {
 		dialog: BoardDialog | null;
+		/** The board's current aggregate version, as `load()` last returned it. */
+		boardVersion: number;
 		/** `deleted` when the submission removed the thing the dialog was
 		 *  editing, so the caller can put focus somewhere that still exists —
 		 *  the trigger that opened the dialog is gone by then. */
@@ -66,6 +70,38 @@
 
 	let error = $state<string | null>(null);
 	let submitting = $state(false);
+
+	/**
+	 * The version this editor was opened at — snapshotted, deliberately not read
+	 * live (ADR 0015 §3).
+	 *
+	 * Sending the *current* version at submit time would defeat the whole
+	 * mechanism: a dialog opened before someone else's edit would silently adopt
+	 * their version and overwrite them. Live refetching (ADR 0015 §5) makes that
+	 * routine rather than theoretical, so the snapshot has to be taken here, at
+	 * open time, and held until the dialog closes.
+	 */
+	let openedAtVersion = $state(0);
+	/**
+	 * Which dialog `openedAtVersion` was captured for. A plain `let`, not state:
+	 * nothing renders it, it only decides whether the snapshot is still the right
+	 * one. Comparing the subject — rather than relying on the effect's dependency
+	 * set — is what makes "snapshot at open time" hold no matter how the parent
+	 * happens to pass its props.
+	 */
+	let snapshotFor: BoardDialog | null = null;
+
+	$effect(() => {
+		const opening = dialog;
+		if (!opening) {
+			snapshotFor = null;
+			return;
+		}
+		if (opening !== snapshotFor) {
+			snapshotFor = opening;
+			openedAtVersion = untrack(() => boardVersion);
+		}
+	});
 
 	// A failure keeps the dialog open with its message; opening a different
 	// editor must not inherit it. Only the open transition needs clearing —
@@ -159,6 +195,7 @@
 
 	{#if dialog?.kind === 'addActivity'}
 		<form method="POST" action="?/addActivity" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<div class="flex flex-col gap-1.5">
 				<label for="dialog-activity-name" class="field-label">New activity</label>
 				<input
@@ -176,6 +213,7 @@
 		</form>
 	{:else if dialog?.kind === 'editActivity'}
 		<form method="POST" action="?/renameActivity" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<input type="hidden" name="activityId" value={dialog.activityId} />
 			<div class="flex flex-col gap-1.5">
 				<label for="dialog-activity-rename" class="field-label">Rename activity</label>
@@ -196,6 +234,7 @@
 			use:enhance={submit}
 			class="border-line mt-5 border-t pt-4"
 		>
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<input type="hidden" name="activityId" value={dialog.activityId} />
 			<p class="text-ink-muted mb-2 text-sm">
 				Deleting an activity also deletes its steps and stories.
@@ -204,6 +243,7 @@
 		</form>
 	{:else if dialog?.kind === 'addStep'}
 		<form method="POST" action="?/addStep" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<input type="hidden" name="activityId" value={dialog.activityId} />
 			<div class="flex flex-col gap-1.5">
 				<label for="dialog-step-name" class="field-label">New step name</label>
@@ -223,6 +263,7 @@
 		</form>
 	{:else if dialog?.kind === 'editStep'}
 		<form method="POST" action="?/renameStep" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<input type="hidden" name="stepId" value={dialog.stepId} />
 			<div class="flex flex-col gap-1.5">
 				<label for="dialog-step-rename" class="field-label">Rename step</label>
@@ -243,12 +284,14 @@
 			use:enhance={submit}
 			class="border-line mt-5 border-t pt-4"
 		>
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<input type="hidden" name="stepId" value={dialog.stepId} />
 			<p class="text-ink-muted mb-2 text-sm">Deleting a step also deletes its stories.</p>
 			<button type="submit" class="btn btn-danger" disabled={submitting}>Delete step</button>
 		</form>
 	{:else if dialog?.kind === 'addSlice'}
 		<form method="POST" action="?/createSlice" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<div class="flex flex-col gap-1.5">
 				<label for="dialog-slice-name" class="field-label">New slice</label>
 				<input
@@ -266,6 +309,7 @@
 		</form>
 	{:else if dialog?.kind === 'editSlice'}
 		<form method="POST" action="?/renameSlice" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<input type="hidden" name="sliceId" value={dialog.sliceId} />
 			<div class="flex flex-col gap-1.5">
 				<label for="dialog-slice-rename" class="field-label">Rename slice</label>
@@ -286,6 +330,7 @@
 			use:enhance={submit}
 			class="border-line mt-5 border-t pt-4"
 		>
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<input type="hidden" name="sliceId" value={dialog.sliceId} />
 			<p class="text-ink-muted mb-2 text-sm">
 				Stories in this slice move back to the unsliced band.
@@ -294,6 +339,7 @@
 		</form>
 	{:else if dialog?.kind === 'addStory'}
 		<form method="POST" action="?/addStory" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<input type="hidden" name="stepId" value={dialog.stepId} />
 			<input type="hidden" name="sliceId" value={dialog.sliceId ?? ''} />
 			<div class="flex flex-col gap-1.5">
@@ -314,6 +360,7 @@
 		</form>
 	{:else if dialog?.kind === 'editStory'}
 		<form method="POST" action="?/editStory" use:enhance={submit} class="flex flex-col gap-3">
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<input type="hidden" name="storyId" value={dialog.storyId} />
 			<div class="flex flex-col gap-1.5">
 				<label for="dialog-story-edit-title" class="field-label">Story title</label>
@@ -344,6 +391,7 @@
 			use:enhance={submit}
 			class="border-line mt-5 border-t pt-4"
 		>
+			<input type="hidden" name="version" value={openedAtVersion} />
 			<input type="hidden" name="storyId" value={dialog.storyId} />
 			<button type="submit" class="btn btn-danger" disabled={submitting}>Delete story</button>
 		</form>

@@ -143,6 +143,7 @@
 	async function handleMove(detail: MoveDetail) {
 		boardError = null;
 		const body = new FormData();
+		body.set('version', String(data.board.version));
 		body.set('storyId', detail.storyId);
 		body.set('stepId', detail.stepId);
 		body.set('sliceId', detail.sliceId ?? '');
@@ -204,6 +205,7 @@
 			<div
 				class="bg-line grid min-w-max gap-px"
 				data-testid="board"
+				data-board-version={data.board.version}
 				style="grid-template-columns: max-content repeat({data.board
 					.totalColumns}, minmax(240px, 1fr)); grid-template-rows: auto auto repeat({data.board.rows
 					.length}, minmax(140px, auto)); --board-sticky-header-height: {stickyHeaderHeight}px;"
@@ -359,6 +361,7 @@
 
 <BoardDialogs
 	{dialog}
+	boardVersion={data.board.version}
 	onClose={async (outcome) => {
 		dialog = null;
 		// A delete removes the trigger the dialog would have restored focus to,

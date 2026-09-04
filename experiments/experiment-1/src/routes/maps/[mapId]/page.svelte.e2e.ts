@@ -137,11 +137,23 @@ test('drag story to slice', async ({ page }) => {
 		.getAttribute('data-testid'))!.replace('story-', '');
 	await page.evaluate(async (storyId) => {
 		const body = new FormData();
+		// Mutations carry the version the client holds (ADR 0015 §3); read it off
+		// the board the page has already rendered, as the real client does.
+		body.set(
+			'version',
+			document.querySelector('[data-testid="board"]')!.getAttribute('data-board-version')!
+		);
 		body.set('storyId', storyId);
 		await fetch('?/deleteStory', { method: 'POST', body });
 	}, storyAId);
 	await dragTo(page, sliceCell.locator('[data-testid^="story-"]'), unslicedCell);
-	await expect(page.locator('p.error[role="alert"]')).toContainText(`Story not found: ${storyAId}`);
+	// The delete above moved the board on, so the drag arrives holding a stale
+	// version and is refused as a conflict. Before ADR 0015 §3 the client held no
+	// version at all, so this same setup reached the domain and surfaced the much
+	// less useful "Story not found" instead of the real reason.
+	await expect(page.locator('p.error[role="alert"]')).toContainText(
+		'changed this map while you were editing'
+	);
 });
 
 // The two things the dialogs made possible that the inline forms could not do
@@ -266,6 +278,12 @@ test('a failed dialog submission keeps the dialog open and owns the error', asyn
 	const storyId = await editor.locator('input[name="storyId"]').first().inputValue();
 	await page.evaluate(async (id) => {
 		const body = new FormData();
+		// Mutations carry the version the client holds (ADR 0015 §3); read it off
+		// the board the page has already rendered, as the real client does.
+		body.set(
+			'version',
+			document.querySelector('[data-testid="board"]')!.getAttribute('data-board-version')!
+		);
 		body.set('storyId', id);
 		await fetch('?/deleteStory', { method: 'POST', body });
 	}, storyId);
@@ -275,7 +293,7 @@ test('a failed dialog submission keeps the dialog open and owns the error', asyn
 
 	// Still open, carrying the domain's own message.
 	await expect(editor).toBeVisible();
-	await expect(editor.locator('p.error')).toContainText(`Story not found: ${storyId}`);
+	await expect(editor.locator('p.error')).toContainText('changed this map while you were editing');
 
 	// And not echoed into the board's banner: suppressing applyAction is what
 	// keeps the message in one place, so a duplicate here means that broke.
@@ -326,6 +344,12 @@ test('a failure arriving after the dialog closed lands on the board', async ({ p
 	// page so the save is guaranteed to fail.
 	await page.evaluate(async (id) => {
 		const body = new FormData();
+		// Mutations carry the version the client holds (ADR 0015 §3); read it off
+		// the board the page has already rendered, as the real client does.
+		body.set(
+			'version',
+			document.querySelector('[data-testid="board"]')!.getAttribute('data-board-version')!
+		);
 		body.set('storyId', id);
 		await fetch('?/deleteStory', { method: 'POST', body });
 	}, storyId);
@@ -354,7 +378,7 @@ test('a failure arriving after the dialog closed lands on the board', async ({ p
 	// When the response finally lands, the message has to surface on the board
 	// rather than into the closed dialog, where nobody would read it.
 	await expect(page.locator('main > div > p.error[role="alert"]')).toContainText(
-		`Story not found: ${storyId}`
+		'changed this map while you were editing'
 	);
 
 	// The banner has had its moment by the time the user reaches for the next
@@ -578,4 +602,49 @@ test('deleting a slice keeps its stories, and deleting a story removes it', asyn
 		page.getByTestId(`cell-${stepId}-unsliced`).locator('[data-testid^="story-"]')
 	).toHaveCount(0);
 	expect(pageErrors.map((e) => e.message)).toEqual([]);
+});
+
+// The bug ADR 0015 §3 exists to close, driven end to end: two editors on one
+// board, one of them holding an editor open across the other's change.
+//
+// Before the version round-trip this test could not fail — the client held no
+// version, so every request loaded and saved within itself and the second save
+// simply won. The lost edit was invisible to both people.
+test("an editor open across someone else's change is refused instead of overwriting it", async ({
+	page
+}) => {
+	await createMap(page, `Concurrent ${Date.now()}`);
+	await addActivity(page, 'Browse');
+	await addStep(page, 'Search products');
+	const stepId = await firstStepId(page);
+	await addStory(page, stepId, 'unsliced', 'Keyword search');
+
+	// Alice opens the editor. Her dialog now holds the version as it is today.
+	const card = page.locator('[data-testid^="story-"]').first();
+	await card.getByRole('button', { name: /edit story/i }).click();
+	const editor = dialog(page);
+	await expect(editor).toBeVisible();
+
+	// Bob renames the same story from another connection, moving the board on.
+	const storyId = await editor.locator('input[name="storyId"]').first().inputValue();
+	await page.evaluate(async (id) => {
+		const body = new FormData();
+		body.set(
+			'version',
+			document.querySelector('[data-testid="board"]')!.getAttribute('data-board-version')!
+		);
+		body.set('storyId', id);
+		body.set('title', "Bob's title");
+		await fetch('?/editStory', { method: 'POST', body });
+	}, storyId);
+
+	// Alice saves. Her version is stale, so she is told rather than obeyed.
+	await editor.getByLabel('Story title').fill("Alice's title");
+	await editor.getByRole('button', { name: 'Save' }).click();
+	await expect(editor.locator('p.error')).toContainText('changed this map while you were editing');
+
+	// And Bob's edit is still the one on the board.
+	await page.reload();
+	await expect(page.getByText("Bob's title")).toBeVisible();
+	await expect(page.getByText("Alice's title")).toHaveCount(0);
 });
