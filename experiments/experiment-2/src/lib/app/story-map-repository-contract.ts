@@ -163,6 +163,21 @@ export function describeStoryMapRepositoryContract(
 			);
 		});
 
+		it('refuses a first save onto an id that is already taken', async () => {
+			// Unreachable through the app, since ids are minted server-side — but
+			// the two implementations answered it differently, which is the drift
+			// this file exists to catch: one threw a raw driver error from inside a
+			// transaction, the other silently replaced the map and made the caller
+			// its owner.
+			const harness = await createHarness();
+			const { map } = await ownedMap(harness);
+			const other = await harness.createUser();
+
+			await expect(
+				harness.repository.save(other, { ...createStoryMap('Impostor'), id: map.id })
+			).rejects.toThrow(ConflictError);
+		});
+
 		it('does not let a stale tab resurrect a map that has been deleted', async () => {
 			// Deleting a map takes its memberships with it, so the save is refused
 			// as a stranger's — which is the right answer, and is not what happens

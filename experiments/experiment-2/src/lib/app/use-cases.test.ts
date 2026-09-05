@@ -143,6 +143,9 @@ describe('mutating use cases', () => {
 		map = story.map;
 
 		const repository = new InMemoryStoryMapRepository([{ map: map, owner: caller.userId }]);
+		// Read back rather than taken from the map as built: a stored map has been
+		// saved, so its version is not the one `createStoryMap` started with.
+		const stored = (await repository.load(caller, map.id))!.map;
 		return {
 			repository,
 			mapId: map.id,
@@ -150,7 +153,7 @@ describe('mutating use cases', () => {
 			stepId: step.step.id as StepId,
 			sliceId: slice.slice.id as SliceId,
 			storyId: story.story.id as StoryId,
-			version: map.version
+			version: stored.version
 		};
 	}
 
@@ -355,7 +358,10 @@ describe('concurrent writers', () => {
 	async function seededMap() {
 		const map = createStoryMap('Retail');
 		const repository = new InMemoryStoryMapRepository([{ map: map, owner: caller.userId }]);
-		return { repository, mapId: map.id };
+		// Read back rather than assumed: a stored map has been saved, so it is not
+		// at the version `createStoryMap` produced.
+		const version = (await repository.load(caller, map.id))!.map.version;
+		return { repository, mapId: map.id, version };
 	}
 
 	it('rejects the second of two concurrent writers rather than letting either overwrite the other', async () => {
@@ -366,11 +372,11 @@ describe('concurrent writers', () => {
 		// different cards is the known cost of a single whole-map version
 		// (ADR 0014); ADR 0014 §5's notify-and-refetch is what keeps the loser's
 		// next attempt from being stale for long.
-		const { repository, mapId } = await seededMap();
+		const { repository, mapId, version } = await seededMap();
 		const gated = new GatedRepository(repository);
 
-		const first = useCases.addActivity(gated, caller, mapId, 0, 'Browse');
-		const second = useCases.addActivity(gated, caller, mapId, 0, 'Checkout');
+		const first = useCases.addActivity(gated, caller, mapId, version, 'Browse');
+		const second = useCases.addActivity(gated, caller, mapId, version, 'Checkout');
 
 		const outcomes = Promise.allSettled([first, second]);
 		let settled = false;
@@ -388,7 +394,7 @@ describe('concurrent writers', () => {
 		// Exactly one activity landed, and the map advanced exactly one version.
 		const saved = (await repository.load(caller, mapId))?.map;
 		expect(saved?.activities).toHaveLength(1);
-		expect(saved?.version).toBe(1);
+		expect(saved?.version).toBe(version + 1);
 	});
 
 	it('serialises writers, so no two ever compute a rank against the same state', async () => {
@@ -399,11 +405,11 @@ describe('concurrent writers', () => {
 		// duplicate into a 500 rather than a merge (ADR 0014, "Fractional ranks
 		// collide"). Sequencing them means the survivor always reads committed
 		// state, whichever one that is.
-		const { repository, mapId } = await seededMap();
+		const { repository, mapId, version } = await seededMap();
 		const gated = new GatedRepository(repository);
 
-		const first = useCases.addActivity(gated, caller, mapId, 0, 'Browse');
-		const second = useCases.addActivity(gated, caller, mapId, 0, 'Checkout');
+		const first = useCases.addActivity(gated, caller, mapId, version, 'Browse');
+		const second = useCases.addActivity(gated, caller, mapId, version, 'Checkout');
 		const outcomes = Promise.allSettled([first, second]);
 		let settled = false;
 		void outcomes.then(() => (settled = true));

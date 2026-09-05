@@ -25,9 +25,18 @@ export class InMemoryStoryMapRepository implements StoryMapRepository {
 	private readonly maps = new Map<MapId, StoryMap>();
 	private readonly members = new Map<MapId, Map<UserId, Role>>();
 
+	/**
+	 * Pre-loaded maps, for tests that want a board without scripting its creation.
+	 *
+	 * A seeded map is stored at version 1 at the lowest, because that is the only
+	 * kind of map a store can actually hold: `save` writes `version + 1`, so a
+	 * persisted map has been saved at least once and is never at version 0.
+	 * Seeding at 0 modelled a state neither implementation can reach, and made
+	 * "version 0 means new" ambiguous for the very next save.
+	 */
 	constructor(seed: { map: StoryMap; owner: UserId }[] = []) {
 		for (const { map, owner } of seed) {
-			this.maps.set(map.id, map);
+			this.maps.set(map.id, { ...map, version: Math.max(map.version, 1) });
 			this.members.set(map.id, new Map([[owner, 'owner']]));
 		}
 	}
@@ -74,6 +83,14 @@ export class InMemoryStoryMapRepository implements StoryMapRepository {
 				throw new ConflictError(`Story map ${map.id} changed since it was loaded`);
 			}
 		}
+		// A version of 0 against an id that is already taken is not a new map, and
+		// must not quietly replace the existing one and re-own it. Unreachable
+		// through the app — ids are minted by `createStoryMap` — but the real
+		// adapter refuses it, so the double has to as well.
+		if (map.version === 0 && this.maps.has(map.id)) {
+			throw new ConflictError(`Story map ${map.id} already exists`);
+		}
+
 		const saved: StoryMap = { ...structuredClone(map), version: map.version + 1 };
 		this.maps.set(map.id, saved);
 		// First save of a map makes its author the owner, in the same step, so
