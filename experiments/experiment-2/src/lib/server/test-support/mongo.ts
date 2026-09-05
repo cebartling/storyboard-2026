@@ -18,6 +18,10 @@ import { ensureIndexes } from '../db/indexes';
  * fresh database name per call instead, which costs nothing.
  */
 
+// `server` lives in the Vitest main process (only `globalSetup` touches it);
+// `client` lives in each worker. They are deliberately never both set in the
+// same process, which is why `stopMongo` does not try to close the client — it
+// runs where there has never been one.
 let server: MongoMemoryReplSet | null = null;
 let client: MongoClient | null = null;
 
@@ -30,8 +34,6 @@ export async function startMongo(): Promise<string> {
 }
 
 export async function stopMongo(): Promise<void> {
-	await client?.close();
-	client = null;
 	await server?.stop();
 	server = null;
 }

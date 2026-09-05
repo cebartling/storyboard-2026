@@ -6,7 +6,9 @@ import { describeStoryMapRepositoryContract } from './story-map-repository-contr
 // rule cannot quietly exist in one and not the other (ADR 0015).
 describeStoryMapRepositoryContract('InMemoryStoryMapRepository', async () => ({
 	repository: new InMemoryStoryMapRepository(),
-	// Nothing to register: the in-memory store has no users collection, so any id
-	// is a usable caller. The MongoDB harness really does insert a document.
+	// Nothing to register, and the same is true of the MongoDB harness: both
+	// authorise from membership rows rather than from a users collection, so a
+	// caller is just an id. (experiment-1's Drizzle harness did insert a row —
+	// there was a foreign key to satisfy.)
 	createUser: async () => ({ userId: newId<UserId>() })
 }));

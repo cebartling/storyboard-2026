@@ -170,7 +170,8 @@ would each hold their own lock and their own hubs. Both `KeyedLock` and `MapHub`
 `demo/collab.ts` is a headed walkthrough of all of this — two windows side by side, each
 captioning what it is doing — for showing someone the feature rather than testing it. Run it
 with `corepack pnpm demo`. It lives outside `src/` because it is neither shipped nor tested,
-it runs against its own `demo.db`, and it is deliberately outside both suites — vitest's
+it runs against its own `storyboard-demo` database, dropped before every run, and it is
+deliberately outside both suites — vitest's
 globs are `src/`-anchored and Playwright's `testMatch` is `**/*.e2e.{ts,js}`, so do not name
 anything in `demo/` with an `.e2e.ts` suffix.
 

@@ -65,16 +65,18 @@ experiments file by file across `src/lib/domain/`, `src/lib/app/`, `src/lib/boar
 **71 of 80 files are byte-identical.** The port itself did not change, and the 17-case
 contract test passed against the new adapter before a single case was added to it.
 
-The nine that changed, in full, because the ones that had to change are the finding:
+The nine that changed, in full, because the ones that had to change are the finding.
+`src/hooks.server.ts` is a tenth changed file, listed here for completeness but outside the
+eight directories the count covers:
 
-| File                                                                             | Change                                                                      |
-| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `src/hooks.server.ts`, `routes/logout`, `routes/register`, `routes/maps/[mapId]` | One `await` each. `Auth` was synchronous only because better-sqlite3 is.    |
-| `domain/story-map.ts`                                                            | `inRankOrder` added — the read-path guarantee `ORDER BY rank` used to make. |
-| `app/in-memory-story-map-repository.ts`                                          | Two behaviours corrected, both found by new contract cases.                 |
-| `app/story-map-repository-contract.ts` (+ its in-memory binding)                 | Four cases added, all pinning drift that already existed.                   |
-| `routes/run-action.test.ts`                                                      | A fixture error string, `SQLITE_IOERR` → a Mongo error.                     |
-| `canvas/camera-math.ts`                                                          | One word in a comment.                                                      |
+| File                                                                                                     | Change                                                                      |
+| -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `routes/logout`, `routes/register`, `routes/maps/[mapId]` (and `src/hooks.server.ts`, outside the count) | One `await` each. `Auth` was synchronous only because better-sqlite3 is.    |
+| `domain/story-map.ts`                                                                                    | `inRankOrder` added — the read-path guarantee `ORDER BY rank` used to make. |
+| `app/in-memory-story-map-repository.ts`                                                                  | Two behaviours corrected, both found by new contract cases.                 |
+| `app/story-map-repository-contract.ts` (+ its in-memory binding)                                         | Four cases added, all pinning drift that already existed.                   |
+| `routes/run-action.test.ts`                                                                              | A fixture error string, `SQLITE_IOERR` → a Mongo error.                     |
+| `canvas/camera-math.ts`                                                                                  | One word in a comment.                                                      |
 
 **The seam held.** The domain's rank math, the move and slice semantics, every use case,
 every component, the whole collaboration layer and every route body came across untouched.
