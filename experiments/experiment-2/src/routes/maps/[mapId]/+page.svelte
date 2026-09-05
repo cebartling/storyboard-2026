@@ -235,6 +235,24 @@
 		return `${stepNames.get(stepId) ?? 'step'} · ${rowNames.get(sliceId) ?? 'Unsliced'}`;
 	}
 
+	// Only the id travels. Unlike the editor, the detail view has nothing to
+	// prefill and nothing to lose, so it reads the story back off the live board
+	// below and follows a collaborator's edit instead of going stale (ADR 0018).
+	function handleViewStory(item: DndStoryItem) {
+		dialog = { kind: 'viewStory', storyId: item.id };
+	}
+
+	/** The story `viewStory` is showing, as the board currently has it. */
+	const viewedStory = $derived.by(() => {
+		// Bound to a local first: narrowing `dialog` does not survive into the
+		// `find` callback, where TypeScript has to assume it may have changed.
+		const open = dialog;
+		if (open?.kind !== 'viewStory') return null;
+		return (
+			data.board.cells.flatMap((cell) => cell.stories).find((s) => s.id === open.storyId) ?? null
+		);
+	});
+
 	function handleEditStory(item: DndStoryItem) {
 		dialog = {
 			kind: 'editStory',
@@ -477,6 +495,7 @@
 							sliceId={cell.sliceId}
 							onMove={handleMove}
 							onEditStory={handleEditStory}
+							onViewStory={handleViewStory}
 							onDragStateChange={(dragging) =>
 								setDragging(`${cell.stepId}:${cell.sliceId ?? 'unsliced'}`, dragging)}
 						/>
@@ -495,7 +514,9 @@
 	{subject}
 	boardVersion={data.board.version}
 	{clientId}
+	story={viewedStory}
 	onReplaceSubject={(replacement) => (dialog = replacement)}
+	onOpenDialog={(next) => (dialog = next)}
 	onClose={async (outcome) => {
 		dialog = null;
 		// A delete removes the trigger the dialog would have restored focus to,

@@ -33,6 +33,12 @@ export default defineConfig({
 	// ERR_UNKNOWN_FILE_EXTENSION. Keeping it noExternal leaves it in Vite's
 	// pipeline, where the Svelte plugin can compile it.
 	ssr: { noExternal: ['@lucide/svelte'] },
+	// Pre-bundled up front rather than on first import. Both are CommonJS and
+	// are reached only from the browser test project, so on a cold optimiser
+	// cache Vite discovers them mid-run, re-optimises, and reloads the test file
+	// it is already running — which it warns is a source of flakes. Naming them
+	// here means a fresh clone's first `test:unit` behaves like every later one.
+	optimizeDeps: { include: ['marked', 'dompurify'] },
 	test: {
 		expect: { requireAssertions: true },
 		projects: [

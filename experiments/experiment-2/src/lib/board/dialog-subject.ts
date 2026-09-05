@@ -70,6 +70,16 @@ export function subjectStatus(dialog: BoardDialog, board: BoardViewModel): Subje
 				: { status: 'changed', current: { ...dialog, name: slice.name } };
 		}
 
+		// A read-only view has no pending input to protect, so it never reports
+		// `changed`: the board is its source of truth and it simply re-renders
+		// when a collaborator edits. Only disappearance is worth saying out loud.
+		case 'viewStory': {
+			const story = board.cells
+				.flatMap((cell) => cell.stories)
+				.find((s) => s.id === dialog.storyId);
+			return story ? { status: 'current' } : { status: 'deleted' };
+		}
+
 		case 'editStory': {
 			const story = board.cells
 				.flatMap((cell) => cell.stories)
