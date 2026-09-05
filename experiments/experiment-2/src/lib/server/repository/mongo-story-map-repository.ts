@@ -1,9 +1,12 @@
-import type { Db, MongoClient } from 'mongodb';
+import { MongoServerError, type Db, type MongoClient } from 'mongodb';
 import { ConflictError, ForbiddenError } from '$lib/domain/errors';
 import type { MapId, UserId } from '$lib/domain/ids';
 import type { Caller, MapAccess, MapSummary, Role, StoryMapRepository } from '$lib/domain/ports';
 import { inRankOrder, type StoryMap } from '$lib/domain/story-map';
 import { collections, memberId, type Collections, type MapDoc } from '../db/collections';
+
+/** MongoDB's duplicate-key error, the one the unique indexes raise. */
+const DUPLICATE_KEY = 11000;
 
 /**
  * `StoryMapRepository` over MongoDB, storing each map as a single document
@@ -115,6 +118,15 @@ export class MongoStoryMapRepository implements StoryMapRepository {
 					{ session }
 				);
 			});
+		} catch (error) {
+			// A version of 0 means "never saved", so an id that is already taken is
+			// not a conflict the caller can resolve by refreshing — but it is still
+			// a conflict, and it must not reach the route as a raw driver error.
+			// Unreachable today: ids are minted by `createStoryMap`.
+			if (error instanceof MongoServerError && error.code === DUPLICATE_KEY) {
+				throw new ConflictError(`Story map ${doc._id} already exists`);
+			}
+			throw error;
 		} finally {
 			await session.endSession();
 		}
@@ -173,11 +185,20 @@ export class MongoStoryMapRepository implements StoryMapRepository {
 		}
 		// Idempotent — re-sharing with someone already on the map is a thing
 		// people do, and it is not an error.
-		await this.c.mapMembers.updateOne(
-			{ mapId: id, userId },
-			{ $setOnInsert: { _id: memberId(id, userId), mapId: id, userId, role } },
-			{ upsert: true }
-		);
+		try {
+			await this.c.mapMembers.updateOne(
+				{ mapId: id, userId },
+				{ $setOnInsert: { _id: memberId(id, userId), mapId: id, userId, role } },
+				{ upsert: true }
+			);
+		} catch (error) {
+			// An upsert is not atomic against a second upsert with the same filter:
+			// both can find nothing and one insert then loses to the (map, user)
+			// unique index. A double-submitted share form is enough. The index
+			// having stopped the duplicate *is* the outcome this method promises,
+			// so it is a success, not a 500.
+			if (!(error instanceof MongoServerError) || error.code !== DUPLICATE_KEY) throw error;
+		}
 	}
 }
 
