@@ -214,6 +214,7 @@ account that already exists.
 corepack pnpm db:up                       # MongoDB, healthy and PRIMARY
 corepack pnpm dev                         # register an account in the app
 corepack pnpm db:seed you@example.com     # the sample map, owned by that account
+corepack pnpm db:seed --with-accounts     # ...or demo owner + 3 editors (localhost only)
 ```
 
 `corepack pnpm db:reset` throws the volume away and starts again. The e2e and demo

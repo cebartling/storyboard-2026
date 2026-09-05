@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
 	buildRetailCommerceMap,
 	retailCommerceBlueprint,
-	retailCommerceSliceNames
+	retailCommerceSliceNames,
+	storyDescription
 } from './retail-commerce';
 import type { Story, StoryMap } from '$lib/domain/story-map';
 
@@ -100,7 +101,7 @@ describe('buildRetailCommerceMap', () => {
 				expect(actual.map((s) => s.title).sort()).toEqual(expected.map((s) => s.title).sort());
 				for (const story of actual) {
 					const blueprint = expected.find((s) => s.title === story.title)!;
-					expect(story.description).toBe(blueprint.description);
+					expect(story.description).toBe(storyDescription(blueprint));
 					expect(story.sliceId === null ? null : sliceNameById.get(story.sliceId)).toBe(
 						blueprint.slice
 					);
@@ -143,5 +144,65 @@ describe('buildRetailCommerceMap', () => {
 			...map.stories.map((s) => s.id as string)
 		];
 		expect(new Set(ids).size).toBe(ids.length);
+	});
+
+	// The seed is the only realistic corpus this app has for the description
+	// renderer (ADR 0018), so its shape is worth pinning: a description that
+	// quietly lost its criteria would still look fine on the board.
+	describe('composed descriptions', () => {
+		const stories = retailCommerceBlueprint.flatMap((a) => a.steps.flatMap((s) => s.stories));
+
+		it('gives every story a narrative and at least one criterion', () => {
+			for (const story of stories) {
+				expect(story.narrative.length, story.title).toBeGreaterThan(0);
+				expect(story.criteria.length, story.title).toBeGreaterThan(0);
+			}
+		});
+
+		it('renders criteria as a GFM task list under a heading', () => {
+			const description = storyDescription({
+				title: 'x',
+				slice: null,
+				narrative: 'As a shopper I **do a thing** so that it happens.',
+				criteria: [
+					['already true', true],
+					['not yet', false]
+				]
+			});
+
+			expect(description).toBe(
+				'As a shopper I **do a thing** so that it happens.\n\n' +
+					'## Acceptance criteria\n\n' +
+					'- [x] already true\n' +
+					'- [ ] not yet'
+			);
+		});
+
+		it('appends a note as a trailing block when there is one', () => {
+			const description = storyDescription({
+				title: 'x',
+				slice: null,
+				narrative: 'n',
+				criteria: [['c', false]],
+				note: '> a caveat'
+			});
+
+			expect(description.endsWith('\n\n> a caveat')).toBe(true);
+		});
+
+		// Every construct the renderer supports should appear somewhere in the
+		// corpus, or the seed stops being useful for exercising it.
+		it('exercises the renderer across the corpus', () => {
+			const all = stories.map(storyDescription).join('\n');
+
+			expect(all).toContain('**');
+			expect(all).toContain('## Acceptance criteria');
+			expect(all).toContain('- [x] ');
+			expect(all).toContain('- [ ] ');
+			expect(all).toContain('`');
+			expect(all).toContain('| --- |');
+			expect(all).toContain('> ');
+			expect(all).toContain('](https://');
+		});
 	});
 });

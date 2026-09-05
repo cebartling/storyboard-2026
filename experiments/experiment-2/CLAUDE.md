@@ -49,6 +49,7 @@ versions before 10 reject this directory's `pnpm-workspace.yaml` with
 | Start / stop MongoDB             | `corepack pnpm db:up` / `corepack pnpm db:down`                                            |
 | Wipe MongoDB                     | `corepack pnpm db:reset` (drops the volume, waits for PRIMARY)                             |
 | Seed sample data                 | `corepack pnpm db:seed <owner-email>` (account must exist)                                 |
+| Seed data **and** demo logins    | `corepack pnpm db:seed --with-accounts` (localhost only)                                   |
 
 **`corepack pnpm db:up` first.** The dev server, the e2e suite and the demo all need the
 Compose container. `test:unit` does not — it starts its own in-process replica set — and
@@ -156,6 +157,12 @@ auth identity.
 `corepack pnpm db:seed <owner-email>` needs an account that already exists — register one in
 the app first. Nothing invents an owner, because a fabricated membership row would point at
 a user id nobody can log in as.
+
+`corepack pnpm db:seed --with-accounts` is the exception, for a database with nothing in it
+yet: it creates `owner@storyboard.test` plus three editors, all with the password
+`storyboard-demo`, and shares the seeded map with them so the collaboration surface has more
+than one person on it. Because that password is committed to this repository, the flag
+refuses to run against anything but a database on localhost.
 
 ## Real-time collaboration (ADR 0014)
 
