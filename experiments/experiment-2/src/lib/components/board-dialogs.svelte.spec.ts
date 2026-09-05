@@ -16,13 +16,21 @@ import BoardDialogs, { type BoardDialog, actionError } from './board-dialogs.sve
 // user closed the dialog — is covered by "a failure arriving after the dialog
 // closed…", which holds the response open with `page.route` to keep the race
 // from depending on machine speed.
-async function open(dialog: BoardDialog, boardVersion = 3) {
+async function open(
+	dialog: BoardDialog,
+	boardVersion = 3,
+	extra: Partial<{
+		story: { title: string; description: string | null } | null;
+		onOpenDialog: (next: BoardDialog) => void;
+	}> = {}
+) {
 	const result = render(BoardDialogs, {
 		dialog,
 		boardVersion,
 		clientId: 'test-tab',
 		onClose: () => {},
-		onLateFailure: () => {}
+		onLateFailure: () => {},
+		...extra
 	});
 	await tick();
 	return Object.assign(page.getByTestId('board-dialog').element() as HTMLDialogElement, {
@@ -207,6 +215,92 @@ describe('actionError', () => {
 			await tick();
 
 			expect(hidden(form(dialogEl, '?/renameStep'), 'version')).toBe('3');
+		});
+	});
+
+	// `viewStory` is the read half of ADR 0018: the only place a description is
+	// legible. It posts nothing, so unlike every other kind these tests are
+	// about what it renders rather than which action it carries.
+	describe('viewStory', () => {
+		it('renders the description as markdown, not as source text', async () => {
+			const dialogEl = await open({ kind: 'viewStory', storyId: 's-1' }, 3, {
+				story: { title: 'Search by keyword', description: 'Needs **fuzzy** matching' }
+			});
+
+			const body = dialogEl.querySelector('.prose-note');
+
+			expect(body?.querySelector('strong')?.textContent).toBe('fuzzy');
+			expect(body?.textContent).not.toContain('**');
+		});
+
+		it('renders a list as list items', async () => {
+			const dialogEl = await open({ kind: 'viewStory', storyId: 's-2' }, 3, {
+				story: { title: 'Search', description: '- by name\n- by SKU' }
+			});
+
+			expect(dialogEl.querySelectorAll('.prose-note li')).toHaveLength(2);
+		});
+
+		it('shows the story title', async () => {
+			const dialogEl = await open({ kind: 'viewStory', storyId: 's-3' }, 3, {
+				story: { title: 'Search by keyword', description: 'x' }
+			});
+
+			expect(dialogEl.textContent).toContain('Search by keyword');
+		});
+
+		// A description is optional in the domain, so the empty case is normal
+		// rather than degenerate and gets a sentence instead of a blank panel.
+		it('says so when there is no description', async () => {
+			const dialogEl = await open({ kind: 'viewStory', storyId: 's-4' }, 3, {
+				story: { title: 'Search', description: null }
+			});
+
+			expect(dialogEl.querySelector('.prose-note')).toBeNull();
+			expect(dialogEl.textContent).toMatch(/no description/i);
+		});
+
+		// The load-bearing assertion. There is no CSP behind this `{@html}`, and
+		// the description was written by a different account (ADR 0015).
+		it('strips script and inline handlers out of a hostile description', async () => {
+			const dialogEl = await open({ kind: 'viewStory', storyId: 's-5' }, 3, {
+				story: {
+					title: 'Search',
+					description:
+						'<script>globalThis.pwned = true;</script><img src=x onerror="globalThis.pwned = true">'
+				}
+			});
+
+			expect(dialogEl.querySelector('script, iframe')).toBeNull();
+			expect(dialogEl.innerHTML).not.toMatch(/onerror/i);
+			expect((globalThis as Record<string, unknown>).pwned).toBeUndefined();
+		});
+
+		// Read and edit are one click apart, in both directions: the dialog is
+		// the only surface that knows which story is being looked at.
+		it('offers an edit trigger that swaps to the story editor', async () => {
+			let opened: BoardDialog | null = null;
+			await open({ kind: 'viewStory', storyId: 's-6' }, 3, {
+				story: { title: 'Search', description: 'x' },
+				onOpenDialog: (next) => (opened = next)
+			});
+
+			await page.getByRole('button', { name: 'Edit story' }).click();
+
+			expect(opened).toEqual({
+				kind: 'editStory',
+				storyId: 's-6',
+				title: 'Search',
+				description: 'x'
+			});
+		});
+
+		it('carries no form of its own', async () => {
+			const dialogEl = await open({ kind: 'viewStory', storyId: 's-7' }, 3, {
+				story: { title: 'Search', description: 'x' }
+			});
+
+			expect(dialogEl.querySelector('form')).toBeNull();
 		});
 	});
 });

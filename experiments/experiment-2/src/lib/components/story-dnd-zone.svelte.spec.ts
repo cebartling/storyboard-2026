@@ -15,7 +15,8 @@ describe('StoryDndZone', () => {
 			stepId: 'step-1',
 			sliceId: null,
 			onMove: () => {},
-			onEditStory: () => {}
+			onEditStory: () => {},
+			onViewStory: () => {}
 		});
 
 		const zone = page.getByTestId('cell-step-1-unsliced');
@@ -35,7 +36,8 @@ describe('StoryDndZone', () => {
 			stepId: 'step-7',
 			sliceId: 'slice-3',
 			onMove: () => {},
-			onEditStory: () => {}
+			onEditStory: () => {},
+			onViewStory: () => {}
 		});
 
 		await expect.element(page.getByTestId('cell-step-7-slice-3')).toBeInTheDocument();
@@ -48,7 +50,8 @@ describe('StoryDndZone', () => {
 			stepId: 'step-9',
 			sliceId: null,
 			onMove: () => {},
-			onEditStory: () => {}
+			onEditStory: () => {},
+			onViewStory: () => {}
 		});
 
 		const zone = page.getByTestId('cell-step-9-unsliced');
@@ -93,7 +96,8 @@ describe('StoryDndZone finalize handling', () => {
 			stepId: 'step-1',
 			sliceId: 'slice-1',
 			onMove,
-			onEditStory: () => {}
+			onEditStory: () => {},
+			onViewStory: () => {}
 		});
 		const zone = page.getByTestId('cell-step-1-slice-1');
 		await expect.element(zone).toBeInTheDocument();
@@ -163,7 +167,8 @@ describe('StoryDndZone finalize handling', () => {
 			stepId: 'step-2',
 			sliceId: null,
 			onMove,
-			onEditStory: () => {}
+			onEditStory: () => {},
+			onViewStory: () => {}
 		});
 		const zone = page.getByTestId('cell-step-2-unsliced');
 		await expect.element(zone).toBeInTheDocument();
@@ -199,7 +204,8 @@ describe('StoryDndZone finalize handling', () => {
 			sliceId: null,
 			zoneLabel: 'Search products, unsliced',
 			onMove: () => {},
-			onEditStory: () => {}
+			onEditStory: () => {},
+			onViewStory: () => {}
 		});
 
 		const zone = page.getByTestId('cell-step-1-unsliced').element();
@@ -222,7 +228,8 @@ describe('StoryDndZone finalize handling', () => {
 			stepId: 'step-1',
 			sliceId: 'slice-1',
 			onMove: () => {},
-			onEditStory: () => {}
+			onEditStory: () => {},
+			onViewStory: () => {}
 		});
 		const zone = page.getByTestId('cell-step-1-slice-1').element();
 
@@ -257,6 +264,7 @@ describe('StoryDndZone finalize handling', () => {
 				zoneLabel: 'cell',
 				onMove: () => {},
 				onEditStory: () => {},
+				onViewStory: () => {},
 				onDragStateChange: (dragging: boolean) => states.push(dragging)
 			});
 			const zone = page.getByTestId('cell-step-1-unsliced').element();
@@ -303,6 +311,7 @@ describe('StoryDndZone finalize handling', () => {
 				zoneLabel: 'cell',
 				onMove: () => {},
 				onEditStory: () => {},
+				onViewStory: () => {},
 				onDragStateChange: (dragging: boolean) => states.push(dragging)
 			});
 			const zone = page.getByTestId('cell-step-9-unsliced').element();

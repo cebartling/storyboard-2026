@@ -34,6 +34,7 @@
 		flipDurationMs = 150,
 		onMove,
 		onEditStory,
+		onViewStory,
 		onDragStateChange
 	}: {
 		items: DndStoryItem[];
@@ -46,6 +47,8 @@
 		onMove: (detail: MoveDetail) => void;
 		/** Passes the whole item up, so the page need not look it back up. */
 		onEditStory: (item: DndStoryItem) => void;
+		/** Opens the read-only detail view for the card (ADR 0018). */
+		onViewStory: (item: DndStoryItem) => void;
 		/**
 		 * Called with `true` when a drag begins over this zone and `false` when it
 		 * ends. The page uses it to suspend live refetching: a refetch mid-drag
@@ -117,6 +120,11 @@
 	onfinalize={handleFinalize}
 >
 	{#each localItems as item (item.id)}
-		<StoryCard id={item.id} title={item.title} onEdit={() => onEditStory(item)} />
+		<StoryCard
+			id={item.id}
+			title={item.title}
+			onEdit={() => onEditStory(item)}
+			onView={() => onViewStory(item)}
+		/>
 	{/each}
 </div>

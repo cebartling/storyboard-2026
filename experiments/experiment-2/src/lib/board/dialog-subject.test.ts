@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { addActivity, addSlice, addStep, addStory, createStoryMap } from '$lib/domain/story-map';
+import {
+	addActivity,
+	addSlice,
+	addStep,
+	addStory,
+	createStoryMap,
+	deleteStory,
+	editStory
+} from '$lib/domain/story-map';
 import type { ActivityId, SliceId, StepId, StoryId } from '$lib/domain/ids';
 import type { BoardDialog } from '$lib/components/board-dialogs.svelte';
 import { buildBoardViewModel } from './board-view-model';
@@ -43,7 +51,8 @@ describe('subjectStatus', () => {
 					title: 'Keyword search',
 					description: 'By name'
 				})
-			]
+			],
+			['viewStory', (c) => ({ kind: 'viewStory', storyId: c.storyId })]
 		])('%s is current', (_kind, build) => {
 			const c = board();
 			expect(subjectStatus(build(c), c.view).status).toBe('current');
@@ -164,6 +173,32 @@ describe('subjectStatus', () => {
 			const withoutSlice = buildBoardViewModel({ ...c.map, slices: [] });
 
 			expect(subjectStatus(dialog, withoutSlice).status).toBe('deleted');
+		});
+	});
+
+	// The read-only detail view (ADR 0018) is the one kind that can never be
+	// `changed`. It holds no pending input, so there is nothing for a
+	// collaborator's edit to overwrite — the board is its source of truth and it
+	// simply re-renders. Only the story disappearing is worth reporting.
+	describe('viewStory', () => {
+		it('stays current when someone else edits the story it is showing', () => {
+			const c = board();
+			const edited = buildBoardViewModel(
+				editStory(c.map, c.storyId, { title: 'Search by SKU', description: 'By name or SKU' })
+			);
+
+			expect(subjectStatus({ kind: 'viewStory', storyId: c.storyId }, edited).status).toBe(
+				'current'
+			);
+		});
+
+		it('is deleted once the story is gone', () => {
+			const c = board();
+			const without = buildBoardViewModel(deleteStory(c.map, c.storyId));
+
+			expect(subjectStatus({ kind: 'viewStory', storyId: c.storyId }, without).status).toBe(
+				'deleted'
+			);
 		});
 	});
 });

@@ -14,6 +14,14 @@
 		| { kind: 'editSlice'; sliceId: string; name: string }
 		| { kind: 'addStory'; stepId: string; sliceId: string | null; scopeLabel: string }
 		| { kind: 'editStory'; storyId: string; title: string; description: string | null }
+		/**
+		 * The read-only story detail view (ADR 0018). Carries only the id, unlike
+		 * every `edit*` kind: an editor snapshots its subject so it can tell that
+		 * the ground moved underneath it (ADR 0014), but a read-only view has no
+		 * pending input to lose. It reads the story live off the board through the
+		 * `story` prop instead, so a collaborator's edit simply re-renders.
+		 */
+		| { kind: 'viewStory'; storyId: string }
 		| { kind: 'shareMap'; mapName: string };
 
 	/** Reads the `{ error }` payload `run-action.ts` puts in every `fail()`. */
@@ -31,6 +39,7 @@
 		editSlice: 'Edit slice',
 		addStory: 'Add story',
 		editStory: 'Edit story',
+		viewStory: 'Story',
 		shareMap: 'Share map'
 	};
 </script>
@@ -46,6 +55,7 @@
 	// dialog the user is standing in.
 	import { tick, untrack } from 'svelte';
 	import type { SubjectStatus } from '$lib/board/dialog-subject';
+	import { renderMarkdown } from '$lib/markdown/render-markdown';
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import type { SubmitFunction } from '@sveltejs/kit';
@@ -56,9 +66,11 @@
 		boardVersion,
 		clientId,
 		subject,
+		story = null,
 		onClose,
 		onLateFailure,
-		onReplaceSubject
+		onReplaceSubject,
+		onOpenDialog
 	}: {
 		dialog: BoardDialog | null;
 		/** The board's current aggregate version, as `load()` last returned it. */
@@ -74,6 +86,13 @@
 		 * refetching means the ground can move under an open editor (ADR 0014).
 		 */
 		subject?: SubjectStatus | null;
+		/**
+		 * The story `viewStory` is showing, as the board currently has it. Passed
+		 * in rather than snapshotted into the dialog so the rendered description
+		 * follows a collaborator's edit instead of going stale; `null` once the
+		 * story is gone.
+		 */
+		story?: { title: string; description: string | null } | null;
 		/** `deleted` when the submission removed the thing the dialog was
 		 *  editing, so the caller can put focus somewhere that still exists —
 		 *  the trigger that opened the dialog is gone by then. */
@@ -85,7 +104,12 @@
 		onLateFailure: (message: string) => void;
 		/** Adopt the other editor's version, discarding what is in the form. */
 		onReplaceSubject?: (dialog: BoardDialog) => void;
+		/** Swap to another dialog in place — the detail view's route to the
+		 *  editor for the story it is already showing. */
+		onOpenDialog?: (dialog: BoardDialog) => void;
 	} = $props();
+
+	const storyMarkdown = $derived(renderMarkdown(story?.description ?? null));
 
 	const subjectDeleted = $derived(subject?.status === 'deleted');
 	const subjectChanged = $derived(subject?.status === 'changed');
@@ -502,6 +526,45 @@
 				>Delete story</button
 			>
 		</form>
+	{:else if dialog?.kind === 'viewStory'}
+		<!-- The read half of ADR 0018, and the only place a description is
+		     legible. No form and no version input: this changes nothing, so it
+		     has no claim on the aggregate.
+
+		     `{@html}` is used here and nowhere else in this app. Everything it
+		     renders has been through `renderMarkdown`, which parses with `marked`
+		     and then sanitises with DOMPurify against an explicit allowlist. That
+		     is the whole of the defence — there is no CSP behind it — and the
+		     description was written by whichever editor last touched the story,
+		     not by the person reading it (ADR 0015). -->
+		{#if story === null}
+			<p class="text-ink-muted text-sm">This story no longer exists.</p>
+		{:else}
+			<p class="text-ink text-base font-medium">{story.title}</p>
+			{#if storyMarkdown === ''}
+				<p class="text-ink-muted mt-3 text-sm italic">
+					No description yet. Use Edit to add one — Markdown is rendered here.
+				</p>
+			{:else}
+				<div class="prose-note mt-3" data-testid="story-description">
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+					{@html storyMarkdown}
+				</div>
+			{/if}
+			<div class="border-line mt-5 border-t pt-4">
+				<button
+					type="button"
+					class="btn btn-quiet"
+					onclick={() =>
+						onOpenDialog?.({
+							kind: 'editStory',
+							storyId: dialog.storyId,
+							title: story.title,
+							description: story.description
+						})}>Edit story</button
+				>
+			</div>
+		{/if}
 	{:else if dialog?.kind === 'shareMap'}
 		<!-- No version input: sharing changes who may reach the map, not the
 		     board, so it neither reads nor advances the aggregate (ADR 0015). -->
