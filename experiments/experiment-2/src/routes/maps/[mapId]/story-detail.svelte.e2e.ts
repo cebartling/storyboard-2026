@@ -83,6 +83,10 @@ test('offers an edit trigger that swaps to the story editor', async ({ page }) =
 	// The same dialog element, now showing the editor for the story it was
 	// displaying — so the title is prefilled without being looked up again.
 	await expect(dialog(page).getByLabel('Story title')).toHaveValue('Search by keyword');
+	// And focus followed. The dialog never closed, so the trigger that was just
+	// clicked has been removed from under the caret; without a deliberate move
+	// focus lands on <body> inside an inerted page.
+	await expect(dialog(page).getByLabel('Story title')).toBeFocused();
 });
 
 /**

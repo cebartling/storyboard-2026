@@ -35,29 +35,44 @@
 	let dialogEl: HTMLDialogElement | undefined = $state();
 	const titleId = $props.id();
 
+	// `showModal()` would otherwise focus the close button, which is first in the
+	// markup so that a keyboard user reaches it before a dialog's Delete rather
+	// than after. Focusing the first field explicitly buys the natural tab order
+	// without giving up the sensible starting point.
+	//
+	// Hidden and disabled controls have to be excluded, not skipped as a nicety:
+	// six of the dialogs open with the hidden id input their action needs,
+	// `focus()` on one is a no-op, and this would silently leave focus on Close —
+	// the exact outcome it exists to prevent.
+	function focusFirstField() {
+		dialogEl
+			?.querySelector<HTMLElement>(
+				'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled])'
+			)
+			?.focus();
+	}
+
 	$effect(() => {
 		if (!dialogEl) return;
 		// The `.open` guards are not defensive padding: `showModal()` on an
 		// already-open dialog throws InvalidStateError.
 		if (open && !dialogEl.open) {
 			dialogEl.showModal();
-			// `showModal()` would otherwise focus the close button, which is
-			// first in the markup so that a keyboard user reaches it before a
-			// dialog's Delete rather than after. Focusing the first field
-			// explicitly buys the natural tab order without giving up the
-			// sensible starting point.
-			//
-			// Hidden and disabled controls have to be excluded, not skipped as
-			// a nicety: six of the eight dialogs open with the hidden id input
-			// their action needs, `focus()` on one is a no-op, and the effect
-			// would silently leave focus on Close — the exact outcome this
-			// line exists to prevent.
-			dialogEl
-				.querySelector<HTMLElement>(
-					'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled])'
-				)
-				?.focus();
+			focusFirstField();
 		} else if (!open && dialogEl.open) dialogEl.close();
+	});
+
+	// A dialog can also change what it is showing *without* closing — the story
+	// detail view swaps itself for the story editor in place. The effect above
+	// never re-runs for that, because the element stays open, and the control
+	// that was clicked has just been removed from the DOM, so focus would fall
+	// to <body> inside an inerted page. Keyed on `title`, which is the one prop
+	// that changes when the dialog becomes a different editor.
+	$effect(() => {
+		// Reading `title` into a local is what subscribes this effect to it; a
+		// bare expression statement would do the same but reads as a mistake.
+		const showing = title;
+		if (showing && dialogEl?.open) focusFirstField();
 	});
 
 	// Backdrop click. The backdrop's hit area belongs to the <dialog> box
