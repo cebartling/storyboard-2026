@@ -119,6 +119,28 @@ describe('renderMarkdown', () => {
 			expect(anchor?.getAttribute('href')).toBe('https://example.com/x');
 		});
 
+		// `target` and `rel` are ours to set, never the author's to supply: the
+		// hook overwrites whatever was written, so they are not in ALLOWED_ATTR.
+		it('overrides an author-supplied target and rel', () => {
+			const anchor = parse(
+				renderMarkdown('<a href="https://example.com" target="_top" rel="opener">x</a>')
+			).querySelector('a');
+
+			expect(anchor?.getAttribute('target')).toBe('_blank');
+			expect(anchor?.getAttribute('rel')).toBe('noopener noreferrer');
+		});
+
+		// No href means the hook does not fire, so nothing puts these back —
+		// which is the case that made them worth removing from the allowlist.
+		it('drops target and rel from an anchor with no href', () => {
+			const anchor = parse(renderMarkdown('<a target="_top" rel="opener">x</a>')).querySelector(
+				'a'
+			);
+
+			expect(anchor?.hasAttribute('target')).toBe(false);
+			expect(anchor?.hasAttribute('rel')).toBe(false);
+		});
+
 		// A description is authored by one account and read by another (ADR 0015),
 		// so an outbound link must not hand the opener a window reference.
 		it('opens links in a new tab without leaking the opener', () => {

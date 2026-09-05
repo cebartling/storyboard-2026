@@ -42,10 +42,13 @@ the rendering path sanitises.**
 - `src/lib/markdown/render-markdown.ts` is a pure module exposing
   `renderMarkdown(source: string | null): string`. It parses with `marked` and sanitises the
   result with `dompurify` against an explicit allowlist — the tags Markdown can emit that a
-  description has a use for, and four attributes (`href`, `title`, `target`, `rel`). No
-  `style`, no `id`, no `on*`. An `afterSanitizeAttributes` hook puts `target="_blank"` and
+  description has a use for, and two attributes (`href` and `title`). No `style`, no `id`, no
+  `on*`. An `afterSanitizeAttributes` hook puts `target="_blank"` and
   `rel="noopener noreferrer"` on surviving anchors, so an outbound link cannot hand the
-  opener a reference back to the board.
+  opener a reference back to the board. Those two are set by us and are deliberately not in
+  the allowlist: DOMPurify keeps attributes written from a hook regardless, so allowing them
+  as input would only have let an anchor whose `href` was stripped keep whatever `target`
+  the description asked for.
 - **Both the parser and the sanitiser are private instances**, not the `marked` and
   `DOMPurify` singletons. `marked.use()` and `DOMPurify.addHook()` mutate one shared object,
   so configuring the shared one would silently change how every future caller in the app

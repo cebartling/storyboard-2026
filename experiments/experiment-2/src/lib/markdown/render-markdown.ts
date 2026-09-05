@@ -60,8 +60,17 @@ const ALLOWED_TAGS = [
 	'td'
 ];
 
-/** No `style`, no `on*`, no `id`: a description cannot reach outside its own box. */
-const ALLOWED_ATTR = ['href', 'title', 'target', 'rel'];
+/**
+ * No `style`, no `on*`, no `id`: a description cannot reach outside its own box.
+ *
+ * `target` and `rel` are deliberately absent even though every rendered anchor
+ * ends up with both. They are ours to set, not the author's to supply — the
+ * hook below writes them on any anchor that kept its `href`, and DOMPurify
+ * preserves attributes set from a hook regardless of this list. Leaving them in
+ * only meant an anchor whose `href` was stripped could keep whatever `target`
+ * the description asked for.
+ */
+const ALLOWED_ATTR = ['href', 'title'];
 
 /**
  * Task-list boxes as text, so no `<input>` is ever emitted for the sanitiser to
