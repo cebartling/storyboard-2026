@@ -3,6 +3,7 @@ import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
 import { tick } from 'svelte';
 import BoardDialogs, { type BoardDialog, actionError } from './board-dialogs.svelte';
+import type { SubjectStatus } from '$lib/board/dialog-subject';
 
 // These tests assert what each `kind` renders — the action it posts, the
 // hidden ids it carries, and that fields prefill. They deliberately never
@@ -21,6 +22,7 @@ async function open(
 	boardVersion = 3,
 	extra: Partial<{
 		story: { title: string; description: string | null } | null;
+		subject: SubjectStatus | null;
 		onOpenDialog: (next: BoardDialog) => void;
 	}> = {}
 ) {
@@ -301,6 +303,31 @@ describe('actionError', () => {
 			});
 
 			expect(dialogEl.querySelector('form')).toBeNull();
+		});
+
+		// The ADR 0014 banner says "there is nothing left to save", which is an
+		// answer to a question a read-only view never asks. It gets one message
+		// about the disappearance, in its own words, not two.
+		it('reports a deleted story once, without the editing banner', async () => {
+			const dialogEl = await open({ kind: 'viewStory', storyId: 's-8' }, 3, {
+				story: null,
+				subject: { status: 'deleted' }
+			});
+
+			expect(dialogEl.querySelector('[data-testid="subject-deleted"]')).toBeNull();
+			expect(dialogEl.textContent).toContain('This story no longer exists.');
+		});
+
+		// The same status on an editor still gets the banner: this narrowed the
+		// notice for one kind, it did not remove it.
+		it('still shows the editing banner when an editor is open', async () => {
+			const dialogEl = await open(
+				{ kind: 'editStory', storyId: 's-9', title: 'Search', description: null },
+				3,
+				{ subject: { status: 'deleted' } }
+			);
+
+			expect(dialogEl.querySelector('[data-testid="subject-deleted"]')).not.toBeNull();
 		});
 	});
 });

@@ -257,8 +257,12 @@
 	{/if}
 
 	<!-- The ground moved under this editor while it was open (ADR 0014 Stage 1).
-	     A notice rather than an error: nothing the user did failed. -->
-	{#if subjectDeleted}
+	     A notice rather than an error: nothing the user did failed.
+
+	     Skipped for `viewStory`, which is read-only: it has nothing open to save,
+	     so "there is nothing left to save" would be answering a question the
+	     reader never asked. That branch says the story is gone in its own words. -->
+	{#if subjectDeleted && dialog?.kind !== 'viewStory'}
 		<p class="notice mb-3" role="status" data-testid="subject-deleted">
 			Someone else deleted this while you were editing. Close this dialog — there is nothing left to
 			save.
