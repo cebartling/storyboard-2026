@@ -6,10 +6,17 @@
 // stays raw text everywhere else — in the aggregate, in Mongo, and in the
 // textarea that edits it. Markdown exists only at the moment it is read.
 //
-// **This runs in the browser only.** `+page.svelte` starts with `dialog = null`,
-// so no dialog branch renders during SSR and DOMPurify is never asked for a
-// `window` it does not have. Rendering a description anywhere server-side would
-// break that assumption and need a DOM shim.
+// **This renders in the browser only**, and — the part that is easy to get
+// wrong — it must also do *nothing* at import time. SvelteKit imports the whole
+// module graph to server-render a route, so this file is loaded on the server
+// even though `+page.svelte` starts with `dialog = null` and no dialog branch
+// ever renders there. In Node, `dompurify`'s default export is the factory
+// rather than a bound instance: `isSupported` is false and `addHook` is
+// `undefined`. Registering the hook at module scope therefore threw a
+// `TypeError` during SSR and turned the whole board route into a 500.
+//
+// So setup is deferred to the first actual render, and a call without a DOM
+// fails loudly rather than falling back to unsanitised HTML.
 // ---------------------------------------------------------------------------
 
 import DOMPurify from 'dompurify';
@@ -47,16 +54,39 @@ const ALLOWED_TAGS = [
 /** No `style`, no `on*`, no `id`: a description cannot reach outside its own box. */
 const ALLOWED_ATTR = ['href', 'title', 'target', 'rel'];
 
-// A description is written by one account and read by another (ADR 0015), so
-// an outbound link must not hand the opener a `window` reference back to the
-// board. Applied after sanitisation, so it only ever lands on an anchor whose
-// href already survived the URI policy.
-DOMPurify.addHook('afterSanitizeAttributes', (node) => {
-	if (node.tagName === 'A' && node.hasAttribute('href')) {
-		node.setAttribute('target', '_blank');
-		node.setAttribute('rel', 'noopener noreferrer');
+let hookRegistered = false;
+
+/**
+ * The DOMPurify instance, with our hook registered exactly once.
+ *
+ * Lazy rather than module-scope: see the note at the top of this file — doing
+ * this at import time breaks SSR for the whole board route.
+ */
+function purifier(): typeof DOMPurify {
+	if (!DOMPurify.isSupported) {
+		throw new Error(
+			'renderMarkdown needs a DOM, and DOMPurify reports none. Story descriptions render ' +
+				'client-side only (ADR 0018); rendering one on the server needs a DOM shim. ' +
+				'Failing here on purpose — the alternative is emitting unsanitised HTML.'
+		);
 	}
-});
+
+	if (!hookRegistered) {
+		// A description is written by one account and read by another (ADR 0015),
+		// so an outbound link must not hand the opener a `window` reference back
+		// to the board. Applied after sanitisation, so it only ever lands on an
+		// anchor whose href already survived the URI policy.
+		DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+			if (node.tagName === 'A' && node.hasAttribute('href')) {
+				node.setAttribute('target', '_blank');
+				node.setAttribute('rel', 'noopener noreferrer');
+			}
+		});
+		hookRegistered = true;
+	}
+
+	return DOMPurify;
+}
 
 /**
  * Render a story description as sanitised HTML, ready for `{@html}`.
@@ -74,5 +104,5 @@ export function renderMarkdown(source: string | null): string {
 	// meant as a line break rather than as paragraph continuation.
 	const html = marked.parse(source, { async: false, gfm: true, breaks: true });
 
-	return DOMPurify.sanitize(html, { ALLOWED_TAGS, ALLOWED_ATTR });
+	return purifier().sanitize(html, { ALLOWED_TAGS, ALLOWED_ATTR });
 }

@@ -102,12 +102,24 @@ on the client. Both are named in `optimizeDeps.include`: they are CommonJS and r
 from the browser test project, so on a cold optimiser cache Vite would otherwise discover
 them mid-run and reload the test file it was running.
 
-**`renderMarkdown` is browser-only.** `+page.svelte` opens with `dialog = null`, so no dialog
-branch renders during SSR and DOMPurify is never asked for a `window` it does not have.
-Rendering a description anywhere server-side would break that and need a DOM shim. Its test
-lives in the browser Vitest project as `render-markdown.svelte.test.ts` for the same reason —
-the `.svelte.` infix is what routes a file to the browser project, and the node project has
-no jsdom.
+**`renderMarkdown` is browser-only, and must also stay inert at import time.** The second
+half is the part that bites. SvelteKit imports the whole module graph to server-render a
+route, so this module is loaded on the server even though `+page.svelte` opens with
+`dialog = null` and the `viewStory` branch never renders there. In Node, `dompurify`'s
+default export is the factory rather than a bound instance — `isSupported` is `false` and
+`addHook` is `undefined` — so registering the anchor hook at module scope threw a
+`TypeError` during SSR and turned the entire board route into a 500. It was caught by the
+pre-existing canvas e2e, not by any new test, which is the argument for having run the whole
+suite rather than only the new one.
+
+Setup is therefore deferred to the first render, and a call without a DOM throws with a
+message saying so. Failing loudly is deliberate: the alternative to sanitising is emitting
+unsanitised HTML, which is not a fallback worth having. Rendering a description server-side
+would need a real DOM shim, and would be a decision, not a fix.
+
+The module's test lives in the browser Vitest project as `render-markdown.svelte.test.ts`
+for the same underlying reason — the `.svelte.` infix is what routes a file to the browser
+project, and the node project has no jsdom.
 
 **Descriptions written before this ADR still render.** Plain prose is valid Markdown, so
 existing text becomes a paragraph. The one visible change is that Markdown punctuation
