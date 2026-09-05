@@ -107,11 +107,12 @@ activities, 43 steps, 3 slices, 157 stories — measures **51 KiB**, so the limi
 that outgrew it would need the aggregate split, which is the same reshaping
 [ADR 0004](./0004-single-aggregate.md) already flags as the cost of its boundary.
 
-**Constraints that were free are now explicit, and three had to be rebuilt.** SQLite was
-enforcing six unique indexes, seven foreign keys and five cascades. Most of that loss is
-genuinely fine: rank uniqueness within a scope became an invariant _inside_ one document,
-which the domain already enforces, and cascades became "the sub-array is gone with the
-document". Three had no such replacement:
+**Constraints that were free are now explicit, and some had to be rebuilt.** SQLite was
+enforcing seven unique indexes plus a composite primary key, eight foreign keys and seven
+cascades — counted from experiment-1's `drizzle/meta/0004_snapshot.json`, not estimated.
+Most of that loss is genuinely fine: rank uniqueness within a scope became an invariant
+_inside_ one document, which the domain already enforces, and five of the seven cascades
+became "the sub-array is gone with the document". The rest had no such replacement:
 
 1. **One owner per map** — a partial unique index on `{ mapId: 1 }` filtered to
    `role: 'owner'`. Nothing in `src/lib/domain/` knows `mapMembers` exists, so without this,
@@ -120,9 +121,17 @@ document". Three had no such replacement:
    pass a one-owner test while making sharing impossible.
 2. **One account per email** — a unique index, the only thing closing the check-then-insert
    race in `Auth.register`.
-3. **The session cascade** — now `Auth.deleteUser`, in application code. There is no foreign
-   key to do it, and "nothing" would mean a deleted account keeps working until its cookie
-   expires.
+3. **The two cascades on `users.id`** — `sessions.user_id` and `map_members.user_id`, both
+   now `Auth.deleteUser`, in application code and in a transaction. There is no foreign key
+   to do it. Losing the first would mean a deleted account keeps working until its cookie
+   expires; losing the second is worse and less obvious, because a leftover **owner** row
+   plus the partial one-owner index above blocks any future owner of that map forever, with
+   no screen that can clear it.
+
+   What `deleteUser` deliberately does not decide is what becomes of maps the account owned
+   — deleting them destroys other members' work, and handing them on picks a new owner
+   arbitrarily. Nothing in the app deletes an account yet, so that is left unanswered rather
+   than answered badly, and must be answered before one does.
 
 These live in `src/lib/server/db/indexes.ts`, created at startup, and replace experiment-1's
 five committed migration files. Documents need no migration to add a field, so what is left

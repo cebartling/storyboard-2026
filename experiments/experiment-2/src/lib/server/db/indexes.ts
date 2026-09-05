@@ -9,11 +9,13 @@ import { collections } from './collections';
  * constraints the database is being asked to enforce — which is a shorter and
  * more honest list than a schema.
  *
- * **Three of these are not performance.** Moving from SQLite gave up six unique
- * indexes, seven foreign keys and five cascades. Most of that loss is fine:
- * rank uniqueness within a scope became an invariant *inside* one document,
- * which the domain already enforces, and cascades became "the sub-array is
- * gone". These three had no such replacement and are rebuilt deliberately:
+ * **Three of these are not performance.** Moving from SQLite gave up seven unique
+ * indexes plus a composite primary key, eight foreign keys and seven cascades
+ * (counted from experiment-1's `drizzle/meta/0004_snapshot.json`). Most of that
+ * loss is fine: rank uniqueness within a scope became an invariant *inside* one
+ * document, which the domain already enforces, and five of the seven cascades
+ * became "the sub-array is gone with the document". These three had no such
+ * replacement and are rebuilt deliberately:
  *
  * - `users.email` unique — the only thing closing the check-then-insert race in
  *   `Auth.register`.
@@ -21,6 +23,9 @@ import { collections } from './collections';
  *   without this "only the owner may delete or share" is a convention rather
  *   than a guarantee, and `roleOf` would pick an arbitrary owner row.
  * - `mapMembers` uniqueness per (map, user) — what makes sharing idempotent.
+ *
+ * The two cascades that did *not* survive as document structure are both on
+ * `users.id`, and both are rebuilt in `Auth.deleteUser` rather than here.
  *
  * Called at startup and by the test harness, and safe to run repeatedly.
  */
