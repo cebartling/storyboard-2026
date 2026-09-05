@@ -19,14 +19,18 @@ import { collections, memberId, type Collections, type MapDoc } from '../db/coll
  * the same `null` as someone asking for a map that was never there.
  */
 export class MongoStoryMapRepository implements StoryMapRepository {
-	private readonly c: Collections;
-
 	constructor(
 		private readonly db: Db,
 		/** Needed only for the one multi-document transaction — see `save`. */
 		private readonly client: MongoClient
-	) {
-		this.c = collections(db);
+	) {}
+
+	// Resolved per call rather than in the constructor, so constructing this
+	// touches nothing. `vite build` imports the server graph to analyse it, and
+	// `deps.ts` builds this at module scope — see `db/index.ts` for why that
+	// import must not need a running database.
+	private get c(): Collections {
+		return collections(this.db);
 	}
 
 	private async roleFor(mapId: MapId, userId: UserId): Promise<Role | null> {

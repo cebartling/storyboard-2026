@@ -66,10 +66,12 @@ function decoyHash(): Promise<string> {
 }
 
 export class Auth {
-	private readonly c: Collections;
+	constructor(private readonly db: Db) {}
 
-	constructor(db: Db) {
-		this.c = collections(db);
+	// Per call, not in the constructor — see the note on
+	// `MongoStoryMapRepository`'s equivalent, and `db/index.ts`.
+	private get c(): Collections {
+		return collections(this.db);
 	}
 
 	async register(email: string, displayName: string, password: string): Promise<AuthenticatedUser> {

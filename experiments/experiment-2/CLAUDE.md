@@ -49,8 +49,10 @@ versions before 10 reject this directory's `pnpm-workspace.yaml` with
 | Seed sample data                 | `corepack pnpm db:seed <owner-email>` (account must exist)                                 |
 
 **`corepack pnpm db:up` first.** The dev server, the e2e suite and the demo all need the
-Compose container; only `test:unit` does not, because it starts its own in-process replica
-set. If a command dies with "Could not reach MongoDB", that is what it is telling you.
+Compose container. `test:unit` does not — it starts its own in-process replica set — and
+neither does `build`, which is deliberate: `src/lib/server/db/index.ts` guards its
+connection on `building`, because SvelteKit imports the whole server graph to analyse it and
+an unguarded build both required a database and silently created one. If a command dies with "Could not reach MongoDB", that is what it is telling you.
 
 There are no migrations. `src/lib/server/db/indexes.ts` runs at db-module load and
 `createIndex` is idempotent, so `dev`, the e2e server and the demo all self-configure. Each
