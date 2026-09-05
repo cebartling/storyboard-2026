@@ -116,4 +116,79 @@
 	.notice {
 		@apply rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900;
 	}
+
+	/* A rendered story description (ADR 0018). Unlike every other class here,
+	   this one is not pulled out because it repeats — it is the only mechanism
+	   available. The markup comes from `renderMarkdown`, so there is nowhere to
+	   put a utility class: the elements are generated, and styling them means
+	   naming them from an ancestor.
+
+	   `:where()` throughout to keep every rule at zero specificity, so a
+	   utility on the container still wins and this can never become the thing
+	   that has to be fought. Tailwind v4 emits `@layer theme, base, components,
+	   utilities`, which is what makes that true regardless of source order. */
+	.prose-note {
+		@apply text-ink text-sm leading-relaxed;
+	}
+	.prose-note :where(p, ul, ol, blockquote, pre) {
+		@apply my-2;
+	}
+	/* No margin above the first block or below the last: the dialog already
+	   owns the padding, and doubling it makes the body look unmoored from its
+	   heading. */
+	.prose-note > :where(:first-child) {
+		@apply mt-0;
+	}
+	.prose-note > :where(:last-child) {
+		@apply mb-0;
+	}
+	.prose-note :where(h1, h2, h3, h4, h5, h6) {
+		@apply text-ink mt-4 mb-1.5 font-semibold tracking-tight;
+	}
+	/* Markdown headings inside a 32rem dialog under an `<h2>` title are section
+	   markers, not a document hierarchy, so they are sized by depth over a
+	   narrow range rather than by their tag's usual scale. */
+	.prose-note :where(h1, h2) {
+		@apply text-base;
+	}
+	.prose-note :where(h3, h4, h5, h6) {
+		@apply text-sm;
+	}
+	.prose-note :where(ul) {
+		@apply list-disc pl-5;
+	}
+	.prose-note :where(ol) {
+		@apply list-decimal pl-5;
+	}
+	.prose-note :where(li) {
+		@apply my-0.5;
+	}
+	.prose-note :where(code) {
+		@apply bg-accent-soft border-line rounded border px-1 py-0.5 font-mono text-[0.85em];
+	}
+	/* The border and padding belong to the block, not to each line inside it. */
+	.prose-note :where(pre) {
+		@apply bg-accent-soft border-line overflow-x-auto rounded-md border p-3;
+	}
+	.prose-note :where(pre code) {
+		@apply border-0 bg-transparent p-0 text-[0.85em];
+	}
+	.prose-note :where(blockquote) {
+		@apply border-line-strong text-ink-muted border-l-2 pl-3 italic;
+	}
+	.prose-note :where(hr) {
+		@apply border-line my-3;
+	}
+	/* Underlined, not colour-only: WCAG 1.4.1. No `outline-none` anywhere in
+	   here — that would cancel the base `:focus-visible` ring, which is the
+	   same trap `.input` documents above. */
+	.prose-note :where(a) {
+		@apply text-brand underline underline-offset-2;
+	}
+	/* Descriptions are written by one account and read by another (ADR 0015),
+	   so a long unbroken string is someone else's paste, not a layout the
+	   reader chose. Break it rather than let it widen the dialog. */
+	.prose-note :where(p, li, h1, h2, h3, h4, h5, h6) {
+		@apply break-words;
+	}
 }
