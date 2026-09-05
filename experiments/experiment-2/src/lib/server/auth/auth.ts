@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { MongoServerError, type Db } from 'mongodb';
+import { MongoServerError, type Db, type MongoClient } from 'mongodb';
 import { InvariantError } from '$lib/domain/errors';
 import { newId, type UserId } from '$lib/domain/ids';
 import { collections, type Collections, type UserDoc } from '../db/collections';
@@ -66,7 +66,12 @@ function decoyHash(): Promise<string> {
 }
 
 export class Auth {
-	constructor(private readonly db: Db) {}
+	constructor(
+		private readonly db: Db,
+		/** Needed only by `deleteUser`, which is the one operation here that spans
+		 *  more than one collection. */
+		private readonly client: MongoClient
+	) {}
 
 	// Per call, not in the constructor — see the note on
 	// `MongoStoryMapRepository`'s equivalent, and `db/index.ts`.
@@ -193,16 +198,40 @@ export class Auth {
 	}
 
 	/**
-	 * A user and their sessions, together.
+	 * A user, their sessions, and their memberships — together.
 	 *
-	 * This is the cascade `sessions.user_id → users.id ON DELETE CASCADE` used to
-	 * provide for free. MongoDB has no foreign keys, so it is application code or
-	 * it is nothing — and "nothing" means a deleted account keeps working until
-	 * its cookie expires.
+	 * Two foreign keys hung off `users.id` in experiment-1, both
+	 * `ON DELETE CASCADE`: `sessions.user_id` and `map_members.user_id`. MongoDB
+	 * has neither, so this is application code or it is nothing.
+	 *
+	 * "Nothing" is worse than it sounds for the second one. A leftover membership
+	 * row does not just linger: if the deleted account **owned** a map, the
+	 * partial unique index that allows one owner per map means that orphaned row
+	 * blocks any future owner forever, and there is no screen that can clear it.
+	 * The sessions half is the more obvious hazard — a deleted account keeps
+	 * working until its cookie expires — but the membership half is the one that
+	 * cannot be undone.
+	 *
+	 * In a transaction, because a half-applied delete is exactly the state
+	 * described above.
+	 *
+	 * **What this deliberately does not do is decide what happens to maps the
+	 * account owned.** Deleting them would destroy other members' work; handing
+	 * them on would pick a new owner arbitrarily. Nothing in the app deletes an
+	 * account yet, so the question is not answered here rather than answered
+	 * badly — but it must be answered before one does.
 	 */
 	async deleteUser(userId: UserId): Promise<void> {
-		await this.c.users.deleteOne({ _id: userId });
-		await this.c.sessions.deleteMany({ userId });
+		const session = this.client.startSession();
+		try {
+			await session.withTransaction(async () => {
+				await this.c.users.deleteOne({ _id: userId }, { session });
+				await this.c.sessions.deleteMany({ userId }, { session });
+				await this.c.mapMembers.deleteMany({ userId }, { session });
+			});
+		} finally {
+			await session.endSession();
+		}
 	}
 
 	/** Housekeeping, exposed for tests and a future sweep. */

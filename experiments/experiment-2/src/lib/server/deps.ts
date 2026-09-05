@@ -42,7 +42,7 @@ export interface Deps {
 export const deps: Deps = {
 	storyMapRepository: new MongoStoryMapRepository(db, client),
 	aiAssistant: new NullAiAssistant(),
-	auth: new Auth(db),
+	auth: new Auth(db, client),
 	collab: new CollabHubs()
 };
 

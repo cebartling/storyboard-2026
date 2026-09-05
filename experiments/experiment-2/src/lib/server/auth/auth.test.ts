@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { Db } from 'mongodb';
+import type { Db, MongoClient } from 'mongodb';
 import { InvariantError } from '$lib/domain/errors';
-import { collections, type Collections } from '../db/collections';
+import type { MapId, UserId } from '$lib/domain/ids';
+import { collections, memberId, type Collections } from '../db/collections';
 import { freshDatabase } from '../test-support/mongo';
 import { Auth, SESSION_TTL_MS } from './auth';
 
 describe('Auth', () => {
 	let db: Db;
+	let client: MongoClient;
 	let c: Collections;
 	let auth: Auth;
 
@@ -14,9 +16,9 @@ describe('Auth', () => {
 		// A fresh database per test, indexes and all. The unique index on
 		// `users.email` is not decoration here — it is what `register` relies on to
 		// close its check-then-insert race.
-		({ db } = await freshDatabase());
+		({ db, client } = await freshDatabase());
 		c = collections(db);
-		auth = new Auth(db);
+		auth = new Auth(db, client);
 	});
 
 	describe('register', () => {
@@ -158,6 +160,34 @@ describe('Auth', () => {
 			await auth.logout(session.token);
 
 			expect(await auth.validateSession(session.token)).toBeNull();
+		});
+
+		it('deleting a user takes their memberships with them, not just their sessions', async () => {
+			// Two foreign keys hung off `users.id` in experiment-1, both cascading;
+			// only one of them was rebuilt at first. A leftover *owner* row is the
+			// bad case: the partial one-owner index means it blocks any future
+			// owner of that map, forever, with no screen that can clear it.
+			const user = await auth.register('ada@example.test', 'Ada', 'hunter2hunter2');
+			const mapId = 'map-1' as MapId;
+			await c.mapMembers.insertOne({
+				_id: memberId(mapId, user.id),
+				mapId,
+				userId: user.id,
+				role: 'owner'
+			});
+
+			await auth.deleteUser(user.id);
+
+			expect(await c.mapMembers.countDocuments({ userId: user.id })).toBe(0);
+			// The index is free again — which is the property that actually matters.
+			await expect(
+				c.mapMembers.insertOne({
+					_id: memberId(mapId, 'someone-else' as UserId),
+					mapId,
+					userId: 'someone-else' as UserId,
+					role: 'owner'
+				})
+			).resolves.toBeDefined();
 		});
 
 		it('deleting a user takes their sessions with them', async () => {

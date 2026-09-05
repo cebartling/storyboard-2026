@@ -37,7 +37,7 @@ try {
 				'The seeded map is owned by an existing account — register one in the app first.'
 		);
 	}
-	const auth = new Auth(db);
+	const auth = new Auth(db, client);
 	const owner = await auth.findUserByEmail(ownerEmail);
 	if (!owner) {
 		throw new Error(
