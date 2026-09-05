@@ -21,7 +21,8 @@ Read `documentation/` before changing anything structural — `glossary.md` for 
 vocabulary (note: we say **Step** where Patton says _user task_), `domain-model.md` for
 entities and invariants, `architecture.md` for the layering, and `adr/` for why. ADR 0006
 is the one that constrains most changes; ADR 0010 (canvas) and ADR 0011 (dialog editing)
-constrain most board work.
+constrain most board work, and ADR 0018 (Markdown descriptions) owns the app's only
+`{@html}`.
 
 ## Commands
 
@@ -41,6 +42,7 @@ versions before 10 reject this directory's `pnpm-workspace.yaml` with
 | **Single canvas component test** | `corepack pnpm vitest run src/lib/components/board-viewport.svelte.spec.ts`                |
 | **Single e2e test**              | `corepack pnpm playwright test -g "drag story to slice"`                                   |
 | **Single canvas e2e test**       | `corepack pnpm playwright test -g "pan and zoom persist"`                                  |
+| **Single story-detail e2e test** | `corepack pnpm playwright test -g "renders a story description as Markdown"`               |
 | Collaboration demo (headed)      | `corepack pnpm demo`                                                                       |
 | Types                            | `corepack pnpm check`                                                                      |
 | Lint / format                    | `corepack pnpm lint` / `corepack pnpm format`                                              |
@@ -95,7 +97,19 @@ the seed, so no test or fixture breaks if you delete it.
   `showModal()`) and submitted with `use:enhance` + `invalidateAll()`. Dialogs render as a
   sibling of `BoardViewport`, never an ancestor of a dnd zone — see the drag-mirror note in
   ADR 0010. Adding a control to a cell or header means adding a `BoardDialog` case, not an
-  inline form.
+  inline form. Adding a case means three edits, all enforced by the compiler: the union
+  member, the `TITLES` entry, and a `subjectStatus` case in `src/lib/board/dialog-subject.ts`.
+- **Story descriptions are Markdown, rendered only in the `viewStory` dialog** (ADR 0018).
+  `src/lib/markdown/render-markdown.ts` parses with `marked` and sanitises with DOMPurify
+  against an explicit allowlist; it is the app's **only** `{@html}` and there is no CSP
+  behind it, so treat it as security code. Two traps it already fell into:
+  - **Do not touch DOMPurify at module scope.** SvelteKit imports the module graph to
+    server-render, and in Node dompurify's default export is the factory, not a bound
+    instance (`isSupported` false, `addHook` undefined). Setup is lazy for that reason;
+    making it eager 500s the whole board route.
+  - Its test is `render-markdown.svelte.test.ts` despite the source being plain `.ts`: the
+    `.svelte.` infix routes a file to the browser Vitest project, and the node project has
+    no jsdom for DOMPurify to use.
 - Styling is **Tailwind CSS v4** (ADR 0009). The palette and the repeated control classes
   (`.panel`, `.input`, `.btn` + `.btn-primary`/`.btn-quiet`/`.btn-icon`/`.btn-danger`/`.btn-danger-quiet`,
   `.field-label`, `.error`) live in `src/app.css`; everything else is utilities in the
