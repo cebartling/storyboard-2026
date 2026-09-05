@@ -1,0 +1,119 @@
+@import 'tailwindcss';
+
+/* The one place the app's visual vocabulary is defined. Routes and components
+   use Tailwind utilities directly; only the handful of controls that repeat on
+   every form (button, input, panel) get a named class here, so the board's
+   dialog editors stay readable. See documentation/adr/0009-tailwind-css.md. */
+
+@theme {
+	--color-canvas: oklch(0.985 0.005 260);
+	--color-ink: oklch(0.28 0.03 260);
+	--color-ink-muted: oklch(0.53 0.02 260);
+	--color-line: oklch(0.9 0.01 260);
+	/* A boundary a low-vision user can actually find. `--color-line` is 1.35:1
+	   on white — fine for decorative separators, below the 3:1 WCAG 1.4.11 asks
+	   for a control boundary, which is the only thing marking an empty field. */
+	--color-line-strong: oklch(0.72 0.02 260);
+	--color-surface: oklch(0.975 0.004 260);
+	--color-brand: oklch(0.52 0.16 265);
+	--color-brand-soft: oklch(0.96 0.025 265);
+	--color-accent: oklch(0.83 0.13 85);
+	--color-accent-soft: oklch(0.97 0.04 85);
+	--color-danger: oklch(0.55 0.19 25);
+
+	--font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+@layer base {
+	html {
+		background-color: var(--color-canvas);
+	}
+
+	body {
+		@apply bg-canvas text-ink font-sans antialiased;
+	}
+
+	h1 {
+		@apply text-ink text-2xl font-semibold tracking-tight;
+	}
+
+	:focus-visible {
+		@apply outline-brand outline-2 outline-offset-2;
+	}
+}
+
+@layer components {
+	.panel {
+		@apply border-line rounded-xl border bg-white shadow-sm;
+	}
+
+	.field-label {
+		@apply text-ink-muted text-xs font-medium tracking-wide uppercase;
+	}
+
+	.input {
+		@apply border-line-strong text-ink placeholder:text-ink-muted w-full rounded-lg border bg-white px-3 py-1.5 text-sm shadow-xs transition;
+	}
+
+	/* `:focus-visible`, not `:focus`, and no `outline-none`: this layer sorts
+	   after `@layer base`, so suppressing the outline here would silently
+	   cancel the base focus ring for every input in the app. */
+	.input:focus-visible {
+		@apply border-brand;
+	}
+
+	.btn {
+		@apply inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition select-none;
+	}
+
+	.btn-primary {
+		@apply bg-brand text-white shadow-sm hover:brightness-110 active:brightness-95;
+	}
+
+	.btn-quiet {
+		@apply border-line text-ink border bg-white hover:bg-surface;
+	}
+
+	/* Square icon button. Defined after `.btn` so its padding wins. */
+	.btn-icon {
+		@apply size-6 p-0;
+	}
+
+	/* Solid destructive action. Repeats across the four delete dialogs, which
+	   is the threshold this file's other named classes were pulled out at. */
+	.btn-danger {
+		@apply bg-danger text-white shadow-sm hover:brightness-110 active:brightness-95;
+	}
+
+	/* A colour modifier only — always used on top of `.btn`. */
+	.btn-danger-quiet {
+		@apply text-ink-muted hover:text-danger bg-transparent;
+	}
+
+	/* The board's first two grid rows are sticky and float over the content
+	   rows below them, so a control the browser scrolls to while following
+	   keyboard focus would otherwise land underneath them. The band's height
+	   is measured at runtime and published by the board route as
+	   `--board-sticky-header-height`.
+
+	   Scoped to buttons on purpose: they are the only focusable things in a
+	   cell, and widening it to every descendant also changes where
+	   `scrollIntoView` puts a *card*, which is what the drag choreography in
+	   the e2e suite scrolls. */
+	.board-cell button {
+		scroll-margin-top: var(--board-sticky-header-height, 0px);
+	}
+
+	/* Kept as a class (not only utilities) because the e2e suite asserts on
+	   `p.error[role="alert"]`. */
+	.error {
+		@apply border-danger/25 bg-danger/8 text-danger rounded-lg border px-3 py-2 text-sm font-medium;
+	}
+
+	/* Someone else changed or deleted what this dialog is editing (ADR 0015
+	   Stage 1). Deliberately not `.error`: nothing has gone wrong and nothing the
+	   user did failed — they are being told the ground moved. */
+	.notice {
+		@apply rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900;
+	}
+}

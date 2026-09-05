@@ -1,0 +1,12 @@
+packages:
+  - '.'
+
+allowBuilds:
+  # Downloads a mongod binary in a postinstall script, which is how the unit
+  # tests get a real replica set without needing Docker.
+  mongodb-memory-server: true
+  # esbuild backs `tsx`, which runs the two standalone entry points (the seed
+  # script and the demo). The app and the tests never need it — Vite and Vitest
+  # resolve TypeScript themselves — but a bare `node` cannot resolve the
+  # extensionless relative imports the source uses.
+  esbuild: true
