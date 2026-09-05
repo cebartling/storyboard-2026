@@ -132,10 +132,14 @@ default export is the factory rather than a bound instance — `isSupported` is 
 pre-existing canvas e2e, not by any new test, which is the argument for having run the whole
 suite rather than only the new one.
 
-Setup is therefore deferred to the first render, and a call without a DOM throws with a
-message saying so. Failing loudly is deliberate: the alternative to sanitising is emitting
-unsanitised HTML, which is not a fallback worth having. Rendering a description server-side
-would need a real DOM shim, and would be a decision, not a fix.
+Setup is therefore deferred to the first render, and a call with real content but no DOM
+throws with a message saying so. Failing loudly is deliberate: the alternative to sanitising
+is emitting unsanitised HTML, which is not a fallback worth having. Rendering a description
+server-side would need a real DOM shim, and would be a decision, not a fix.
+
+The exception is worth stating precisely, because it is what the guard actually promises:
+`null` and blank input return `''` before the sanitiser is reached at all, so they are safe
+anywhere. Only a non-empty description demands a DOM.
 
 The module's test lives in the browser Vitest project as `render-markdown.svelte.test.ts`
 for the same underlying reason — the `.svelte.` infix is what routes a file to the browser
