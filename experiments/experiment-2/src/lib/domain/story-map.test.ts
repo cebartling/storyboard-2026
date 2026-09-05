@@ -13,13 +13,15 @@ import {
 	editStory,
 	findActivity,
 	findStory,
+	inRankOrder,
 	moveActivity,
 	moveSlice,
 	moveStep,
 	moveStory,
 	renameActivity,
 	renameSlice,
-	renameStep
+	renameStep,
+	type StoryMap
 } from './story-map';
 
 function sortByRank<T extends { rank: string }>(items: T[]): T[] {
@@ -558,5 +560,74 @@ describe('invariant enforcement smoke test', () => {
 			seen.add(story.rank);
 			byScope.set(key, seen);
 		}
+	});
+});
+
+describe('inRankOrder', () => {
+	// The read-path guarantee `ORDER BY rank` used to make. Under SQLite this was
+	// free; a document store hands arrays back as written, and a move changes a
+	// rank rather than a position — so without this the board renders in creation
+	// order and every drag appears to do nothing.
+	//
+	// Tested per collection deliberately: the repository contract had one case
+	// asserting activity order, and deleting the sort for steps or stories left it
+	// green. Stories are the case that actually breaks the board.
+	function outOfOrderMap(): StoryMap {
+		const created = createStoryMap('Retail');
+		const browse = addActivity(created, 'Browse');
+		const buy = addActivity(browse.map, 'Buy');
+		// Move 'Buy' in front of 'Browse': its rank now sorts first while it stays
+		// second in the array, which is exactly the state a drag leaves behind.
+		const reordered = moveActivity(buy.map, buy.activity.id, null, browse.activity.id);
+
+		const search = addStep(reordered, browse.activity.id, 'Search');
+		const filter = addStep(search.map, browse.activity.id, 'Filter');
+		const steps = moveStep(filter.map, filter.step.id, browse.activity.id, null, search.step.id);
+
+		const r1 = addSlice(steps, 'Release 1');
+		const r2 = addSlice(r1.map, 'Release 2');
+		const slices = moveSlice(r2.map, r2.slice.id, null, r1.slice.id);
+
+		const first = addStory(slices, search.step.id, 'Sort by price');
+		const second = addStory(first.map, search.step.id, 'Filter by size');
+		return moveStory(second.map, second.story.id, search.step.id, null, null, first.story.id);
+	}
+
+	const names = (map: StoryMap) => ({
+		activities: map.activities.map((a) => a.name),
+		steps: map.activities.flatMap((a) => a.steps.map((s) => s.name)),
+		slices: map.slices.map((s) => s.name),
+		stories: map.stories.map((s) => s.title)
+	});
+
+	it('sorts every collection by rank, not by the order things were created', () => {
+		const map = outOfOrderMap();
+		// Precondition: the fixture really is out of order, or the assertions below
+		// would pass against a function that does nothing.
+		expect(names(map)).toEqual({
+			activities: ['Browse', 'Buy'],
+			steps: ['Search', 'Filter'],
+			slices: ['Release 1', 'Release 2'],
+			stories: ['Sort by price', 'Filter by size']
+		});
+
+		expect(names(inRankOrder(map))).toEqual({
+			activities: ['Buy', 'Browse'],
+			steps: ['Filter', 'Search'],
+			slices: ['Release 2', 'Release 1'],
+			stories: ['Filter by size', 'Sort by price']
+		});
+	});
+
+	it('does not mutate the map it is given', () => {
+		// Every other function in this module returns a new map and leaves its
+		// input alone; a sort that reached back into the caller's arrays would be
+		// the one exception, and an easy one to write by accident.
+		const map = outOfOrderMap();
+		const before = names(map);
+
+		inRankOrder(map);
+
+		expect(names(map)).toEqual(before);
 	});
 });

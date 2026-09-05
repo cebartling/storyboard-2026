@@ -2,7 +2,15 @@ import { expect, describe, it } from 'vitest';
 import type { Caller, StoryMapRepository } from '$lib/domain/ports';
 import type { MapId, UserId } from '$lib/domain/ids';
 import { ConflictError, ForbiddenError } from '$lib/domain/errors';
-import { addActivity, createStoryMap, moveActivity } from '$lib/domain/story-map';
+import {
+	addActivity,
+	addStep,
+	addStory,
+	createStoryMap,
+	moveActivity,
+	moveStep,
+	moveStory
+} from '$lib/domain/story-map';
 
 /**
  * The authorisation rules every `StoryMapRepository` must obey, run against
@@ -81,15 +89,34 @@ export function describeStoryMapRepositoryContract(
 			// free and nothing in the app sorts. A store that returns what it was
 			// given renders the board in creation order instead, and every drag
 			// looks like it did nothing.
+			//
+			// Activities, steps and stories, because they are separately sorted and
+			// an implementation can get one right and another wrong — and stories
+			// are the case a user would actually hit.
 			const harness = await createHarness();
 			const owner = await harness.createUser();
 			const first = addActivity(createStoryMap('Retail'), 'Browse');
 			const second = addActivity(first.map, 'Buy');
-			const moved = moveActivity(second.map, second.activity.id, null, first.activity.id);
-			const saved = await harness.repository.save(owner, moved);
+			const activities = moveActivity(second.map, second.activity.id, null, first.activity.id);
+
+			const search = addStep(activities, first.activity.id, 'Search');
+			const filter = addStep(search.map, first.activity.id, 'Filter');
+			const steps = moveStep(filter.map, filter.step.id, first.activity.id, null, search.step.id);
+
+			const sort = addStory(steps, search.step.id, 'Sort by price');
+			const size = addStory(sort.map, search.step.id, 'Filter by size');
+			const stories = moveStory(size.map, size.story.id, search.step.id, null, null, sort.story.id);
+
+			const saved = await harness.repository.save(owner, stories);
 
 			const access = await harness.repository.load(owner, saved.id);
-			expect(access!.map.activities.map((a) => a.name)).toEqual(['Buy', 'Browse']);
+			const loaded = access!.map;
+			expect(loaded.activities.map((a) => a.name)).toEqual(['Buy', 'Browse']);
+			expect(loaded.activities.flatMap((a) => a.steps.map((s) => s.name))).toEqual([
+				'Filter',
+				'Search'
+			]);
+			expect(loaded.stories.map((s) => s.title)).toEqual(['Filter by size', 'Sort by price']);
 		});
 
 		it('lists the most recently created map first', async () => {
