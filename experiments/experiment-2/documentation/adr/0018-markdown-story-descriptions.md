@@ -46,6 +46,23 @@ the rendering path sanitises.**
   `style`, no `id`, no `on*`. An `afterSanitizeAttributes` hook puts `target="_blank"` and
   `rel="noopener noreferrer"` on surviving anchors, so an outbound link cannot hand the
   opener a reference back to the board.
+- **Both the parser and the sanitiser are private instances**, not the `marked` and
+  `DOMPurify` singletons. `marked.use()` and `DOMPurify.addHook()` mutate one shared object,
+  so configuring the shared one would silently change how every future caller in the app
+  parses or sanitises, with nothing at that call site to say why.
+- **Three GFM constructs are handled deliberately rather than by omission**, because the
+  failure mode for all of them is silent — the text survives and only its meaning is lost:
+  - **Task lists render as `☐`/`☑` glyphs**, via a renderer override, so no `<input>` is
+    ever emitted for the sanitiser to strip. Left alone, `- [x] done` and `- [ ] done`
+    render identically, which is worse than showing no box at all — and acceptance criteria
+    written as a task list are the motivating case in this ADR's Context.
+  - **Tables are allowed** (`table`, `thead`, `tbody`, `tr`, `th`, `td`; all inert, with no
+    attribute surface beyond what is already blocked). Flattened into a run of cell text,
+    a table loses the only thing that made it one.
+  - **Images are not.** With no CSP, an `img` pointing at an arbitrary host is a request the
+    reader's browser makes on the author's behalf — a read receipt and an IP beacon that one
+    editor could aim at the map's owner. The alt text is rendered as text so the author's
+    words are not silently dropped.
 - **The domain is untouched.** `description` stays raw text in the aggregate, in Mongo, and
   in the textarea. Markdown exists only at the moment of reading. This keeps ADR 0006's pure
   core free of a presentation concern and means there is no migration and no server change —

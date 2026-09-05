@@ -179,6 +179,18 @@
 	.prose-note :where(hr) {
 		@apply border-line my-3;
 	}
+	/* Tables survive the sanitiser (ADR 0018), so they need to be legible.
+	   Scrollable in their own right: a wide table is someone else's content and
+	   must not widen the dialog it sits in. */
+	.prose-note :where(table) {
+		@apply my-2 block w-full overflow-x-auto border-collapse text-left;
+	}
+	.prose-note :where(th, td) {
+		@apply border-line border px-2 py-1 align-top;
+	}
+	.prose-note :where(th) {
+		@apply bg-accent-soft font-semibold;
+	}
 	/* Underlined, not colour-only: WCAG 1.4.1. No `outline-none` anywhere in
 	   here — that would cancel the base `:focus-visible` ring, which is the
 	   same trap `.input` documents above. */

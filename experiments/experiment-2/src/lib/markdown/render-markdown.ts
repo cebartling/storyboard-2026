@@ -20,7 +20,7 @@
 // ---------------------------------------------------------------------------
 
 import DOMPurify from 'dompurify';
-import { marked } from 'marked';
+import { Marked } from 'marked';
 
 /**
  * What a description is allowed to become. An explicit allowlist rather than
@@ -48,11 +48,31 @@ const ALLOWED_TAGS = [
 	'ul',
 	'ol',
 	'li',
-	'a'
+	'a',
+	// Inert structure. Tables carry no attribute surface beyond what is already
+	// blocked, and a table flattened into a run of cell text loses the only
+	// thing that made it a table.
+	'table',
+	'thead',
+	'tbody',
+	'tr',
+	'th',
+	'td'
 ];
 
 /** No `style`, no `on*`, no `id`: a description cannot reach outside its own box. */
 const ALLOWED_ATTR = ['href', 'title', 'target', 'rel'];
+
+/**
+ * Task-list boxes as text, so no `<input>` is ever emitted for the sanitiser to
+ * have to strip.
+ *
+ * Without this the checkbox is dropped and its state goes with it — "done" and
+ * "todo" render identically, which is worse than showing no box at all.
+ * Acceptance criteria are the motivating use for descriptions (ADR 0018), and a
+ * task list is how people write them.
+ */
+const CHECKBOX_GLYPHS = { checked: '\u2611\uFE0E ', unchecked: '\u2610\uFE0E ' };
 
 let instance: ReturnType<typeof DOMPurify> | null = null;
 
@@ -105,6 +125,42 @@ function purifier(): ReturnType<typeof DOMPurify> {
 }
 
 /**
+ * Our own parser, not the shared `marked` singleton.
+ *
+ * `marked.use()` mutates the one global instance, so overriding the renderer
+ * there would change how every other caller in the app parses — the same
+ * hazard the private DOMPurify instance below avoids. The constructor merges
+ * these overrides with the defaults, unlike passing `renderer` to `parse()`,
+ * which replaces the renderer wholesale and leaves it without a `paragraph`.
+ *
+ * `breaks` because this is typed into a textarea, where a single newline is
+ * meant as a line break rather than as paragraph continuation.
+ */
+const markdown = new Marked({
+	gfm: true,
+	breaks: true,
+	renderer: {
+		checkbox: ({ checked }) => (checked ? CHECKBOX_GLYPHS.checked : CHECKBOX_GLYPHS.unchecked),
+		// Images are deliberately unsupported. With no CSP, an `img` pointing at
+		// an arbitrary host is a request the reader's browser makes on the
+		// author's behalf — a read receipt and an IP beacon that one editor could
+		// aim at the map's owner (ADR 0015). Rendering the alt text keeps the
+		// author's words rather than dropping them silently, which is what the
+		// sanitiser alone would do.
+		image: ({ text }) => (text ? escapeHtml(text) : '')
+	}
+});
+
+/** Only ever applied to text we are about to hand back through the parser. */
+function escapeHtml(text: string): string {
+	return text
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;');
+}
+
+/**
  * Render a story description as sanitised HTML, ready for `{@html}`.
  *
  * `null` and blank both collapse to `''` so the caller has one branch rather
@@ -114,11 +170,9 @@ function purifier(): ReturnType<typeof DOMPurify> {
 export function renderMarkdown(source: string | null): string {
 	if (source === null || source.trim() === '') return '';
 
-	// `async: false` pins the return type to `string`; `marked.parse` is
-	// otherwise `string | Promise<string>` and would infect every caller.
-	// `breaks` because this is typed into a textarea, where a single newline is
-	// meant as a line break rather than as paragraph continuation.
-	const html = marked.parse(source, { async: false, gfm: true, breaks: true });
+	// `async: false` pins the return type to `string`; `parse` is otherwise
+	// `string | Promise<string>` and would infect every caller.
+	const html = markdown.parse(source, { async: false });
 
 	return purifier().sanitize(html, { ALLOWED_TAGS, ALLOWED_ATTR });
 }

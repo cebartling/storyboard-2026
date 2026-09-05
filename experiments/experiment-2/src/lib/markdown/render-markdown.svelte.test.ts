@@ -70,6 +70,48 @@ describe('renderMarkdown', () => {
 		});
 	});
 
+	// GFM constructs the allowlist has to make a deliberate decision about.
+	// Pinned here because the failure mode for all three is silent: the text
+	// survives and only its meaning is lost.
+	describe('GFM', () => {
+		// A checked box that renders identically to an unchecked one is worse
+		// than no checkbox at all, and acceptance criteria are the motivating
+		// use for descriptions in the first place (ADR 0018).
+		it('keeps the state of a task list', () => {
+			const items = parse(renderMarkdown('- [x] done\n- [ ] todo')).querySelectorAll('li');
+
+			expect(items[0].textContent).toContain('☑');
+			expect(items[1].textContent).toContain('☐');
+			expect(items[0].textContent).toContain('done');
+		});
+
+		// The glyph, not an <input>: nothing that could carry state or an event
+		// handler is emitted in the first place, so the sanitiser is not the
+		// thing standing between a checkbox and the reader.
+		it('renders task list state without emitting a form control', () => {
+			expect(parse(renderMarkdown('- [x] done')).querySelector('input')).toBeNull();
+		});
+
+		it('keeps a table as a table', () => {
+			const host = parse(renderMarkdown('| a | b |\n| --- | --- |\n| 1 | 2 |'));
+
+			expect([...host.querySelectorAll('th')].map((c) => c.textContent)).toEqual(['a', 'b']);
+			expect([...host.querySelectorAll('td')].map((c) => c.textContent)).toEqual(['1', '2']);
+		});
+
+		// Images stay out on purpose. With no CSP, an `img` pointing at an
+		// arbitrary host is a request the reader's browser makes on the author's
+		// behalf — a read receipt and an IP beacon one editor could aim at the
+		// map's owner (ADR 0015). The alt text is kept so nothing is silently
+		// lost.
+		it('drops an image but keeps its alt text', () => {
+			const host = parse(renderMarkdown('![a diagram](https://example.com/i.png)'));
+
+			expect(host.querySelector('img')).toBeNull();
+			expect(host.textContent).toContain('a diagram');
+		});
+	});
+
 	describe('links', () => {
 		it('renders an http link', () => {
 			const anchor = parse(renderMarkdown('[docs](https://example.com/x)')).querySelector('a');
