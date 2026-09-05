@@ -73,11 +73,12 @@ that policy lives in two implementations, which is why both are held to
 
 `experiment-2` replaced the entire persistence layer. Across `src/lib/domain/`,
 `src/lib/app/`, `src/lib/board/`, `src/lib/canvas/`, `src/lib/collab/`,
-`src/lib/components/`, `src/lib/seed/` and `src/routes/`, **71 of 80 files are
-byte-identical to experiment-1**. The nine that changed were four `await`s (`Auth` was
-synchronous only because better-sqlite3 is), one new domain function (`inRankOrder`), the
-in-memory double and its contract test, one test fixture's error string, and one word in a
-comment. ADR 0003 lists them, and lists the four pre-existing divergences the exercise
+`src/lib/components/`, `src/lib/seed/` and `src/routes/`, **69 of 80 files are
+byte-identical to experiment-1**. Nine of the eleven differences are the port swap itself:
+four `await`s (`Auth` was synchronous only because better-sqlite3 is), one new domain
+function (`inRankOrder`), the in-memory double and its contract test, one test fixture's
+error string, and one word in a comment. The other two are test files a later self-review
+added. ADR 0003 lists them all, and lists the four pre-existing divergences the exercise
 turned up.
 
 ## The two outbound ports, and why only two

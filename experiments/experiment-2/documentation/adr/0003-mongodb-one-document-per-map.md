@@ -62,21 +62,24 @@ experiments file by file across `src/lib/domain/`, `src/lib/app/`, `src/lib/boar
 `src/lib/canvas/`, `src/lib/collab/`, `src/lib/components/`, `src/lib/seed/` and
 `src/routes/`, and ignoring the ADR renumbering this experiment introduced:
 
-**71 of 80 files are byte-identical.** The port itself did not change, and the 17-case
+**69 of 80 files are byte-identical.** The port itself did not change, and the 17-case
 contract test passed against the new adapter before a single case was added to it.
 
-The nine that changed, in full, because the ones that had to change are the finding.
-`src/hooks.server.ts` is a tenth changed file, listed here for completeness but outside the
-eight directories the count covers:
+Nine of the eleven differences are the port swap; the other two are test files a subsequent
+self-review added, and they are marked as such rather than folded in — the number that
+answers the question is the first one. `src/hooks.server.ts` is a twelfth changed file,
+listed for completeness but outside the eight directories the count covers:
 
-| File                                                                                                     | Change                                                                      |
-| -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `routes/logout`, `routes/register`, `routes/maps/[mapId]` (and `src/hooks.server.ts`, outside the count) | One `await` each. `Auth` was synchronous only because better-sqlite3 is.    |
-| `domain/story-map.ts`                                                                                    | `inRankOrder` added — the read-path guarantee `ORDER BY rank` used to make. |
-| `app/in-memory-story-map-repository.ts`                                                                  | Two behaviours corrected, both found by new contract cases.                 |
-| `app/story-map-repository-contract.ts` (+ its in-memory binding)                                         | Four cases added, all pinning drift that already existed.                   |
-| `routes/run-action.test.ts`                                                                              | A fixture error string, `SQLITE_IOERR` → a Mongo error.                     |
-| `canvas/camera-math.ts`                                                                                  | One word in a comment.                                                      |
+| File                                                                                                     | Change                                                                                           |
+| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `routes/logout`, `routes/register`, `routes/maps/[mapId]` (and `src/hooks.server.ts`, outside the count) | One `await` each. `Auth` was synchronous only because better-sqlite3 is.                         |
+| `domain/story-map.ts`                                                                                    | `inRankOrder` added — the read-path guarantee `ORDER BY rank` used to make.                      |
+| `app/in-memory-story-map-repository.ts`                                                                  | Two behaviours corrected, both found by new contract cases.                                      |
+| `app/story-map-repository-contract.ts` (+ its in-memory binding)                                         | Four cases added, all pinning drift that already existed.                                        |
+| `routes/run-action.test.ts`                                                                              | A fixture error string, `SQLITE_IOERR` → a Mongo error.                                          |
+| `canvas/camera-math.ts`                                                                                  | One word in a comment.                                                                           |
+| `domain/story-map.test.ts` (self-review)                                                                 | A unit test for `inRankOrder`, which had none.                                                   |
+| `app/use-cases.test.ts` (self-review)                                                                    | Seeded maps stored at a version a store can actually hold, and one SQLite-era comment corrected. |
 
 **The seam held.** The domain's rank math, the move and slice semantics, every use case,
 every component, the whole collaboration layer and every route body came across untouched.
@@ -96,6 +99,19 @@ the contract test against a third implementation rather than by reading the code
 None of these were caused by the move. All four had been sitting in experiment-1, passing
 its whole suite. A contract test only prevents the drift it asks about, and these are what
 it was not asking.
+
+**The files that stayed byte-identical kept their SQLite-era comments**, which is the price
+of the measurement meaning anything: editing them to say "MongoDB" would have made the count
+a statement about how much prose was rewritten. So `ports.ts` still says the port keeps the
+domain "free of Drizzle", `retail-commerce.ts` still says the seed script "writes it to
+SQLite", and so on — inherited context, harmless to a reader who knows this is a port of
+experiment-1.
+
+One was not harmless and was corrected: `use-cases.test.ts` claimed "the unique indexes turn
+a leaked duplicate into a 500", describing a backstop that no longer exists — rank
+uniqueness is an invariant inside one document now, so the write lock and the
+compare-and-set are the whole defence rather than the first of two. A stale comment is
+noise; a stale comment asserting a protection is a trap.
 
 ## Consequences
 

@@ -401,10 +401,14 @@ describe('concurrent writers', () => {
 		// The lock is what stops both callers reaching the domain's rank maths
 		// concurrently. `rank.ts` wraps generateKeyBetween, which is deterministic
 		// and carries no actor entropy, so two inserts computed against identical
-		// state produce byte-identical keys — and the unique indexes turn a leaked
-		// duplicate into a 500 rather than a merge (ADR 0014, "Fractional ranks
-		// collide"). Sequencing them means the survivor always reads committed
-		// state, whichever one that is.
+		// state produce byte-identical keys (ADR 0014, "Fractional ranks collide").
+		//
+		// Under SQLite a leaked duplicate hit a unique index on (step, slice, rank)
+		// and surfaced as a 500. There is no such index here — rank uniqueness is
+		// an invariant inside one document now (ADR 0003) — so the lock and the
+		// compare-and-set are the whole defence rather than the first of two.
+		// Sequencing them means the survivor always reads committed state,
+		// whichever one that is.
 		const { repository, mapId, version } = await seededMap();
 		const gated = new GatedRepository(repository);
 
