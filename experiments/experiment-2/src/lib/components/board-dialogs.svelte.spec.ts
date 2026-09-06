@@ -442,6 +442,29 @@ describe('actionError', () => {
 			);
 		});
 
+		// Choosing a story and then narrowing past it: the radio unmounts, but
+		// Svelte's bind:group teardown only removes the input from the group — it
+		// never clears the bound value. Left alone, Add stays enabled and posts a
+		// form with no `otherId`, which the server answers with a raw field name.
+		it('will not submit a candidate the query has hidden', async () => {
+			const dialogEl = await open({ kind: 'viewStory', storyId: 'st-1' }, 3, {
+				story,
+				candidates
+			});
+			await page.getByRole('button', { name: 'Add dependency' }).click();
+			await page.getByRole('radio', { name: /Sort results/ }).click();
+
+			// 'price' matches the other candidate's title only — both fixtures share
+			// the step name 'Filter', so filtering on that hides neither.
+			await page.getByRole('searchbox').fill('price');
+
+			const add = dialogEl.querySelector<HTMLButtonElement>(
+				'form[action="?/addDependency"] button[type="submit"]'
+			)!;
+			expect(dialogEl.querySelector('input[name="otherId"]:checked')).toBeNull();
+			expect(add.disabled).toBe(true);
+		});
+
 		it('will not submit until a candidate is chosen', async () => {
 			const dialogEl = await open({ kind: 'viewStory', storyId: 'st-1' }, 3, {
 				story,

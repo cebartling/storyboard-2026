@@ -152,6 +152,16 @@
 	const CANDIDATE_LIMIT = 50;
 	const shownCandidates = $derived(filterCandidates(candidates, candidateQuery, CANDIDATE_LIMIT));
 
+	/**
+	 * Whether the chosen candidate is still on screen.
+	 *
+	 * Narrowing the query past a chosen story unmounts its radio, but Svelte's
+	 * `bind:group` teardown only drops the input from the group — it leaves the
+	 * bound value set. Without this the button stays enabled and posts a form
+	 * with no `otherId`, which comes back as a 400 naming a form field.
+	 */
+	const chosenIsShown = $derived(shownCandidates.shown.some((c) => c.id === chosenCandidate));
+
 	$effect(() => {
 		// Reading it into a local is what subscribes this effect: reset the picker
 		// whenever the dialog turns to a different story, or it would open
@@ -764,7 +774,7 @@
 						<button
 							type="submit"
 							class="btn btn-primary self-start"
-							disabled={submitting || subjectDeleted || chosenCandidate === null}>Add</button
+							disabled={submitting || subjectDeleted || !chosenIsShown}>Add</button
 						>
 					</form>
 				{:else}
