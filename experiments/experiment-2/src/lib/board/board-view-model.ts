@@ -42,7 +42,15 @@ export interface CellVM {
 	sliceId: SliceId | null;
 	gridColumn: number;
 	gridRow: number;
-	stories: { id: StoryId; title: string; description: string | null }[];
+	stories: {
+		id: StoryId;
+		title: string;
+		description: string | null;
+		/** Counts, not ids: a card badge needs a number, and carrying the ids
+		 *  would copy the edge list once per endpoint (ADR 0019). */
+		blockedByCount: number;
+		blocksCount: number;
+	}[];
 }
 
 export interface BoardViewModel {
@@ -61,6 +69,18 @@ export interface BoardViewModel {
 	columns: ColumnVM[];
 	rows: RowVM[];
 	cells: CellVM[];
+	/**
+	 * Every edge with both endpoints resolved to titles, so the story dialog can
+	 * render both directions without re-joining ids against `cells`.
+	 *
+	 * Unordered — dependencies carry no rank (ADR 0019) — so the dialog sorts.
+	 */
+	dependencies: {
+		blockerId: StoryId;
+		blockerTitle: string;
+		blockedId: StoryId;
+		blockedTitle: string;
+	}[];
 	totalColumns: number;
 }
 
@@ -107,6 +127,17 @@ export function buildBoardViewModel(map: StoryMap): BoardViewModel {
 	const unslicedRow = 3 + map.slices.length;
 	rows.push({ sliceId: null, name: 'Unsliced', gridRow: unslicedRow });
 
+	// Counted once, up here, rather than filtered inside the loop below: `cells`
+	// is a full columns x rows cross product, so a scan per card would be
+	// O(cells x edges) — and this whole builder re-runs on every refetch, which
+	// ADR 0014 makes frequent.
+	const blockedByCount = new Map<StoryId, number>();
+	const blocksCount = new Map<StoryId, number>();
+	for (const d of map.dependencies) {
+		blocksCount.set(d.blockerId, (blocksCount.get(d.blockerId) ?? 0) + 1);
+		blockedByCount.set(d.blockedId, (blockedByCount.get(d.blockedId) ?? 0) + 1);
+	}
+
 	const cells: CellVM[] = [];
 	for (const column of columns) {
 		for (const row of rows) {
@@ -117,10 +148,31 @@ export function buildBoardViewModel(map: StoryMap): BoardViewModel {
 				gridRow: row.gridRow,
 				stories: map.stories
 					.filter((s) => s.stepId === column.stepId && s.sliceId === row.sliceId)
-					.map((s) => ({ id: s.id, title: s.title, description: s.description }))
+					.map((s) => ({
+						id: s.id,
+						title: s.title,
+						description: s.description,
+						blockedByCount: blockedByCount.get(s.id) ?? 0,
+						blocksCount: blocksCount.get(s.id) ?? 0
+					}))
 			});
 		}
 	}
+
+	// Resolved here so the dialog does not re-join ids against `cells`.
+	//
+	// The filter is defensive rather than an invariant claim: the domain's
+	// cascades mean an edge cannot outlive either endpoint through the app, but
+	// a test fixture that spreads a partial map (`{ ...map, stories: [] }`) does
+	// reach this, and rendering `undefined` titles would be a worse answer than
+	// dropping the row.
+	const titleById = new Map(map.stories.map((s) => [s.id, s.title]));
+	const dependencies = map.dependencies.flatMap((d) => {
+		const blockerTitle = titleById.get(d.blockerId);
+		const blockedTitle = titleById.get(d.blockedId);
+		if (blockerTitle === undefined || blockedTitle === undefined) return [];
+		return [{ blockerId: d.blockerId, blockerTitle, blockedId: d.blockedId, blockedTitle }];
+	});
 
 	return {
 		id: map.id,
@@ -132,6 +184,7 @@ export function buildBoardViewModel(map: StoryMap): BoardViewModel {
 		columns,
 		rows,
 		cells,
+		dependencies,
 		totalColumns
 	};
 }
