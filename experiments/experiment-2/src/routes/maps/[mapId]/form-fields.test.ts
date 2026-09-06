@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { InvariantError } from '$lib/domain/errors';
-import { optionalNeighbour, requireString, requireVersion } from './form-fields';
+import { optionalNeighbour, requireDirection, requireString, requireVersion } from './form-fields';
 
 describe('requireString', () => {
 	it('returns the trimmed value', () => {
@@ -37,4 +37,20 @@ describe('requireVersion', () => {
 			expect(() => requireVersion(value)).toThrow(InvariantError);
 		}
 	);
+});
+
+describe('requireDirection', () => {
+	it.each(['blocks', 'blockedBy'] as const)('accepts %s', (value) => {
+		expect(requireDirection(value)).toBe(value);
+	});
+
+	// Anything else is a malformed request. Defaulting would silently record the
+	// opposite of what was asked for, which is worse than a 400.
+	it.each([
+		['an unknown value', 'sideways'],
+		['the empty string', ''],
+		['nothing at all', null]
+	])('rejects %s', (_label, value) => {
+		expect(() => requireDirection(value)).toThrow(InvariantError);
+	});
 });

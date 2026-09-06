@@ -38,3 +38,18 @@ export function requireVersion(value: FormDataEntryValue | null): number {
 	}
 	return version;
 }
+
+/** Which way round the dependency picker's two story ids go (ADR 0019). */
+export type DependencyDirection = 'blocks' | 'blockedBy';
+
+/**
+ * Two values only. A third is a malformed request, not something to default —
+ * guessing here would silently record the opposite of what was asked for.
+ */
+export function requireDirection(value: FormDataEntryValue | null): DependencyDirection {
+	const raw = requireString(value, 'Direction');
+	if (raw !== 'blocks' && raw !== 'blockedBy') {
+		throw new InvariantError(`Direction must be "blocks" or "blockedBy", got ${raw}.`);
+	}
+	return raw;
+}

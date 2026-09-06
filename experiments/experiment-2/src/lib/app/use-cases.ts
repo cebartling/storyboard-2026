@@ -349,6 +349,38 @@ export async function deleteStory(
 }
 
 // ---------------------------------------------------------------------------
+// Dependencies (ADR 0019)
+// ---------------------------------------------------------------------------
+
+export async function addDependency(
+	repository: StoryMapRepository,
+	caller: Caller,
+	mapId: MapId,
+	expectedVersion: number,
+	blockerId: StoryId,
+	blockedId: StoryId
+): Promise<void> {
+	await mutate(repository, caller, mapId, expectedVersion, (map) => ({
+		map: domain.addDependency(map, blockerId, blockedId),
+		result: undefined
+	}));
+}
+
+export async function removeDependency(
+	repository: StoryMapRepository,
+	caller: Caller,
+	mapId: MapId,
+	expectedVersion: number,
+	blockerId: StoryId,
+	blockedId: StoryId
+): Promise<void> {
+	await mutate(repository, caller, mapId, expectedVersion, (map) => ({
+		map: domain.removeDependency(map, blockerId, blockedId),
+		result: undefined
+	}));
+}
+
+// ---------------------------------------------------------------------------
 // Move / reorder / slice
 // ---------------------------------------------------------------------------
 
