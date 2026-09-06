@@ -134,4 +134,22 @@ describe('MongoStoryMapRepository (storage-specific)', () => {
 		const loaded = await repository.load(caller, saved.id);
 		expect(loaded!.map.activities[0].steps.map((s) => s.name)).toEqual(['Search']);
 	});
+
+	it('defaults dependencies to [] for a document written before the field existed', async () => {
+		// There are no migrations here (ADR 0003), so every map created before
+		// dependencies shipped has no such key. A cast in `toDomain` would
+		// typecheck and hand the domain `undefined`, and the first thing to touch
+		// it is `deleteStory` — so the symptom would be a 500 deleting a story
+		// from an ordinary pre-existing map, not a missing feature.
+		//
+		// Written with the driver rather than through `save`, because `save` always
+		// writes the field: this shape cannot be produced through the repository.
+		const { map } = addActivity(createStoryMap('Legacy'), 'Browse');
+		const saved = await repository.save(caller, map);
+		await collections(db).maps.updateOne({ _id: saved.id }, { $unset: { dependencies: '' } });
+
+		const access = await repository.load(caller, saved.id);
+
+		expect(access!.map.dependencies).toEqual([]);
+	});
 });

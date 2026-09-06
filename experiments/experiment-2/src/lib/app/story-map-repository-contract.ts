@@ -4,6 +4,7 @@ import type { MapId, UserId } from '$lib/domain/ids';
 import { ConflictError, ForbiddenError } from '$lib/domain/errors';
 import {
 	addActivity,
+	addDependency,
 	addStep,
 	addStory,
 	createStoryMap,
@@ -117,6 +118,27 @@ export function describeStoryMapRepositoryContract(
 				'Search'
 			]);
 			expect(loaded.stories.map((s) => s.title)).toEqual(['Filter by size', 'Sort by price']);
+		});
+
+		it('round-trips story dependencies', async () => {
+			// The only thing that catches an adapter dropping the new array. The two
+			// repositories are otherwise interchangeable, and the in-memory double
+			// clones the whole aggregate, so it literally cannot lose it — only a
+			// store that names its fields on the way out can, and one of them does.
+			const harness = await createHarness();
+			const owner = await harness.createUser();
+			const activity = addActivity(createStoryMap('Retail'), 'Browse');
+			const step = addStep(activity.map, activity.activity.id, 'Search');
+			const blocker = addStory(step.map, step.step.id, 'Create a product');
+			const blocked = addStory(blocker.map, step.step.id, 'Search by keyword');
+			const linked = addDependency(blocked.map, blocker.story.id, blocked.story.id);
+
+			const saved = await harness.repository.save(owner, linked);
+
+			const access = await harness.repository.load(owner, saved.id);
+			expect(access!.map.dependencies).toEqual([
+				{ blockerId: blocker.story.id, blockedId: blocked.story.id }
+			]);
 		});
 
 		it('lists the most recently created map first', async () => {

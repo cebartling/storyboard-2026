@@ -46,6 +46,22 @@ export interface Story {
 	rank: Rank;
 }
 
+/**
+ * A directional "blocks" edge between two Stories in one map (ADR 0019).
+ *
+ * The pair *is* the identity — that is exactly what the duplicate rule
+ * enforces — so there is no id to keep consistent with it. And an edge is never
+ * laid out on the board, so it has no `rank`: `dependencies` is deliberately
+ * left out of `inRankOrder`, whose `byRank` would sort on a field that is not
+ * there.
+ */
+export interface Dependency {
+	/** The story that must come first. */
+	blockerId: StoryId;
+	/** The story that waits on it. */
+	blockedId: StoryId;
+}
+
 export interface StoryMap {
 	id: MapId;
 	name: string;
@@ -54,6 +70,10 @@ export interface StoryMap {
 	activities: Activity[];
 	slices: Slice[];
 	stories: Story[];
+	/** Flat on the root beside `stories`, because an edge belongs to neither
+	 *  endpoint: nesting it under the blocker would make "what blocks me" a scan
+	 *  of every story, and make the two prune directions structurally different. */
+	dependencies: Dependency[];
 }
 
 /** A neighbour reference for a move/insert operation: the id of an existing
@@ -73,7 +93,8 @@ export function createStoryMap(name: string, createdAt: Date = new Date()): Stor
 		version: 0,
 		activities: [],
 		slices: [],
-		stories: []
+		stories: [],
+		dependencies: []
 	};
 }
 
@@ -287,6 +308,46 @@ function assertSliceBelongsToMap(map: StoryMap, sliceId: SliceId): void {
 	}
 }
 
+/** Every edge that does not touch one of `removed`. Used by the deletes that
+ *  actually remove stories, so no edge is left pointing at nothing — there is
+ *  no foreign key here to catch one (ADR 0003). */
+function withoutStories(dependencies: Dependency[], removed: Set<StoryId>): Dependency[] {
+	return dependencies.filter((d) => !removed.has(d.blockerId) && !removed.has(d.blockedId));
+}
+
+/**
+ * The chain of story ids from `from` to `to` along blocks-edges, or `null` when
+ * `to` is unreachable. Returned as a path rather than a boolean so a rejection
+ * can name the loop it would have closed.
+ *
+ * The `seen` set is not for termination — the stored graph is acyclic by
+ * induction, since every edge in it went through `addDependency` — it is for
+ * cost. Without it a diamond is re-walked once per path into it, and a document
+ * hand-edited into a cycle would hang here instead of being rejected.
+ */
+function pathBetween(dependencies: Dependency[], from: StoryId, to: StoryId): StoryId[] | null {
+	const successors = new Map<StoryId, StoryId[]>();
+	for (const d of dependencies) {
+		const existing = successors.get(d.blockerId);
+		if (existing) existing.push(d.blockedId);
+		else successors.set(d.blockerId, [d.blockedId]);
+	}
+
+	const seen = new Set<StoryId>([from]);
+	const stack: StoryId[][] = [[from]];
+	while (stack.length > 0) {
+		const path = stack.pop()!;
+		const node = path[path.length - 1];
+		if (node === to) return path;
+		for (const next of successors.get(node) ?? []) {
+			if (seen.has(next)) continue;
+			seen.add(next);
+			stack.push([...path, next]);
+		}
+	}
+	return null;
+}
+
 // ---------------------------------------------------------------------------
 // Rename / edit
 // ---------------------------------------------------------------------------
@@ -354,23 +415,31 @@ export function editStory(
 export function deleteActivity(map: StoryMap, activityId: ActivityId): StoryMap {
 	const activity = findActivity(map, activityId);
 	const deletedStepIds = new Set(activity.steps.map((s) => s.id));
+	const deletedStoryIds = new Set(
+		map.stories.filter((s) => deletedStepIds.has(s.stepId)).map((s) => s.id)
+	);
 	return {
 		...map,
 		activities: map.activities.filter((a) => a.id !== activityId),
-		stories: map.stories.filter((s) => !deletedStepIds.has(s.stepId))
+		stories: map.stories.filter((s) => !deletedStoryIds.has(s.id)),
+		dependencies: withoutStories(map.dependencies, deletedStoryIds)
 	};
 }
 
 /** Deleting a Step cascades to its Stories. */
 export function deleteStep(map: StoryMap, stepId: StepId): StoryMap {
 	findStep(map, stepId);
+	// Hoisted rather than filtering on `stepId` twice, so "what went" has one
+	// definition that both the story filter and the edge filter read.
+	const deletedStoryIds = new Set(map.stories.filter((s) => s.stepId === stepId).map((s) => s.id));
 	return {
 		...map,
 		activities: map.activities.map((a) => ({
 			...a,
 			steps: a.steps.filter((s) => s.id !== stepId)
 		})),
-		stories: map.stories.filter((s) => s.stepId !== stepId)
+		stories: map.stories.filter((s) => !deletedStoryIds.has(s.id)),
+		dependencies: withoutStories(map.dependencies, deletedStoryIds)
 	};
 }
 
@@ -435,7 +504,74 @@ export function deleteSlice(map: StoryMap, sliceId: SliceId): StoryMap {
 
 export function deleteStory(map: StoryMap, storyId: StoryId): StoryMap {
 	findStory(map, storyId);
-	return { ...map, stories: map.stories.filter((s) => s.id !== storyId) };
+	return {
+		...map,
+		stories: map.stories.filter((s) => s.id !== storyId),
+		dependencies: withoutStories(map.dependencies, new Set([storyId]))
+	};
+}
+
+// ---------------------------------------------------------------------------
+// Dependencies (ADR 0019)
+// ---------------------------------------------------------------------------
+
+/**
+ * Records that `blocker` must come before `blocked`.
+ *
+ * Existence is checked first, and it doubles as the same-map check: `map.stories`
+ * is the whole map, so "this story exists" and "this story belongs here" are one
+ * lookup — the same trick `addStory` plays with `findStep`.
+ */
+export function addDependency(map: StoryMap, blockerId: StoryId, blockedId: StoryId): StoryMap {
+	const blocker = findStory(map, blockerId);
+	const blocked = findStory(map, blockedId);
+
+	if (blockerId === blockedId) {
+		throw new InvariantError(`"${blocker.title}" cannot block itself`);
+	}
+	if (map.dependencies.some((d) => d.blockerId === blockerId && d.blockedId === blockedId)) {
+		throw new InvariantError(`"${blocker.title}" already blocks "${blocked.title}"`);
+	}
+
+	// Deliberately not checked above: the *reverse* edge. It is not a duplicate —
+	// the edges are directional and distinct — it is the shortest possible cycle,
+	// and it belongs to the check below, whose message says so. Reporting it as a
+	// duplicate would answer a question the user did not ask.
+	//
+	// Adding blocker -> blocked closes a loop exactly when `blocked` already
+	// reaches `blocker`, so the walk starts at the blocked story and looks for
+	// the blocker. Reversed, this would ask "does the blocker already reach the
+	// blocked story?" — which accepts real 2-cycles and rejects a merely
+	// redundant transitive edge.
+	const loop = pathBetween(map.dependencies, blockedId, blockerId);
+	if (loop) {
+		const chain = [...loop, blockerId]
+			.map((id) => `"${findStory(map, id).title}"`)
+			.join(' blocks ');
+		throw new InvariantError(
+			`"${blocker.title}" cannot block "${blocked.title}": that would create a cycle (${chain})`
+		);
+	}
+
+	return { ...map, dependencies: [...map.dependencies, { blockerId, blockedId }] };
+}
+
+/**
+ * Drops one edge, in the direction given.
+ *
+ * Throws on a missing edge rather than being idempotent, matching `deleteStory`.
+ * The idempotent reading would be "someone else already removed it", but any
+ * removal bumps the version, so a stale caller is refused with a 409 before this
+ * runs — a missing edge here can only be a malformed request.
+ */
+export function removeDependency(map: StoryMap, blockerId: StoryId, blockedId: StoryId): StoryMap {
+	const remaining = map.dependencies.filter(
+		(d) => !(d.blockerId === blockerId && d.blockedId === blockedId)
+	);
+	if (remaining.length === map.dependencies.length) {
+		throw new InvariantError(`No dependency from ${blockerId} to ${blockedId}`);
+	}
+	return { ...map, dependencies: remaining };
 }
 
 // ---------------------------------------------------------------------------

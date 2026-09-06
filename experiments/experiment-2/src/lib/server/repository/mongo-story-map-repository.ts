@@ -218,7 +218,13 @@ function toDomain(doc: MapDoc): StoryMap {
 		version: doc.version,
 		activities: doc.activities as StoryMap['activities'],
 		slices: doc.slices as StoryMap['slices'],
-		stories: doc.stories as StoryMap['stories']
+		stories: doc.stories as StoryMap['stories'],
+		// `?? []`, not a cast like its neighbours. They can cast because they were
+		// always written; this field was not, so a cast would typecheck and hand
+		// the domain `undefined`. The first `map.dependencies.filter(...)` is
+		// inside `deleteStory`, so the symptom would be a 500 deleting a story
+		// from any map that predates this field.
+		dependencies: (doc.dependencies ?? []) as StoryMap['dependencies']
 	});
 }
 
@@ -234,6 +240,8 @@ function toDocument(map: StoryMap, version: number): MapDoc {
 		// `sliceId` is written explicitly as `null` for the unsliced band rather
 		// than omitted: Mongo distinguishes a missing field from a null one, and
 		// the unsliced band is where every new story starts.
-		stories: map.stories.map((s) => ({ ...s, sliceId: s.sliceId ?? null }))
+		stories: map.stories.map((s) => ({ ...s, sliceId: s.sliceId ?? null })),
+		// No defaulting on the way out: `createStoryMap` guarantees the array.
+		dependencies: map.dependencies
 	};
 }
