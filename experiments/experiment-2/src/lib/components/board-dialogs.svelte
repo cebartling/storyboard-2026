@@ -56,6 +56,13 @@
 	import { tick, untrack } from 'svelte';
 	import type { SubjectStatus } from '$lib/board/dialog-subject';
 	import { renderMarkdown } from '$lib/markdown/render-markdown';
+	import { filterCandidates, type Candidate } from '$lib/board/dependency-candidates';
+	import { tooltip } from '$lib/actions/tooltip';
+	import type { BoardViewModel } from '$lib/board/board-view-model';
+	import Plus from '@lucide/svelte/icons/plus';
+	import X from '@lucide/svelte/icons/x';
+
+	type BoardDependency = BoardViewModel['dependencies'][number];
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import type { SubmitFunction } from '@sveltejs/kit';
@@ -67,6 +74,8 @@
 		clientId,
 		subject,
 		story = null,
+		dependencies = [],
+		candidates = [],
 		onClose,
 		onLateFailure,
 		onReplaceSubject,
@@ -93,6 +102,10 @@
 		 * story is gone.
 		 */
 		story?: { title: string; description: string | null } | null;
+		/** Every edge on the board, both endpoints resolved (ADR 0019). */
+		dependencies?: BoardDependency[];
+		/** Stories this one could legally be linked to. */
+		candidates?: Candidate[];
 		/** `deleted` when the submission removed the thing the dialog was
 		 *  editing, so the caller can put focus somewhere that still exists —
 		 *  the trigger that opened the dialog is gone by then. */
@@ -110,6 +123,47 @@
 	} = $props();
 
 	const storyMarkdown = $derived(renderMarkdown(story?.description ?? null));
+
+	// The two directions, sorted by title: edges carry no rank (ADR 0019), so an
+	// order has to be chosen somewhere and the reader's is the one that matters.
+	const viewedStoryId = $derived(dialog?.kind === 'viewStory' ? dialog.storyId : null);
+	const blockedBy = $derived(
+		dependencies
+			.filter((d) => d.blockedId === viewedStoryId)
+			.sort((a, b) => a.blockerTitle.localeCompare(b.blockerTitle))
+	);
+	const blocks = $derived(
+		dependencies
+			.filter((d) => d.blockerId === viewedStoryId)
+			.sort((a, b) => a.blockedTitle.localeCompare(b.blockedTitle))
+	);
+
+	/**
+	 * The dependency section, so focus has somewhere real to land after a remove:
+	 * the button that was clicked is gone from the DOM by then, and a modal with
+	 * focus on <body> is a keyboard dead end.
+	 */
+	let dependencySection = $state<HTMLElement | null>(null);
+
+	/** The picker is collapsed until asked for — see the comment at its markup. */
+	let pickerOpen = $state(false);
+	let candidateQuery = $state('');
+	let chosenCandidate = $state<string | null>(null);
+	const CANDIDATE_LIMIT = 50;
+	const shownCandidates = $derived(filterCandidates(candidates, candidateQuery, CANDIDATE_LIMIT));
+
+	$effect(() => {
+		// Reading it into a local is what subscribes this effect: reset the picker
+		// whenever the dialog turns to a different story, or it would open
+		// pre-filled with the last story's search.
+		const showing = viewedStoryId;
+		if (showing === null) return;
+		untrack(() => {
+			pickerOpen = false;
+			candidateQuery = '';
+			chosenCandidate = null;
+		});
+	});
 
 	const subjectDeleted = $derived(subject?.status === 'deleted');
 	const subjectChanged = $derived(subject?.status === 'changed');
@@ -229,6 +283,23 @@
 			// closing; Escape and the close button are still the way out.
 			// Every other editor is a one-off edit, and closing is the right
 			// end to it.
+			// The detail view writes now (ADR 0019) and must not close on success —
+			// removing a dependency would take the view the reader is standing in
+			// with it. Re-snapshotting matters more here than for `addStory`,
+			// because two removes in a row is an ordinary thing to do.
+			if (submittedFor?.kind === 'viewStory') {
+				await tick();
+				openedAtVersion = boardVersion;
+				pickerOpen = false;
+				candidateQuery = '';
+				chosenCandidate = null;
+				submitting = false;
+				// The control that was clicked has just been removed from the DOM,
+				// so focus would fall to <body> inside an inerted page.
+				dependencySection?.focus();
+				return;
+			}
+
 			if (submittedFor?.kind === 'addStory') {
 				formElement.reset();
 				// The version this dialog holds was spent on the add that just
@@ -254,6 +325,23 @@
 		};
 	};
 </script>
+
+{#snippet removeForm(edge: BoardDependency, otherTitle: string)}
+	<form method="POST" action="?/removeDependency" use:enhance={submit} class="shrink-0">
+		<input type="hidden" name="version" value={openedAtVersion} />
+		<input type="hidden" name="blockerId" value={edge.blockerId} />
+		<input type="hidden" name="blockedId" value={edge.blockedId} />
+		<button
+			type="submit"
+			class="btn btn-icon btn-danger-quiet rounded"
+			aria-label="Remove dependency on {otherTitle}"
+			use:tooltip={'Remove dependency'}
+			disabled={submitting || subjectDeleted}
+		>
+			<X class="size-3.5" />
+		</button>
+	</form>
+{/snippet}
 
 <Modal
 	open={dialog !== null}
@@ -564,6 +652,134 @@
 					{@html storyMarkdown}
 				</div>
 			{/if}
+			<!-- Dependencies (ADR 0019). This is what stopped `viewStory` being
+			     form-free: it now writes, so its forms carry the version and the
+			     client id like every other editor, and the submit handler keeps it
+			     open instead of closing on success. -->
+			<div
+				class="border-line mt-5 border-t pt-4 focus:outline-none"
+				bind:this={dependencySection}
+				tabindex="-1"
+			>
+				{#if blockedBy.length > 0}
+					<p class="field-label">Blocked by</p>
+					<ul class="mt-1.5 flex flex-col gap-1" data-testid="blocked-by-list">
+						{#each blockedBy as edge (edge.blockerId)}
+							<li class="flex items-center justify-between gap-2 text-sm">
+								<span class="break-words">{edge.blockerTitle}</span>
+								{@render removeForm(edge, edge.blockerTitle)}
+							</li>
+						{/each}
+					</ul>
+				{/if}
+
+				{#if blocks.length > 0}
+					<p class="field-label {blockedBy.length > 0 ? 'mt-3' : ''}">Blocks</p>
+					<ul class="mt-1.5 flex flex-col gap-1" data-testid="blocks-list">
+						{#each blocks as edge (edge.blockedId)}
+							<li class="flex items-center justify-between gap-2 text-sm">
+								<span class="break-words">{edge.blockedTitle}</span>
+								{@render removeForm(edge, edge.blockedTitle)}
+							</li>
+						{/each}
+					</ul>
+				{/if}
+
+				{#if blockedBy.length === 0 && blocks.length === 0}
+					<p class="text-ink-muted text-sm italic">No dependencies.</p>
+				{/if}
+
+				<!-- Collapsed until asked for, and not only to save space: `Modal`
+				     focuses the first non-hidden input when it opens, so a picker
+				     rendered up front would take focus off the description the
+				     reader came here for. -->
+				{#if pickerOpen}
+					<form
+						method="POST"
+						action="?/addDependency"
+						use:enhance={submit}
+						class="border-line mt-4 flex flex-col gap-3 border-t pt-4"
+					>
+						<input type="hidden" name="version" value={openedAtVersion} />
+						<input type="hidden" name="storyId" value={dialog.storyId} />
+
+						<fieldset class="flex flex-col gap-1.5">
+							<legend class="field-label">Direction</legend>
+							<label class="flex items-center gap-2 text-sm">
+								<input type="radio" name="direction" value="blocks" checked />
+								This story blocks
+							</label>
+							<label class="flex items-center gap-2 text-sm">
+								<input type="radio" name="direction" value="blockedBy" />
+								This story is blocked by
+							</label>
+						</fieldset>
+
+						<div class="flex flex-col gap-1.5">
+							<label for="dialog-dependency-filter" class="field-label">Find a story</label>
+							<input
+								id="dialog-dependency-filter"
+								type="search"
+								class="input"
+								placeholder="Type to narrow the list…"
+								bind:value={candidateQuery}
+							/>
+						</div>
+
+						{#if shownCandidates.total === 0}
+							<p class="text-ink-muted text-sm italic">No stories match.</p>
+						{:else}
+							<div
+								class="border-line max-h-52 overflow-y-auto rounded-md border"
+								role="radiogroup"
+								aria-label="Candidate stories"
+							>
+								{#each shownCandidates.shown as candidate (candidate.id)}
+									<label
+										class="hover:bg-surface flex cursor-pointer items-start gap-2 px-2 py-1.5 text-sm"
+									>
+										<input
+											type="radio"
+											name="otherId"
+											value={candidate.id}
+											class="mt-1"
+											bind:group={chosenCandidate}
+										/>
+										<span class="flex-1">
+											<span class="break-words">{candidate.title}</span>
+											<span class="text-ink-muted block text-xs">
+												{candidate.stepName} · {candidate.sliceName}
+											</span>
+										</span>
+									</label>
+								{/each}
+							</div>
+							<!-- A capped list that just stops reads as "there is nothing
+							     else", so it says how much it is not showing. -->
+							<p class="text-ink-muted text-xs" data-testid="candidate-count">
+								Showing {shownCandidates.shown.length} of {shownCandidates.total}
+							</p>
+						{/if}
+
+						<button
+							type="submit"
+							class="btn btn-primary self-start"
+							disabled={submitting || subjectDeleted || chosenCandidate === null}>Add</button
+						>
+					</form>
+				{:else}
+					<button
+						type="button"
+						class="btn btn-quiet mt-4"
+						disabled={candidates.length === 0}
+						onclick={() => (pickerOpen = true)}
+					>
+						<Plus class="size-3.5" />
+						Add dependency
+					</button>
+				{/if}
+			</div>
+
 			<div class="border-line mt-5 border-t pt-4">
 				<button
 					type="button"

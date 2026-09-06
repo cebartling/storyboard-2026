@@ -4,6 +4,9 @@ import { page } from 'vitest/browser';
 import { tick } from 'svelte';
 import BoardDialogs, { type BoardDialog, actionError } from './board-dialogs.svelte';
 import type { SubjectStatus } from '$lib/board/dialog-subject';
+import type { StoryId } from '$lib/domain/ids';
+import type { BoardViewModel } from '$lib/board/board-view-model';
+import type { Candidate } from '$lib/board/dependency-candidates';
 
 // These tests assert what each `kind` renders — the action it posts, the
 // hidden ids it carries, and that fields prefill. They deliberately never
@@ -23,6 +26,8 @@ async function open(
 	extra: Partial<{
 		story: { title: string; description: string | null } | null;
 		subject: SubjectStatus | null;
+		dependencies: BoardViewModel['dependencies'];
+		candidates: Candidate[];
 		onOpenDialog: (next: BoardDialog) => void;
 	}> = {}
 ) {
@@ -186,13 +191,27 @@ describe('actionError', () => {
 			{ kind: 'addSlice' },
 			{ kind: 'editSlice', sliceId: 'sl-1', name: 'Release 1' },
 			{ kind: 'addStory', stepId: 's-1', sliceId: null, scopeLabel: 'Search' },
-			{ kind: 'editStory', storyId: 'st-1', title: 'Keyword search', description: null }
+			{ kind: 'editStory', storyId: 'st-1', title: 'Keyword search', description: null },
+			// It renders forms now (ADR 0019) — a remove per edge, and the picker —
+			// so it is held to the same rule as every other editor. Needs a story
+			// and an edge, or it renders nothing to check.
+			{ kind: 'viewStory', storyId: 'st-1' }
 		];
 
 		it.each(everyKind.map((dialog) => [dialog.kind, dialog] as const))(
 			'%s sends the board version with every form it renders',
 			async (_kind, dialog) => {
-				const dialogEl = await open(dialog, 3);
+				const dialogEl = await open(dialog, 3, {
+					story: { title: 'Keyword search', description: null },
+					dependencies: [
+						{
+							blockerId: 'st-1' as StoryId,
+							blockerTitle: 'Keyword search',
+							blockedId: 'st-2' as StoryId,
+							blockedTitle: 'Filter by price'
+						}
+					]
+				});
 
 				const forms = [...dialogEl.querySelectorAll('form')] as HTMLFormElement[];
 				expect(forms.length).toBeGreaterThan(0);
@@ -297,7 +316,10 @@ describe('actionError', () => {
 			});
 		});
 
-		it('carries no form of its own', async () => {
+		// It used to carry no form at all (ADR 0018). Dependencies changed that
+		// (ADR 0019), but only for them: the story's own fields are still read
+		// here and edited elsewhere.
+		it('has no form until it has a dependency to remove', async () => {
 			const dialogEl = await open({ kind: 'viewStory', storyId: 's-7' }, 3, {
 				story: { title: 'Search', description: 'x' }
 			});
@@ -328,6 +350,128 @@ describe('actionError', () => {
 			);
 
 			expect(dialogEl.querySelector('[data-testid="subject-deleted"]')).not.toBeNull();
+		});
+	});
+
+	// Dependencies live in the detail view (ADR 0019).
+	describe('viewStory dependencies', () => {
+		const edge = {
+			blockerId: 'st-1' as StoryId,
+			blockerTitle: 'Create a product',
+			blockedId: 'st-2' as StoryId,
+			blockedTitle: 'Search by keyword'
+		};
+		const story = { title: 'Create a product', description: null };
+		const candidates: Candidate[] = [
+			{
+				id: 'st-3' as StoryId,
+				title: 'Filter by price',
+				stepName: 'Filter',
+				sliceName: 'Unsliced'
+			},
+			{ id: 'st-4' as StoryId, title: 'Sort results', stepName: 'Filter', sliceName: 'Unsliced' }
+		];
+
+		it('lists what this story blocks, and what blocks it, separately', async () => {
+			const dialogEl = await open({ kind: 'viewStory', storyId: 'st-1' }, 3, {
+				story,
+				dependencies: [
+					edge,
+					{
+						blockerId: 'st-9' as StoryId,
+						blockerTitle: 'Sign in',
+						blockedId: 'st-1' as StoryId,
+						blockedTitle: 'Create a product'
+					}
+				]
+			});
+
+			expect(dialogEl.querySelector('[data-testid="blocks-list"]')?.textContent).toContain(
+				'Search by keyword'
+			);
+			expect(dialogEl.querySelector('[data-testid="blocked-by-list"]')?.textContent).toContain(
+				'Sign in'
+			);
+		});
+
+		it('says so when there are none', async () => {
+			const dialogEl = await open({ kind: 'viewStory', storyId: 'st-1' }, 3, { story });
+
+			expect(dialogEl.textContent).toContain('No dependencies');
+		});
+
+		it('carries the oriented pair on the remove form', async () => {
+			const dialogEl = await open({ kind: 'viewStory', storyId: 'st-1' }, 3, {
+				story,
+				dependencies: [edge]
+			});
+
+			const removeForm = form(dialogEl, '?/removeDependency');
+			expect(hidden(removeForm, 'blockerId')).toBe('st-1');
+			expect(hidden(removeForm, 'blockedId')).toBe('st-2');
+		});
+
+		// Collapsed on open so `Modal`'s focus-the-first-field effect has nothing
+		// to take focus onto — the reader opened this to read the description.
+		it('keeps the picker collapsed until it is asked for', async () => {
+			const dialogEl = await open({ kind: 'viewStory', storyId: 'st-1' }, 3, {
+				story,
+				candidates
+			});
+
+			expect(dialogEl.querySelector('input[type="search"]')).toBeNull();
+
+			await page.getByRole('button', { name: 'Add dependency' }).click();
+
+			await expect.element(page.getByRole('searchbox')).toBeVisible();
+		});
+
+		it('narrows the candidates as the query changes, and says how many it hides', async () => {
+			const dialogEl = await open({ kind: 'viewStory', storyId: 'st-1' }, 3, {
+				story,
+				candidates
+			});
+			await page.getByRole('button', { name: 'Add dependency' }).click();
+
+			await page.getByRole('searchbox').fill('Sort');
+
+			const group = dialogEl.querySelector('[role="radiogroup"]')!;
+			expect(group.querySelectorAll('input[type="radio"]')).toHaveLength(1);
+			expect(dialogEl.querySelector('[data-testid="candidate-count"]')?.textContent).toContain(
+				'1 of 1'
+			);
+		});
+
+		it('will not submit until a candidate is chosen', async () => {
+			const dialogEl = await open({ kind: 'viewStory', storyId: 'st-1' }, 3, {
+				story,
+				candidates
+			});
+			await page.getByRole('button', { name: 'Add dependency' }).click();
+
+			const add = dialogEl.querySelector<HTMLButtonElement>(
+				'form[action="?/addDependency"] button[type="submit"]'
+			)!;
+			expect(add.disabled).toBe(true);
+
+			await page.getByRole('radio', { name: /Sort results/ }).click();
+
+			expect(add.disabled).toBe(false);
+		});
+
+		it('offers no picker when every other story is already linked', async () => {
+			const dialogEl = await open({ kind: 'viewStory', storyId: 'st-1' }, 3, {
+				story,
+				candidates: []
+			});
+
+			const trigger = dialogEl.querySelector<HTMLButtonElement>('button:not([type="submit"])');
+			expect(
+				[...dialogEl.querySelectorAll('button')].find((b) =>
+					b.textContent?.includes('Add dependency')
+				)?.disabled
+			).toBe(true);
+			expect(trigger).not.toBeNull();
 		});
 	});
 });
