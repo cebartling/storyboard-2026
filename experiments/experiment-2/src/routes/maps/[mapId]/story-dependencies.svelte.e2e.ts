@@ -57,6 +57,24 @@ test('links one story to another, and both stories say so', async ({ page }) => 
 	await expect(other.getByTestId('blocked-by-list')).toContainText('Create a product');
 });
 
+// The route swaps the pair when the direction is `blockedBy`, and every other
+// test here links the other way round — so a swapped ternary would record every
+// "is blocked by" edge backwards with nothing to notice it.
+test('links the other way round when the direction says blocked by', async ({ page }) => {
+	await boardWith(page, 'Search by keyword', 'Create a product');
+
+	const detail = await link(page, 'Search by keyword', 'blockedBy', 'Create a product');
+
+	// The story the dialog belongs to is the one waiting.
+	await expect(detail.getByTestId('blocked-by-list')).toContainText('Create a product');
+	await expect(detail.getByTestId('blocks-list')).toHaveCount(0);
+
+	await detail.getByRole('button', { name: 'Close' }).click();
+	const other = await openStory(page, 'Create a product');
+	await expect(other.getByTestId('blocks-list')).toContainText('Search by keyword');
+	await expect(other.getByTestId('blocked-by-list')).toHaveCount(0);
+});
+
 test('badges only the blocked story, not the blocker', async ({ page }) => {
 	await boardWith(page, 'Create a product', 'Search by keyword');
 	const detail = await link(page, 'Create a product', 'blocks', 'Search by keyword');
