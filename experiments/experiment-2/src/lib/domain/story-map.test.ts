@@ -735,12 +735,27 @@ describe('dependencies', () => {
 			expect(() => addDependency(forward, ids[1], ids[0])).not.toThrow(/already blocks/);
 		});
 
-		it('rejects a longer cycle and names the chain', () => {
+		// Asserted as an exact string, not a loose regex: the chain is easy to get
+		// subtly wrong — an off-by-one here repeats the last story and omits the
+		// edge being refused — and a regex listing the three titles in order
+		// passes on exactly that mistake.
+		it('rejects a longer cycle and names the loop it would close', () => {
 			const { map, ids } = mapWithStories(3);
 			const [a, b, c] = ids;
 			const chain = addDependency(addDependency(map, a, b), b, c);
 
-			expect(() => addDependency(chain, c, a)).toThrow(/cycle.*"A".*"B".*"C"/s);
+			expect(() => addDependency(chain, c, a)).toThrow(
+				'"C" cannot block "A": that would create a cycle ("C" blocks "A" blocks "B" blocks "C")'
+			);
+		});
+
+		it('names the two-story loop the same way', () => {
+			const { map, ids } = mapWithStories(2);
+			const forward = addDependency(map, ids[0], ids[1]);
+
+			expect(() => addDependency(forward, ids[1], ids[0])).toThrow(
+				'"B" cannot block "A": that would create a cycle ("B" blocks "A" blocks "B")'
+			);
 		});
 
 		it('links stories in different steps and different slices', () => {

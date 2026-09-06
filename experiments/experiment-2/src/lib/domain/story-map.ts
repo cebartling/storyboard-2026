@@ -545,7 +545,11 @@ export function addDependency(map: StoryMap, blockerId: StoryId, blockedId: Stor
 	// redundant transitive edge.
 	const loop = pathBetween(map.dependencies, blockedId, blockerId);
 	if (loop) {
-		const chain = [...loop, blockerId]
+		// `loop` already runs from the blocked story to the blocker, so the edge
+		// being refused goes on the *front* to close it: C -> A -> B -> C reads as
+		// the loop it would make. Appending the blocker instead repeats the tail
+		// and leaves out the edge the user actually asked for.
+		const chain = [blockerId, ...loop]
 			.map((id) => `"${findStory(map, id).title}"`)
 			.join(' blocks ');
 		throw new InvariantError(
