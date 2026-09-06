@@ -1666,7 +1666,18 @@ export function buildRetailCommerceMap(createdAt: Date = new Date()): StoryMap {
 
 	// Resolved after every story exists, because an edge names two of them and
 	// the blueprint is written in board order rather than dependency order.
-	const storyIdByTitle = new Map(map.stories.map((story) => [story.title, story.id]));
+	const storyIdByTitle = new Map<string, (typeof map.stories)[number]['id']>();
+	for (const story of map.stories) {
+		// Rejected rather than letting the last one win: a duplicate title would
+		// silently attach a seeded edge to whichever story happened to be built
+		// last, and the blueprint's only handle on a story is its title.
+		if (storyIdByTitle.has(story.title)) {
+			throw new Error(
+				`Seed story titles must be unique across the map; "${story.title}" appears twice.`
+			);
+		}
+		storyIdByTitle.set(story.title, story.id);
+	}
 	for (const [blockerTitle, blockedTitle] of retailCommerceDependencies) {
 		const blockerId = storyIdByTitle.get(blockerTitle);
 		const blockedId = storyIdByTitle.get(blockedTitle);

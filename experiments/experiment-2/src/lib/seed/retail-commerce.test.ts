@@ -222,6 +222,16 @@ describe('buildRetailCommerceMap', () => {
 			expect(asTitles).toEqual(retailCommerceDependencies);
 		});
 
+		// Per-step uniqueness is asserted elsewhere; the dependency blueprint needs
+		// it across the whole map, because a title is its only handle on a story.
+		it('keeps every story title unique across the map', () => {
+			const titles = retailCommerceBlueprint.flatMap((a) =>
+				a.steps.flatMap((s) => s.stories.map((x) => x.title))
+			);
+
+			expect(new Set(titles).size).toBe(titles.length);
+		});
+
 		it('names only stories that are on the map', () => {
 			// The builder throws on a typo rather than silently seeding fewer
 			// edges, and this is the test that would notice a renamed story.
