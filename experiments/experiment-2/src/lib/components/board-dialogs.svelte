@@ -231,6 +231,15 @@
 			// end to it.
 			if (submittedFor?.kind === 'addStory') {
 				formElement.reset();
+				// The version this dialog holds was spent on the add that just
+				// succeeded, so re-snapshot it before the next one. Every other
+				// dialog closes here and gets a fresh snapshot on its next open;
+				// this is the only one that lives long enough to submit twice, and
+				// without this the second add is refused as a conflict with nobody.
+				// `tick()` for the same reason the 409 branch needs it — let the
+				// refetch's new value reach the `boardVersion` prop first.
+				await tick();
+				openedAtVersion = boardVersion;
 				submitting = false;
 				formElement.querySelector<HTMLInputElement>('input[name="title"]')?.focus();
 				return;
