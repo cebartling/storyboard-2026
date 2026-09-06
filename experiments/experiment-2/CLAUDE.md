@@ -21,8 +21,8 @@ Read `documentation/` before changing anything structural — `glossary.md` for 
 vocabulary (note: we say **Step** where Patton says _user task_), `domain-model.md` for
 entities and invariants, `architecture.md` for the layering, and `adr/` for why. ADR 0006
 is the one that constrains most changes; ADR 0010 (canvas) and ADR 0011 (dialog editing)
-constrain most board work, and ADR 0018 (Markdown descriptions) owns the app's only
-`{@html}`.
+constrain most board work; ADR 0018 (Markdown descriptions) owns the app's only `{@html}`,
+and ADR 0019 (story dependencies) is the one place the board writes from a read-only dialog.
 
 ## Commands
 
@@ -100,6 +100,15 @@ the seed, so no test or fixture breaks if you delete it.
   ADR 0010. Adding a control to a cell or header means adding a `BoardDialog` case, not an
   inline form. Adding a case means three edits, all enforced by the compiler: the union
   member, the `TITLES` entry, and a `subjectStatus` case in `src/lib/board/dialog-subject.ts`.
+- **Story dependencies are directional blocks-edges on the aggregate** (ADR 0019), edited in
+  the story detail dialog. Three things about them are easy to get wrong:
+  - **`deleteSlice` must not prune edges** — it un-slices stories rather than deleting them, so
+    nothing dangles. `deleteStory`, `deleteStep` and `deleteActivity` do prune, and there is no
+    foreign key to catch a miss.
+  - **The cycle check walks from the blocked story to the blocker.** Reversed, it accepts real
+    two-story cycles and rejects a redundant transitive edge.
+  - **The detail dialog stays open across its writes** and re-snapshots the version. Every other
+    editor closes; this one would close the view the reader is standing in.
 - **Story descriptions are Markdown, rendered only in the `viewStory` dialog** (ADR 0018).
   `src/lib/markdown/render-markdown.ts` parses with `marked` and sanitises with DOMPurify
   against an explicit allowlist; it is the app's **only** `{@html}` and there is no CSP

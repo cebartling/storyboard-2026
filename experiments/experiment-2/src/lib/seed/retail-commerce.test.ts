@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	buildRetailCommerceMap,
 	retailCommerceBlueprint,
+	retailCommerceDependencies,
 	retailCommerceSliceNames,
 	storyDescription
 } from './retail-commerce';
@@ -203,6 +204,37 @@ describe('buildRetailCommerceMap', () => {
 			expect(all).toContain('| --- |');
 			expect(all).toContain('> ');
 			expect(all).toContain('](https://');
+		});
+	});
+
+	// The seed is the only board anyone sees before drawing their own, so it is
+	// the only place the dependency feature is visible without setting it up.
+	describe('dependencies', () => {
+		it('links the seeded stories the blueprint names', () => {
+			const map = buildRetailCommerceMap();
+			const titleById = new Map(map.stories.map((s) => [s.id, s.title]));
+
+			const asTitles = map.dependencies.map((d) => [
+				titleById.get(d.blockerId),
+				titleById.get(d.blockedId)
+			]);
+
+			expect(asTitles).toEqual(retailCommerceDependencies);
+		});
+
+		it('names only stories that are on the map', () => {
+			// The builder throws on a typo rather than silently seeding fewer
+			// edges, and this is the test that would notice a renamed story.
+			const titles = new Set(
+				retailCommerceBlueprint.flatMap((a) =>
+					a.steps.flatMap((s) => s.stories.map((x) => x.title))
+				)
+			);
+
+			for (const [blocker, blocked] of retailCommerceDependencies) {
+				expect(titles.has(blocker), blocker).toBe(true);
+				expect(titles.has(blocked), blocked).toBe(true);
+			}
 		});
 	});
 });

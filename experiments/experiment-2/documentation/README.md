@@ -15,11 +15,11 @@ Start here:
 
 Then the decision record:
 
-- **[adr/](./adr/)** — the numbered ADRs (0001–0018) behind the choices above. 0006 is the
+- **[adr/](./adr/)** — the numbered ADRs (0001–0019) behind the choices above. 0006 is the
   direct written answer to "would hexagonal architecture be helpful here?" and is worth
-  reading even if you skip the others. 0003, 0016, 0017 and 0018 are this experiment's own —
-  MongoDB and the document model, the compare-and-set, why everything runs on Node, and
-  Markdown story descriptions.
+  reading even if you skip the others. 0003, 0016, 0017, 0018 and 0019 are this experiment's own —
+  MongoDB and the document model, the compare-and-set, why everything runs on Node, Markdown
+  story descriptions, and story dependencies.
 
   The rest are carried over from `experiment-1` with their reasoning intact, because it was
   never about storage. Three moved number: its 0003 (SQLite) is replaced by this 0003, its
