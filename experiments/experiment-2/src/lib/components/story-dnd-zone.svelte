@@ -8,6 +8,8 @@
 		id: string;
 		title: string;
 		description: string | null;
+		/** Optional so existing fixtures keep typechecking; absent means zero. */
+		blockedByCount?: number;
 	}
 
 	export interface MoveDetail {
@@ -123,6 +125,7 @@
 		<StoryCard
 			id={item.id}
 			title={item.title}
+			blockedByCount={item.blockedByCount}
 			onEdit={() => onEditStory(item)}
 			onView={() => onViewStory(item)}
 		/>
