@@ -126,9 +126,13 @@ describe('StoryCard', () => {
 				onView: () => {}
 			});
 
+			// The accessible *name*, not the attribute: an aria-label on a bare
+			// <span> is ignored, so asserting the attribute would pass while a
+			// screen reader still announced only "1". `role="img"` is what makes
+			// the label count, and this assertion is what notices if it goes.
 			await expect
 				.element(page.getByTestId('deps-badge-story-12'))
-				.toHaveAttribute('aria-label', 'Blocked by 1 story');
+				.toHaveAccessibleName('Blocked by 1 story');
 		});
 
 		it('pluralises', async () => {
@@ -142,7 +146,7 @@ describe('StoryCard', () => {
 
 			await expect
 				.element(page.getByTestId('deps-badge-story-13'))
-				.toHaveAttribute('aria-label', 'Blocked by 3 stories');
+				.toHaveAccessibleName('Blocked by 3 stories');
 		});
 
 		// BoardViewport's INTERACTIVE_SELECTOR is

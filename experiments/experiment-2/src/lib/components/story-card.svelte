@@ -50,6 +50,7 @@
 		<span
 			class="border-danger/25 bg-danger/8 text-danger inline-flex shrink-0 items-center gap-0.5 rounded border px-1 py-0.5 text-[0.7rem] font-medium"
 			data-testid="deps-badge-{id}"
+			role="img"
 			aria-label={blockedLabel}
 			use:tooltip={blockedLabel}
 		>
