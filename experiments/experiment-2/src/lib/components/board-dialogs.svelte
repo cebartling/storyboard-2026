@@ -232,7 +232,7 @@
 	const submit: SubmitFunction = ({ formElement, formData }) => {
 		error = null;
 		submitting = true;
-		// Set here rather than as a hidden input in each of the twelve forms: it
+		// Set here rather than as a hidden input in every form: it
 		// is a constant for the life of the page, so there is nothing to snapshot
 		// and nothing a form reset could revert (unlike `version`).
 		formData.set('clientId', clientId);
@@ -280,7 +280,7 @@
 			// Everything else is `success` — or `redirect`, which falls through
 			// here deliberately: suppressing `applyAction` means nothing would
 			// follow the redirect, so it would be discarded silently. None of
-			// the eleven board actions redirects (only `?/createMap` on `/`
+			// the board actions redirects (only `?/createMap` on `/`
 			// does, and it is not enhanced), so there is no case to handle yet.
 			// An action that starts redirecting needs an explicit branch here.
 			//
@@ -639,8 +639,10 @@
 		</form>
 	{:else if dialog?.kind === 'viewStory'}
 		<!-- The read half of ADR 0018, and the only place a description is
-		     legible. No form and no version input: this changes nothing, so it
-		     has no claim on the aggregate.
+		     legible. The story's own fields stay read-only here — title and
+		     description are edited next door — but dependencies are added and
+		     removed from this dialog (ADR 0019), so it does now carry forms and a
+		     version, and it deliberately stays open across them.
 
 		     `{@html}` is used here and nowhere else in this app. Everything it
 		     renders has been through `renderMarkdown`, which parses with `marked`
