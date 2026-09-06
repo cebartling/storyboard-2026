@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { buildBoardViewModel } from './board-view-model';
-import { addActivity, addSlice, addStep, addStory, createStoryMap } from '$lib/domain/story-map';
+import {
+	addActivity,
+	addDependency,
+	addSlice,
+	addStep,
+	addStory,
+	createStoryMap
+} from '$lib/domain/story-map';
 import type { StoryMap } from '$lib/domain/story-map';
 
 /**
@@ -95,5 +102,75 @@ describe('buildBoardViewModel', () => {
 		const unsliced = board.cells.find((c) => c.stepId === stepId && c.sliceId === null);
 		expect(sliced?.stories.map((s) => s.title)).toEqual(['Keyword search']);
 		expect(unsliced?.stories.map((s) => s.title)).toEqual(['Aisle filters']);
+	});
+});
+
+describe('dependencies', () => {
+	/** One step carrying three stories, A blocks B and C blocks B. */
+	function linkedMap() {
+		let map = createStoryMap('Retail');
+		const activity = addActivity(map, 'Browse');
+		map = activity.map;
+		const step = addStep(map, activity.activity.id, 'Search');
+		map = step.map;
+		const a = addStory(map, step.step.id, 'A');
+		map = a.map;
+		const b = addStory(map, step.step.id, 'B');
+		map = b.map;
+		const c = addStory(map, step.step.id, 'C');
+		map = c.map;
+		map = addDependency(map, a.story.id, b.story.id);
+		map = addDependency(map, c.story.id, b.story.id);
+		return { map, stepId: step.step.id, a: a.story.id, b: b.story.id, c: c.story.id };
+	}
+
+	function storyIn(board: ReturnType<typeof buildBoardViewModel>, title: string) {
+		return board.cells.flatMap((cell) => cell.stories).find((s) => s.title === title)!;
+	}
+
+	it('counts both directions on the right story', () => {
+		const board = buildBoardViewModel(linkedMap().map);
+
+		expect(storyIn(board, 'B')).toMatchObject({ blockedByCount: 2, blocksCount: 0 });
+		expect(storyIn(board, 'A')).toMatchObject({ blockedByCount: 0, blocksCount: 1 });
+	});
+
+	it('gives an unlinked story zero in both directions', () => {
+		let map = createStoryMap('Retail');
+		const activity = addActivity(map, 'Browse');
+		map = activity.map;
+		const step = addStep(map, activity.activity.id, 'Search');
+		map = step.map;
+		map = addStory(map, step.step.id, 'Alone').map;
+
+		const board = buildBoardViewModel(map);
+
+		expect(storyIn(board, 'Alone')).toMatchObject({ blockedByCount: 0, blocksCount: 0 });
+		expect(board.dependencies).toEqual([]);
+	});
+
+	it('resolves both endpoints to titles', () => {
+		const { map, a, b } = linkedMap();
+
+		const board = buildBoardViewModel(map);
+
+		expect(board.dependencies).toContainEqual({
+			blockerId: a,
+			blockerTitle: 'A',
+			blockedId: b,
+			blockedTitle: 'B'
+		});
+	});
+
+	// The domain's cascades mean this cannot happen through the app, but a
+	// fixture that spreads a partial map reaches it — `dialog-subject.test.ts`
+	// builds a board from `{ ...map, stories: [] }`. Dropping the row beats
+	// rendering "undefined blocks undefined".
+	it('drops an edge whose endpoints are not on the board', () => {
+		const { map } = linkedMap();
+
+		const board = buildBoardViewModel({ ...map, stories: [] });
+
+		expect(board.dependencies).toEqual([]);
 	});
 });

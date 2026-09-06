@@ -2,7 +2,11 @@
 
 ## Status
 
-Accepted, 2026-09-04.
+Accepted, 2026-09-04. **Amended by ADR 0019, 2026-09-05**: the `viewStory` dialog is no longer
+read-only. It gained dependency lists, remove forms and an add picker, so it now carries a
+version and a client id like every other editor, and it stays open across its own writes. The
+story's own fields — title and description — are still read here and edited elsewhere, which is
+the part of this decision that stands.
 
 ## Context
 
@@ -36,7 +40,8 @@ Two things make this more than a rendering change:
 
 ## Decision
 
-**Story descriptions are Markdown. They render in a new read-only `viewStory` dialog, and
+**Story descriptions are Markdown. They render in a new `viewStory` dialog (read-only when this
+was written; see the Status note), and
 the rendering path sanitises.**
 
 - `src/lib/markdown/render-markdown.ts` is a pure module exposing

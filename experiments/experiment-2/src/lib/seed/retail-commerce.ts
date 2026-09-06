@@ -20,6 +20,7 @@
 
 import {
 	addActivity,
+	addDependency,
 	addSlice,
 	addStep,
 	addStory,
@@ -59,6 +60,27 @@ const R2 = 'Release 2 — Trustworthy Checkout';
 const R3 = 'Release 3 — Scale & Personalise';
 
 export const retailCommerceSliceNames = [R1, R2, R3] as const;
+
+/**
+ * A few real dependencies, by story title (ADR 0019).
+ *
+ * Deliberately few. The point is that a seeded board *shows* the feature — a
+ * badge on a card, two non-empty lists in a dialog — not that it models the
+ * whole product's sequencing, which nobody would read and everybody would have
+ * to maintain. Titles rather than ids because the blueprint has no ids until it
+ * is built; they are unique across the map, and the builder throws if one stops
+ * being.
+ */
+export const retailCommerceDependencies: [blocker: string, blocked: string][] = [
+	// You cannot sell what the catalogue does not have.
+	['Create a product', 'Add an item to the cart'],
+	['Set a list price', 'See cart line items and total'],
+	// Nothing to pay for until there is a cart, and no confirmation until paid.
+	['See cart line items and total', 'Pay by card'],
+	['Pay by card', 'See an order confirmation page'],
+	// A return needs an order that arrived.
+	['See what was delivered', 'Request a return online']
+];
 
 /**
  * The Markdown a story's `description` holds, composed from the blueprint.
@@ -1640,6 +1662,31 @@ export function buildRetailCommerceMap(createdAt: Date = new Date()): StoryMap {
 				}).map;
 			}
 		}
+	}
+
+	// Resolved after every story exists, because an edge names two of them and
+	// the blueprint is written in board order rather than dependency order.
+	const storyIdByTitle = new Map<string, (typeof map.stories)[number]['id']>();
+	for (const story of map.stories) {
+		// Rejected rather than letting the last one win: a duplicate title would
+		// silently attach a seeded edge to whichever story happened to be built
+		// last, and the blueprint's only handle on a story is its title.
+		if (storyIdByTitle.has(story.title)) {
+			throw new Error(
+				`Seed story titles must be unique across the map; "${story.title}" appears twice.`
+			);
+		}
+		storyIdByTitle.set(story.title, story.id);
+	}
+	for (const [blockerTitle, blockedTitle] of retailCommerceDependencies) {
+		const blockerId = storyIdByTitle.get(blockerTitle);
+		const blockedId = storyIdByTitle.get(blockedTitle);
+		if (!blockerId || !blockedId) {
+			throw new Error(
+				`Seed dependency names a story that is not on the map: "${blockerTitle}" -> "${blockedTitle}"`
+			);
+		}
+		map = addDependency(map, blockerId, blockedId);
 	}
 
 	return map;

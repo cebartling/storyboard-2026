@@ -90,4 +90,96 @@ describe('StoryCard', () => {
 
 		expect(card.querySelectorAll('button')).toHaveLength(2);
 	});
+
+	// A story that is blocked is the one a planner scans for; a story that merely
+	// blocks others is legible from the other card (ADR 0019).
+	describe('dependency badge', () => {
+		it('shows nothing when the story is not blocked', async () => {
+			render(StoryCard, {
+				id: 'story-10',
+				title: 'Sort results',
+				onEdit: () => {},
+				onView: () => {}
+			});
+
+			expect(page.getByTestId('deps-badge-story-10').elements()).toHaveLength(0);
+		});
+
+		it('shows the count of blockers', async () => {
+			render(StoryCard, {
+				id: 'story-11',
+				title: 'Filter by price',
+				blockedByCount: 2,
+				onEdit: () => {},
+				onView: () => {}
+			});
+
+			await expect.element(page.getByTestId('deps-badge-story-11')).toHaveTextContent('2');
+		});
+
+		it('names what it means, for anyone not reading the icon', async () => {
+			render(StoryCard, {
+				id: 'story-12',
+				title: 'Filter by price',
+				blockedByCount: 1,
+				onEdit: () => {},
+				onView: () => {}
+			});
+
+			// The accessible *name*, not the attribute: an aria-label on a bare
+			// <span> is ignored, so asserting the attribute would pass while a
+			// screen reader still announced only "1". `role="img"` is what makes
+			// the label count, and this assertion is what notices if it goes.
+			await expect
+				.element(page.getByTestId('deps-badge-story-12'))
+				.toHaveAccessibleName('Blocked by 1 story');
+		});
+
+		it('pluralises', async () => {
+			render(StoryCard, {
+				id: 'story-13',
+				title: 'Filter by price',
+				blockedByCount: 3,
+				onEdit: () => {},
+				onView: () => {}
+			});
+
+			await expect
+				.element(page.getByTestId('deps-badge-story-13'))
+				.toHaveAccessibleName('Blocked by 3 stories');
+		});
+
+		// BoardViewport's INTERACTIVE_SELECTOR is
+		// '[data-testid^="story-"], button, a' — so a testid starting with
+		// `story-` would be classified as a card by the pan handler, and a drag
+		// begun on the badge would stop panning the board. This asserts the
+		// prefix we deliberately avoided.
+		it('does not claim a testid the pan handler treats as a card', async () => {
+			render(StoryCard, {
+				id: 'story-14',
+				title: 'Filter by price',
+				blockedByCount: 1,
+				onEdit: () => {},
+				onView: () => {}
+			});
+
+			const badge = page.getByTestId('deps-badge-story-14').element();
+
+			expect(badge.getAttribute('data-testid')?.startsWith('story-')).toBe(false);
+		});
+
+		it('is not a third button on the card', async () => {
+			render(StoryCard, {
+				id: 'story-15',
+				title: 'Filter by price',
+				blockedByCount: 1,
+				onEdit: () => {},
+				onView: () => {}
+			});
+
+			expect(page.getByTestId('story-story-15').element().querySelectorAll('button')).toHaveLength(
+				2
+			);
+		});
+	});
 });

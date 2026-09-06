@@ -44,6 +44,11 @@ Story {
   sliceId: string | null      // null = unsliced band
   rank: string                // fractional rank, scoped to (stepId, sliceId)
 }
+
+Dependency {                  // ADR 0019
+  blockerId: string           // the Story that must come first
+  blockedId: string           // the Story that waits on it
+}                             // no id (the pair is the identity), no rank
 ```
 
 ## Invariants
@@ -60,6 +65,13 @@ Enforced in domain code (`src/lib/domain/`), not left to the database to catch:
   (un-slicing), matching pulling a strip of tape off a physical wall.
 - Moving a `Step` to a different `Activity` carries its `Story`s with it; their `sliceId`
   values are untouched (slice membership is orthogonal to which activity owns the step).
+- A `Dependency` names two distinct `Story`s of the same `StoryMap`. A story cannot block
+  itself, the same edge cannot be recorded twice in the same direction, and the edge set
+  stays **acyclic** — adding `blocker → blocked` is refused when `blocked` already reaches
+  `blocker`. The reverse of an existing edge is therefore a cycle, not a duplicate.
+- Deleting a `Story` — directly, or through its `Step` or `Activity` — drops every
+  `Dependency` naming it, in both directions. Deleting a `Slice` drops none: it un-slices
+  stories rather than deleting them, and an edge is invariant under a slice or rank change.
 
 ## Concurrency
 

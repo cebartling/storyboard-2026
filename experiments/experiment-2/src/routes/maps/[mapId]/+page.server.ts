@@ -3,6 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { deps } from '$lib/server/deps';
 import {
 	addActivity,
+	addDependency,
 	addStep,
 	addStory,
 	createSlice,
@@ -15,13 +16,14 @@ import {
 	moveStory,
 	renameActivity,
 	renameSlice,
+	removeDependency,
 	renameStep,
 	shareMap
 } from '$lib/app/use-cases';
 import type { ActivityId, ClientId, MapId, SliceId, StepId, StoryId } from '$lib/domain/ids';
 
 import { buildBoardViewModel } from '$lib/board/board-view-model';
-import { optionalNeighbour, requireString, requireVersion } from './form-fields';
+import { optionalNeighbour, requireDirection, requireString, requireVersion } from './form-fields';
 import { InvariantError } from '$lib/domain/errors';
 import { requireCaller } from '$lib/server/auth/require-caller';
 import { runAction } from '../../run-action';
@@ -298,6 +300,53 @@ export const actions: Actions = {
 					title,
 					description
 				}
+			);
+			return expectedVersion;
+		});
+	},
+
+	addDependency: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
+		const form = await request.formData();
+		return runAndPublish('addDependency', params.mapId as MapId, form, async () => {
+			const expectedVersion = requireVersion(form.get('version'));
+			// The dialog posts "this story", "the other one" and which way round,
+			// rather than a pre-oriented pair: that is the shape the radio group
+			// produces, and it keeps the orientation rule on the server.
+			const storyId = requireString(form.get('storyId'), 'storyId') as StoryId;
+			const otherId = requireString(form.get('otherId'), 'otherId') as StoryId;
+			const [blockerId, blockedId] =
+				requireDirection(form.get('direction')) === 'blocks'
+					? [storyId, otherId]
+					: [otherId, storyId];
+			await addDependency(
+				deps.storyMapRepository,
+				caller,
+				params.mapId as MapId,
+				expectedVersion,
+				blockerId,
+				blockedId
+			);
+			return expectedVersion;
+		});
+	},
+
+	removeDependency: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
+		const form = await request.formData();
+		return runAndPublish('removeDependency', params.mapId as MapId, form, async () => {
+			const expectedVersion = requireVersion(form.get('version'));
+			// Already oriented, unlike the add: the row being removed renders from
+			// a resolved edge, so there is no direction left to interpret.
+			const blockerId = requireString(form.get('blockerId'), 'blockerId') as StoryId;
+			const blockedId = requireString(form.get('blockedId'), 'blockedId') as StoryId;
+			await removeDependency(
+				deps.storyMapRepository,
+				caller,
+				params.mapId as MapId,
+				expectedVersion,
+				blockerId,
+				blockedId
 			);
 			return expectedVersion;
 		});

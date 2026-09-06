@@ -3,8 +3,9 @@
 	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { useMapSync } from '$lib/collab/map-sync-lifecycle.svelte';
-	import type { ClientId } from '$lib/domain/ids';
+	import type { ClientId, StoryId } from '$lib/domain/ids';
 	import { subjectStatus } from '$lib/board/dialog-subject';
+	import { candidateStories } from '$lib/board/dependency-candidates';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { trailingThrottle } from '$lib/collab/throttle';
 	import PresenceList from '$lib/components/presence-list.svelte';
@@ -241,6 +242,13 @@
 	function handleViewStory(item: DndStoryItem) {
 		dialog = { kind: 'viewStory', storyId: item.id };
 	}
+
+	/** Stories the open detail view could legally be linked to (ADR 0019). */
+	const dependencyCandidates = $derived.by(() => {
+		const open = dialog;
+		if (open?.kind !== 'viewStory') return [];
+		return candidateStories(data.board, open.storyId as StoryId);
+	});
 
 	/** The story `viewStory` is showing, as the board currently has it. */
 	const viewedStory = $derived.by(() => {
@@ -515,6 +523,8 @@
 	boardVersion={data.board.version}
 	{clientId}
 	story={viewedStory}
+	dependencies={data.board.dependencies}
+	candidates={dependencyCandidates}
 	onReplaceSubject={(replacement) => (dialog = replacement)}
 	onOpenDialog={(next) => (dialog = next)}
 	onClose={async (outcome) => {

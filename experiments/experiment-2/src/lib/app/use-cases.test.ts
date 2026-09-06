@@ -20,7 +20,14 @@ import {
 	type StoryId,
 	type UserId
 } from '$lib/domain/ids';
-import { addActivity, addSlice, addStep, addStory, createStoryMap } from '$lib/domain/story-map';
+import {
+	addActivity,
+	addDependency,
+	addSlice,
+	addStep,
+	addStory,
+	createStoryMap
+} from '$lib/domain/story-map';
 import { ConflictError, InvariantError } from '$lib/domain/errors';
 
 /** Every use case now acts as somebody (ADR 0015). */
@@ -141,6 +148,13 @@ describe('mutating use cases', () => {
 		map = slice.map;
 		const story = addStory(map, step.step.id, 'Keyword search');
 		map = story.map;
+		// Two more stories and one edge, so the dependency cases below have both a
+		// legal new pair to add and an existing pair to remove.
+		const other = addStory(map, step.step.id, 'Filter by price');
+		map = other.map;
+		const third = addStory(map, step.step.id, 'Sort results');
+		map = third.map;
+		map = addDependency(map, story.story.id, other.story.id);
 
 		const repository = new InMemoryStoryMapRepository([{ map: map, owner: caller.userId }]);
 		// Read back rather than taken from the map as built: a stored map has been
@@ -153,6 +167,8 @@ describe('mutating use cases', () => {
 			stepId: step.step.id as StepId,
 			sliceId: slice.slice.id as SliceId,
 			storyId: story.story.id as StoryId,
+			otherStoryId: other.story.id as StoryId,
+			thirdStoryId: third.story.id as StoryId,
 			version: stored.version
 		};
 	}
@@ -211,6 +227,23 @@ describe('mutating use cases', () => {
 		{
 			name: 'deleteStory',
 			run: (c) => useCases.deleteStory(c.repository, caller, c.mapId, c.version, c.storyId)
+		},
+		{
+			name: 'addDependency',
+			run: (c) =>
+				useCases.addDependency(c.repository, caller, c.mapId, c.version, c.storyId, c.thirdStoryId)
+		},
+		{
+			name: 'removeDependency',
+			run: (c) =>
+				useCases.removeDependency(
+					c.repository,
+					caller,
+					c.mapId,
+					c.version,
+					c.storyId,
+					c.otherStoryId
+				)
 		},
 		{
 			name: 'moveStory',

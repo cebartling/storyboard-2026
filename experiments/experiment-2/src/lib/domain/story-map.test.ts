@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { ConflictError, InvariantError } from './errors';
+import type { StoryId } from './ids';
 import {
 	addActivity,
+	addDependency,
 	addSlice,
 	addStep,
 	addStory,
@@ -20,6 +22,7 @@ import {
 	moveStory,
 	renameActivity,
 	renameSlice,
+	removeDependency,
 	renameStep,
 	type StoryMap
 } from './story-map';
@@ -45,6 +48,7 @@ describe('createStoryMap', () => {
 		expect(map.activities).toEqual([]);
 		expect(map.slices).toEqual([]);
 		expect(map.stories).toEqual([]);
+		expect(map.dependencies).toEqual([]);
 	});
 });
 
@@ -629,5 +633,251 @@ describe('inRankOrder', () => {
 		inRankOrder(map);
 
 		expect(names(map)).toEqual(before);
+	});
+});
+
+describe('dependencies', () => {
+	/** A step carrying `count` stories, named A, B, C… so edges read as prose. */
+	function mapWithStories(count: number) {
+		const base = mapWithOneStep();
+		let map = base.map;
+		const ids: StoryId[] = [];
+		for (let i = 0; i < count; i++) {
+			const added = addStory(map, base.stepId, String.fromCharCode(65 + i));
+			map = added.map;
+			ids.push(added.story.id);
+		}
+		return { map, ids, stepId: base.stepId, activityId: base.activityId };
+	}
+
+	describe('addDependency', () => {
+		it('records the edge in the direction it was given', () => {
+			const { map, ids } = mapWithStories(2);
+
+			const updated = addDependency(map, ids[0], ids[1]);
+
+			expect(updated.dependencies).toEqual([{ blockerId: ids[0], blockedId: ids[1] }]);
+		});
+
+		it('does not mutate the map it is given', () => {
+			const { map, ids } = mapWithStories(2);
+
+			addDependency(map, ids[0], ids[1]);
+
+			expect(map.dependencies).toEqual([]);
+		});
+
+		it('lets one story block several, and several block one', () => {
+			const { map, ids } = mapWithStories(3);
+
+			const fanOut = addDependency(addDependency(map, ids[0], ids[1]), ids[0], ids[2]);
+			const fanIn = addDependency(addDependency(map, ids[0], ids[2]), ids[1], ids[2]);
+
+			expect(fanOut.dependencies).toHaveLength(2);
+			expect(fanIn.dependencies).toHaveLength(2);
+		});
+
+		// A -> B -> D and A -> C -> D. Nothing here is a cycle: D is reachable
+		// from A twice over, which is a diamond, not a loop.
+		it('accepts a diamond', () => {
+			const { map, ids } = mapWithStories(4);
+			const [a, b, c, d] = ids;
+
+			let updated = addDependency(map, a, b);
+			updated = addDependency(updated, a, c);
+			updated = addDependency(updated, b, d);
+			updated = addDependency(updated, c, d);
+
+			expect(updated.dependencies).toHaveLength(4);
+		});
+
+		// A -> B -> C already exists and A -> C adds nothing, but redundant is not
+		// the same as illegal. This is the case a *reversed* reachability walk
+		// rejects — it would ask "does A already reach C?" and find that it does.
+		it('accepts a transitive shortcut over an existing path', () => {
+			const { map, ids } = mapWithStories(3);
+			const [a, b, c] = ids;
+
+			const updated = addDependency(addDependency(addDependency(map, a, b), b, c), a, c);
+
+			expect(updated.dependencies).toHaveLength(3);
+		});
+
+		it('rejects an unknown blocker, and an unknown blocked story', () => {
+			const { map, ids } = mapWithStories(1);
+
+			expect(() => addDependency(map, 'nope' as never, ids[0])).toThrow(InvariantError);
+			expect(() => addDependency(map, ids[0], 'nope' as never)).toThrow(/Story not found/);
+		});
+
+		it('rejects a story blocking itself', () => {
+			const { map, ids } = mapWithStories(1);
+
+			expect(() => addDependency(map, ids[0], ids[0])).toThrow(/cannot block itself/);
+		});
+
+		it('rejects the same edge twice', () => {
+			const { map, ids } = mapWithStories(2);
+			const once = addDependency(map, ids[0], ids[1]);
+
+			expect(() => addDependency(once, ids[0], ids[1])).toThrow(/already blocks/);
+		});
+
+		// The reverse of an existing edge is not a duplicate — it is the shortest
+		// possible loop, and it must be refused as one. Reported as a cycle rather
+		// than as a duplicate, because "A already blocks B" would be a confusing
+		// answer to someone asking for B to block A.
+		it('rejects the reverse of an existing edge as a cycle', () => {
+			const { map, ids } = mapWithStories(2);
+			const forward = addDependency(map, ids[0], ids[1]);
+
+			expect(() => addDependency(forward, ids[1], ids[0])).toThrow(/cycle/);
+			expect(() => addDependency(forward, ids[1], ids[0])).not.toThrow(/already blocks/);
+		});
+
+		// Asserted as an exact string, not a loose regex: the chain is easy to get
+		// subtly wrong — an off-by-one here repeats the last story and omits the
+		// edge being refused — and a regex listing the three titles in order
+		// passes on exactly that mistake.
+		it('rejects a longer cycle and names the loop it would close', () => {
+			const { map, ids } = mapWithStories(3);
+			const [a, b, c] = ids;
+			const chain = addDependency(addDependency(map, a, b), b, c);
+
+			expect(() => addDependency(chain, c, a)).toThrow(
+				'"C" cannot block "A": that would create a cycle ("C" blocks "A" blocks "B" blocks "C")'
+			);
+		});
+
+		it('names the two-story loop the same way', () => {
+			const { map, ids } = mapWithStories(2);
+			const forward = addDependency(map, ids[0], ids[1]);
+
+			expect(() => addDependency(forward, ids[1], ids[0])).toThrow(
+				'"B" cannot block "A": that would create a cycle ("B" blocks "A" blocks "B")'
+			);
+		});
+
+		it('links stories in different steps and different slices', () => {
+			const base = mapWithOneStep();
+			let map = base.map;
+			const otherStep = addStep(map, base.activityId, 'Step 2');
+			map = otherStep.map;
+			const slice = addSlice(map, 'Release 1');
+			map = slice.map;
+			const here = addStory(map, base.stepId, 'Here');
+			map = here.map;
+			const there = addStory(map, otherStep.step.id, 'There', { sliceId: slice.slice.id });
+			map = there.map;
+
+			const updated = addDependency(map, here.story.id, there.story.id);
+
+			expect(updated.dependencies).toHaveLength(1);
+		});
+	});
+
+	describe('removeDependency', () => {
+		it('removes exactly the edge named', () => {
+			const { map, ids } = mapWithStories(3);
+			const both = addDependency(addDependency(map, ids[0], ids[1]), ids[0], ids[2]);
+
+			const updated = removeDependency(both, ids[0], ids[1]);
+
+			expect(updated.dependencies).toEqual([{ blockerId: ids[0], blockedId: ids[2] }]);
+		});
+
+		it('does not remove the edge with the same pair the other way round', () => {
+			const { map, ids } = mapWithStories(2);
+			const forward = addDependency(map, ids[0], ids[1]);
+
+			expect(() => removeDependency(forward, ids[1], ids[0])).toThrow(/No dependency/);
+			expect(forward.dependencies).toHaveLength(1);
+		});
+
+		it('rejects removing an edge that is not there', () => {
+			const { map, ids } = mapWithStories(2);
+
+			expect(() => removeDependency(map, ids[0], ids[1])).toThrow(InvariantError);
+		});
+	});
+
+	describe('cascades', () => {
+		it('drops edges in both directions when a story is deleted', () => {
+			const { map, ids } = mapWithStories(3);
+			const [a, b, c] = ids;
+			// b is both blocked by a and blocking c, so deleting it must take an
+			// incoming and an outgoing edge with it — and leave a -> c alone.
+			let linked = addDependency(map, a, b);
+			linked = addDependency(linked, b, c);
+			linked = addDependency(linked, a, c);
+
+			const updated = deleteStory(linked, b);
+
+			expect(updated.dependencies).toEqual([{ blockerId: a, blockedId: c }]);
+		});
+
+		it('drops edges for every story in a deleted step', () => {
+			const base = mapWithOneStep();
+			let map = base.map;
+			const other = addStep(map, base.activityId, 'Step 2');
+			map = other.map;
+			const doomed = addStory(map, base.stepId, 'Doomed');
+			map = doomed.map;
+			const survivor = addStory(map, other.step.id, 'Survivor');
+			map = survivor.map;
+			map = addDependency(map, doomed.story.id, survivor.story.id);
+
+			const updated = deleteStep(map, base.stepId);
+
+			expect(updated.dependencies).toEqual([]);
+		});
+
+		it('drops edges for every story under a deleted activity', () => {
+			const base = mapWithOneStep();
+			let map = base.map;
+			const otherActivity = addActivity(map, 'Activity 2');
+			map = otherActivity.map;
+			const otherStep = addStep(map, otherActivity.activity.id, 'Step 2');
+			map = otherStep.map;
+			const doomed = addStory(map, base.stepId, 'Doomed');
+			map = doomed.map;
+			const survivor = addStory(map, otherStep.step.id, 'Survivor');
+			map = survivor.map;
+			map = addDependency(map, survivor.story.id, doomed.story.id);
+
+			const updated = deleteActivity(map, base.activityId);
+
+			expect(updated.dependencies).toEqual([]);
+		});
+
+		// The two cases the word "delete" makes people expect a cascade for, and
+		// neither has one: `deleteSlice` un-slices its stories rather than
+		// deleting them, and a move changes a story's step or slice, never its
+		// identity. An edge names two story ids and nothing else.
+		it('keeps every edge when a slice is deleted', () => {
+			const base = mapWithOneStep();
+			let map = base.map;
+			const slice = addSlice(map, 'Release 1');
+			map = slice.map;
+			const a = addStory(map, base.stepId, 'A', { sliceId: slice.slice.id });
+			map = a.map;
+			const b = addStory(map, base.stepId, 'B', { sliceId: slice.slice.id });
+			map = b.map;
+			map = addDependency(map, a.story.id, b.story.id);
+
+			const updated = deleteSlice(map, slice.slice.id);
+
+			expect(updated.dependencies).toHaveLength(1);
+			expect(updated.stories).toHaveLength(2);
+		});
+
+		it('keeps every edge when a story moves', () => {
+			const { map, ids, stepId } = mapWithStories(2);
+			const linked = addDependency(map, ids[0], ids[1]);
+
+			const updated = moveStory(linked, ids[1], stepId, null, ids[0], null);
+
+			expect(updated.dependencies).toHaveLength(1);
+		});
 	});
 });

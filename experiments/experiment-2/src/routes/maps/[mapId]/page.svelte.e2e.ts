@@ -256,6 +256,36 @@ test('adds a story into a slice band and edits its description', async ({ page }
 	);
 });
 
+// The add-story dialog is the only one that stays open across a successful
+// submit (ADR 0011), which makes it the only place a *second* write can be made
+// from one open dialog — and every other route through it closes after a single
+// add, `board-helpers.ts`'s helper included. So this is the only test that can
+// catch the dialog posting a version it has already spent.
+test('adds two stories from one open dialog', async ({ page }) => {
+	await createMap(page, `E2E repeat add ${Date.now()}`);
+	await addActivity(page, 'Browse');
+	await addStep(page, 'Find a product');
+	const stepId = await firstStepId(page);
+
+	await page.getByTestId(`add-story-${stepId}-unsliced`).click();
+	const open = dialog(page);
+
+	for (const title of ['First story', 'Second story']) {
+		await open.getByLabel('New story title').fill(title);
+		await open.getByRole('button', { name: 'Add story' }).click();
+		// Cleared is what success looks like here; the failure this guards
+		// against is a 409 whose message names a conflict with nobody.
+		await expect(open.getByLabel('New story title')).toHaveValue('');
+		await expect(open.locator('p.error')).toHaveCount(0);
+	}
+
+	await open.getByRole('button', { name: 'Close' }).click();
+	await expect(open).toBeHidden();
+
+	await expect(page.getByText('First story')).toBeVisible();
+	await expect(page.getByText('Second story')).toBeVisible();
+});
+
 // The dialog submit policy's failure path (ADR 0011). Every other e2e drives
 // the happy path, where a dialog closing *is* the assertion — so a failure
 // keeping the dialog open, owning its own message, and not echoing it into the

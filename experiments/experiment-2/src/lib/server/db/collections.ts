@@ -50,6 +50,16 @@ export interface MapDoc {
 		sliceId: string | null;
 		rank: string;
 	}[];
+	/**
+	 * Directional blocks-edges between two stories in this map (ADR 0019). Flat,
+	 * matching the domain shape.
+	 *
+	 * Optional, and that is not cosmetic: there are no migrations here, so every
+	 * document written before this field existed has no `dependencies` key at
+	 * all. `toDomain` defaults it; `save`'s whole-document `$set` writes it back
+	 * on that document's next update.
+	 */
+	dependencies?: { blockerId: string; blockedId: string }[];
 }
 
 export interface UserDoc {
