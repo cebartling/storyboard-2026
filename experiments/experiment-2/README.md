@@ -62,9 +62,38 @@ register in the app first. It adds a new map each time it runs; `corepack pnpm d
 starts over.
 
 On an empty database, `corepack pnpm db:seed --with-accounts` does both halves: it creates
-`owner@storyboard.test` and three editors — all with the password `storyboard-demo` — and
-shares the map with them, so there is something to log into and more than one person on the
-board. That password lives in this repository, so the flag only runs against localhost.
+the four accounts below, shares the map with them, and prints the URL to open it at — so
+there is something to log into and more than one person on the board.
+
+### Test accounts
+
+Created by `--with-accounts` only. All four share the password **`storyboard-demo`**.
+
+| Email                     | Name         | Role   |
+| ------------------------- | ------------ | ------ |
+| `owner@storyboard.test`   | Priya Raman  | owner  |
+| `editor1@storyboard.test` | Sam Okonjo   | editor |
+| `editor2@storyboard.test` | Lena Fischer | editor |
+| `editor3@storyboard.test` | Tom Àlvarez  | editor |
+
+The owner can share and delete the map; editors can change the board but neither share nor
+delete it ([ADR 0015](./documentation/adr/0015-accounts-sessions-and-map-membership.md)).
+Signing in as an editor is the quickest way to see that distinction, since the Share button
+is simply absent.
+
+Three editors rather than one because presence, live cursors and the concurrent-edit
+warnings ([ADR 0014](./documentation/adr/0014-collaboration-model.md)) only look like
+themselves with several people on a board. Open the same map in two browser profiles as
+different editors to see it.
+
+Sign in at `/login`. Re-running `--with-accounts` reuses any of these that already exist, so
+it is safe to run twice; `corepack pnpm db:reset` removes them along with everything else.
+
+> **These are local fixtures, not a convenience to copy.** The password is committed to this
+> repository, so `--with-accounts` refuses to run against anything but a database on
+> `localhost`, and against any database named `*prod*` — checked before it connects rather
+> than after. Seeding a real deployment needs an account you registered yourself:
+> `corepack pnpm db:seed <owner-email>`.
 
 ## Reading it
 
