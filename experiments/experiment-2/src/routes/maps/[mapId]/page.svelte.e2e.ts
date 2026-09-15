@@ -612,6 +612,40 @@ test('deleting a slice keeps its stories, and deleting a story removes it', asyn
 	expect(pageErrors.map((e) => e.message)).toEqual([]);
 });
 
+// ADR 0020: collapsing is this viewer's presentation state, kept in
+// localStorage — it survives a reload and writes nothing to the map.
+test('collapse a slice hides its stories and persists across reload', async ({ page }) => {
+	await createMap(page, `E2E collapse slice ${Date.now()}`);
+	await addActivity(page, 'Search');
+	await addStep(page, 'Find a product');
+	await addSlice(page, 'Release 1');
+	const stepId = await firstStepId(page);
+	const sliceId = await firstSliceId(page);
+	await addStory(page, stepId, sliceId, 'Keyword search');
+
+	const board = page.getByTestId('board');
+	const cellStories = page
+		.getByTestId(`cell-${stepId}-${sliceId}`)
+		.locator('[data-testid^="story-"]');
+	const summary = page.getByTestId(`collapsed-cell-${stepId}-${sliceId}`);
+	await expect(cellStories).toHaveText([/Keyword search/]);
+	const version = await board.getAttribute('data-board-version');
+
+	await page.getByRole('button', { name: 'Collapse slice Release 1' }).click();
+	await expect(cellStories).toHaveCount(0);
+	await expect(summary).toHaveText('1 story');
+
+	await page.reload();
+	await expect(summary).toHaveText('1 story');
+	const expand = page.getByRole('button', { name: 'Expand slice Release 1' });
+	await expect(expand).toHaveAttribute('aria-expanded', 'false');
+	await expect(board).toHaveAttribute('data-board-version', version!);
+
+	await expand.click();
+	await expect(summary).toHaveCount(0);
+	await expect(cellStories).toHaveText([/Keyword search/]);
+});
+
 // The bug ADR 0014 §3 exists to close, driven end to end: two editors on one
 // board, one of them holding an editor open across the other's change.
 //
