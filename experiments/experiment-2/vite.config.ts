@@ -39,6 +39,9 @@ export default defineConfig({
 	// it is already running — which it warns is a source of flakes. Naming them
 	// here means a fresh clone's first `test:unit` behaves like every later one.
 	optimizeDeps: { include: ['marked', 'dompurify'] },
+	// The dev server is reached over HTTPS through `tailscale serve`, which
+	// forwards the tailnet host name; Vite otherwise blocks it as unknown.
+	server: { allowedHosts: ['bartling-lab01.taild94b5d.ts.net'] },
 	test: {
 		expect: { requireAssertions: true },
 		projects: [
