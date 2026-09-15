@@ -100,6 +100,9 @@ the seed, so no test or fixture breaks if you delete it.
   ADR 0010. Adding a control to a cell or header means adding a `BoardDialog` case, not an
   inline form. Adding a case means three edits, all enforced by the compiler: the union
   member, the `TITLES` entry, and a `subjectStatus` case in `src/lib/board/dialog-subject.ts`.
+- **Slice collapse is per-viewer, client-only state** (ADR 0020), in `localStorage` via
+  `src/lib/board/slice-collapse-storage.ts`. The board view model is built on the server
+  and knows nothing about it; the route applies it. Never post it.
 - **Story dependencies are directional blocks-edges on the aggregate** (ADR 0019), edited in
   the story detail dialog. Three things about them are easy to get wrong:
   - **`deleteSlice` must not prune edges** — it un-slices stories rather than deleting them, so

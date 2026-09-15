@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { useMapSync } from '$lib/collab/map-sync-lifecycle.svelte';
@@ -24,6 +24,9 @@
 	import { createCamera } from '$lib/canvas/camera.svelte';
 	import { persistCamera } from '$lib/canvas/camera-persistence.svelte';
 	import { toMinimapModel } from '$lib/canvas/minimap-model';
+	import { loadCollapsedSlices, saveCollapsedSlices } from '$lib/board/slice-collapse-storage';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Plus from '@lucide/svelte/icons/plus';
 	import { tooltip } from '$lib/actions/tooltip';
@@ -94,6 +97,54 @@
 		if (draggingZones.size > 0) sync?.pause();
 		else sync?.resume();
 	}
+
+	// ---------------------------------------------------------------------
+	// Slice collapse (ADR 0020): this viewer's presentation state only. It is
+	// never posted, so it survives refetches and never reaches a collaborator.
+	// ---------------------------------------------------------------------
+
+	const collapsedSlices = new SvelteSet<string>();
+
+	/** `localStorage` can throw merely on access in some locked-down browsers. */
+	function boardStorage(): Storage | null {
+		try {
+			return localStorage;
+		} catch {
+			return null;
+		}
+	}
+
+	// Derived so a refetch — which replaces `data` but not the id — does not
+	// rerun the restore below.
+	const mapId = $derived(data.board.id);
+
+	// Client-only: the server render has no storage, so a collapsed slice paints
+	// expanded for a frame before this runs.
+	$effect(() => {
+		const storage = boardStorage();
+		const saved = storage ? loadCollapsedSlices(storage, mapId) : new Set<string>();
+		untrack(() => {
+			collapsedSlices.clear();
+			for (const id of saved) collapsedSlices.add(id);
+		});
+	});
+
+	function toggleSlice(sliceId: string) {
+		if (collapsedSlices.has(sliceId)) collapsedSlices.delete(sliceId);
+		else collapsedSlices.add(sliceId);
+		const storage = boardStorage();
+		if (storage) saveCollapsedSlices(storage, mapId, collapsedSlices);
+	}
+
+	// One track per row rather than `repeat()`: a collapsed row must be allowed
+	// to shrink below the 140px an expanded band reserves for dropping into.
+	const rowTracks = $derived(
+		data.board.rows
+			.map((row) =>
+				row.sliceId && collapsedSlices.has(row.sliceId) ? 'auto' : 'minmax(140px, auto)'
+			)
+			.join(' ')
+	);
 
 	// A POST per pointer move would be wasteful, which ADR 0014 §4 names as the
 	// one real cost of the SSE/POST split. 50ms is 20 updates a second — smooth
@@ -359,8 +410,7 @@
 				data-board-version={data.board.version}
 				data-collab-state={sync?.state ?? 'connecting'}
 				style="grid-template-columns: max-content repeat({data.board
-					.totalColumns}, minmax(240px, 1fr)); grid-template-rows: auto auto repeat({data.board.rows
-					.length}, minmax(140px, auto)); --board-sticky-header-height: {stickyHeaderHeight}px;"
+					.totalColumns}, minmax(240px, 1fr)); grid-template-rows: auto auto {rowTracks}; --board-sticky-header-height: {stickyHeaderHeight}px;"
 			>
 				<div
 					class="sticky top-0 left-0 z-30 bg-surface"
@@ -446,7 +496,25 @@
 						style="grid-column: 1; grid-row: {row.gridRow};"
 					>
 						{#if row.sliceId}
-							<span class="text-ink text-sm font-semibold break-words">{row.name}</span>
+							{@const collapsed = collapsedSlices.has(row.sliceId)}
+							{@const toggleLabel = `${collapsed ? 'Expand' : 'Collapse'} slice ${row.name}`}
+							<div class="flex items-start gap-1">
+								<button
+									type="button"
+									class="btn btn-icon btn-quiet shrink-0"
+									aria-expanded={!collapsed}
+									aria-label={toggleLabel}
+									use:tooltip={toggleLabel}
+									onclick={() => toggleSlice(row.sliceId!)}
+								>
+									{#if collapsed}
+										<ChevronRight class="size-3.5" />
+									{:else}
+										<ChevronDown class="size-3.5" />
+									{/if}
+								</button>
+								<span class="text-ink text-sm font-semibold break-words">{row.name}</span>
+							</div>
 							<button
 								type="button"
 								class="btn btn-icon btn-quiet self-start"
@@ -471,7 +539,18 @@
 						class="board-cell flex flex-col gap-2 bg-white p-1.5"
 						style="grid-column: {cell.gridColumn}; grid-row: {cell.gridRow};"
 					>
-						<!-- Every cell, not just the unsliced band: adding straight
+						{#if cell.sliceId && collapsedSlices.has(cell.sliceId)}
+							<!-- Collapsed (ADR 0020): no add button and no drop zone, so
+							     nothing can be dropped into a band the viewer cannot see. -->
+							<p
+								class="text-ink-muted px-2 py-1 text-xs"
+								data-testid="collapsed-cell-{cell.stepId}-{cell.sliceId}"
+							>
+								{cell.stories.length}
+								{cell.stories.length === 1 ? 'story' : 'stories'}
+							</p>
+						{:else}
+							<!-- Every cell, not just the unsliced band: adding straight
 						     into a release slice was impossible with the old inline
 						     form, which only existed on the unsliced row.
 
@@ -480,33 +559,34 @@
 						     bottom of the panel, and on a board with no overflow
 						     there is no way to scroll a control out from under
 						     them. -->
-						<button
-							type="button"
-							class="btn btn-quiet self-start px-2 text-xs"
-							data-testid="add-story-{cell.stepId}-{cell.sliceId ?? 'unsliced'}"
-							aria-label="Add story to {cellLabel(cell.stepId, cell.sliceId)}"
-							onclick={() =>
-								(dialog = {
-									kind: 'addStory',
-									stepId: cell.stepId,
-									sliceId: cell.sliceId,
-									scopeLabel: cellLabel(cell.stepId, cell.sliceId)
-								})}
-						>
-							<Plus class="size-3.5" />
-							Add story
-						</button>
-						<StoryDndZone
-							zoneLabel={cellLabel(cell.stepId, cell.sliceId)}
-							items={cell.stories}
-							stepId={cell.stepId}
-							sliceId={cell.sliceId}
-							onMove={handleMove}
-							onEditStory={handleEditStory}
-							onViewStory={handleViewStory}
-							onDragStateChange={(dragging) =>
-								setDragging(`${cell.stepId}:${cell.sliceId ?? 'unsliced'}`, dragging)}
-						/>
+							<button
+								type="button"
+								class="btn btn-quiet self-start px-2 text-xs"
+								data-testid="add-story-{cell.stepId}-{cell.sliceId ?? 'unsliced'}"
+								aria-label="Add story to {cellLabel(cell.stepId, cell.sliceId)}"
+								onclick={() =>
+									(dialog = {
+										kind: 'addStory',
+										stepId: cell.stepId,
+										sliceId: cell.sliceId,
+										scopeLabel: cellLabel(cell.stepId, cell.sliceId)
+									})}
+							>
+								<Plus class="size-3.5" />
+								Add story
+							</button>
+							<StoryDndZone
+								zoneLabel={cellLabel(cell.stepId, cell.sliceId)}
+								items={cell.stories}
+								stepId={cell.stepId}
+								sliceId={cell.sliceId}
+								onMove={handleMove}
+								onEditStory={handleEditStory}
+								onViewStory={handleViewStory}
+								onDragStateChange={(dragging) =>
+									setDragging(`${cell.stepId}:${cell.sliceId ?? 'unsliced'}`, dragging)}
+							/>
+						{/if}
 					</div>
 				{/each}
 			</div>
