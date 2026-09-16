@@ -152,4 +152,23 @@ describe('MongoStoryMapRepository (storage-specific)', () => {
 
 		expect(access!.map.dependencies).toEqual([]);
 	});
+
+	it('defaults a story’s status for a document written before the field existed', async () => {
+		// The `status` counterpart of the case above, and the quieter of the two:
+		// a story that came back with `status` undefined would render an untinted
+		// card and an empty chip rather than throwing, so nothing else in the
+		// suite would notice.
+		//
+		// Same technique — `$unset` through the driver, because `save` always
+		// writes the field and this shape is unreachable through the repository.
+		const activity = addActivity(createStoryMap('Legacy'), 'Browse');
+		const step = addStep(activity.map, activity.activity.id, 'Search');
+		const story = addStory(step.map, step.step.id, 'Filter by size', { status: 'done' });
+		const saved = await repository.save(caller, story.map);
+		await collections(db).maps.updateOne({ _id: saved.id }, { $unset: { 'stories.0.status': '' } });
+
+		const access = await repository.load(caller, saved.id);
+
+		expect(access!.map.stories[0].status).toBe('todo');
+	});
 });

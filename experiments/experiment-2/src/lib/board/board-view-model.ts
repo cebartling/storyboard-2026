@@ -1,5 +1,5 @@
 import type { ActivityId, MapId, SliceId, StepId, StoryId } from '$lib/domain/ids';
-import type { StoryMap } from '$lib/domain/story-map';
+import type { StoryMap, StoryStatus } from '$lib/domain/story-map';
 
 // ---------------------------------------------------------------------------
 // Board view model: a CSS-grid-friendly flattening of the aggregate.
@@ -50,6 +50,8 @@ export interface CellVM {
 		 *  would copy the edge list once per endpoint (ADR 0019). */
 		blockedByCount: number;
 		blocksCount: number;
+		/** Drives the card's tint and status chip (ADR 0021). */
+		status: StoryStatus;
 	}[];
 }
 
@@ -153,7 +155,8 @@ export function buildBoardViewModel(map: StoryMap): BoardViewModel {
 						title: s.title,
 						description: s.description,
 						blockedByCount: blockedByCount.get(s.id) ?? 0,
-						blocksCount: blocksCount.get(s.id) ?? 0
+						blocksCount: blocksCount.get(s.id) ?? 0,
+						status: s.status
 					}))
 			});
 		}

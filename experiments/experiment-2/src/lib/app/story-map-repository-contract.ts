@@ -141,6 +141,27 @@ export function describeStoryMapRepositoryContract(
 			]);
 		});
 
+		it('round-trips story status', async () => {
+			// Same reasoning as the dependencies case above, for a per-story scalar
+			// rather than a new array: the in-memory double clones the aggregate and
+			// cannot lose it, so only a store that names its fields can.
+			const harness = await createHarness();
+			const owner = await harness.createUser();
+			const activity = addActivity(createStoryMap('Retail'), 'Browse');
+			const step = addStep(activity.map, activity.activity.id, 'Search');
+			const started = addStory(step.map, step.step.id, 'Search by keyword', {
+				status: 'in-progress'
+			});
+			const defaulted = addStory(started.map, step.step.id, 'Sort by price');
+
+			const saved = await harness.repository.save(owner, defaulted.map);
+
+			const access = await harness.repository.load(owner, saved.id);
+			const byTitle = new Map(access!.map.stories.map((s) => [s.title, s.status]));
+			expect(byTitle.get('Search by keyword')).toBe('in-progress');
+			expect(byTitle.get('Sort by price')).toBe('todo');
+		});
+
 		it('lists the most recently created map first', async () => {
 			// The order the map list is rendered in. Distinct `createdAt` values
 			// rather than whatever the store happens to return, because "newest

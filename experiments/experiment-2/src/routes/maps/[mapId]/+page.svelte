@@ -4,6 +4,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import { useMapSync } from '$lib/collab/map-sync-lifecycle.svelte';
 	import type { ClientId, StoryId } from '$lib/domain/ids';
+	import { DEFAULT_STORY_STATUS } from '$lib/domain/story-map';
 	import { subjectStatus } from '$lib/board/dialog-subject';
 	import { candidateStories } from '$lib/board/dependency-candidates';
 	import { SvelteSet } from 'svelte/reactivity';
@@ -317,7 +318,10 @@
 			kind: 'editStory',
 			storyId: item.id,
 			title: item.title,
-			description: item.description
+			description: item.description,
+			// `?? DEFAULT_STORY_STATUS` because `DndStoryItem.status` is optional
+			// for the fixtures' sake; every item the board builds carries one.
+			status: item.status ?? DEFAULT_STORY_STATUS
 		};
 	}
 

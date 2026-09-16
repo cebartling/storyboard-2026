@@ -1,4 +1,5 @@
 import { InvariantError } from '$lib/domain/errors';
+import { isStoryStatus, STORY_STATUSES, type StoryStatus } from '$lib/domain/story-map';
 
 /**
  * Form-field parsing shared by the board's named actions. Extracted from
@@ -37,6 +38,21 @@ export function requireVersion(value: FormDataEntryValue | null): number {
 		throw new InvariantError(`Version must be a non-negative integer, got ${raw}.`);
 	}
 	return version;
+}
+
+/**
+ * A story status off the edit dialog's `<select>` (ADR 0021).
+ *
+ * Strict for the same reason `requireDirection` is: the set is closed, and
+ * defaulting an unrecognised value would quietly move the story somewhere the
+ * user did not ask for — to `todo`, undoing whatever it actually was.
+ */
+export function requireStatus(value: FormDataEntryValue | null): StoryStatus {
+	const raw = requireString(value, 'Status');
+	if (!isStoryStatus(raw)) {
+		throw new InvariantError(`Status must be one of ${STORY_STATUSES.join(', ')}, got ${raw}.`);
+	}
+	return raw;
 }
 
 /** Which way round the dependency picker's two story ids go (ADR 0019). */

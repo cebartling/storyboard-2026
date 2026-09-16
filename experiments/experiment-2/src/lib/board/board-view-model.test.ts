@@ -173,4 +173,21 @@ describe('dependencies', () => {
 
 		expect(board.dependencies).toEqual([]);
 	});
+
+	it('carries each story’s status onto its cell', () => {
+		// The card's tint comes from here, and a cell that dropped the field
+		// would paint every story in the default rather than fail.
+		let map = createStoryMap('Retail');
+		const activity = addActivity(map, 'Browse');
+		map = activity.map;
+		const step = addStep(map, activity.activity.id, 'Search');
+		map = step.map;
+		map = addStory(map, step.step.id, 'Started', { status: 'in-progress' }).map;
+		map = addStory(map, step.step.id, 'Untouched').map;
+
+		const board = buildBoardViewModel(map);
+
+		expect(storyIn(board, 'Started').status).toBe('in-progress');
+		expect(storyIn(board, 'Untouched').status).toBe('todo');
+	});
 });

@@ -1,6 +1,7 @@
 import type { Collection, Db } from 'mongodb';
 import type { MapId, UserId } from '$lib/domain/ids';
 import type { Role } from '$lib/domain/ports';
+import type { StoryStatus } from '$lib/domain/story-map';
 
 /**
  * The shapes actually stored, and typed accessors for the four collections.
@@ -48,6 +49,15 @@ export interface MapDoc {
 		title: string;
 		description: string | null;
 		sliceId: string | null;
+		/**
+		 * Where the story has got to (ADR 0021).
+		 *
+		 * Optional for the same reason `dependencies` is: there are no migrations
+		 * here, so every story written before this field existed has no `status`
+		 * key. `toDomain` defaults it to `todo`; `save`'s whole-document `$set`
+		 * writes it back on that document's next update.
+		 */
+		status?: StoryStatus;
 		rank: string;
 	}[];
 	/**

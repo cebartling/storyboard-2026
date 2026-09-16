@@ -282,7 +282,7 @@ export async function editStory(
 	mapId: MapId,
 	expectedVersion: number,
 	storyId: StoryId,
-	changes: { title?: string; description?: string | null }
+	changes: { title?: string; description?: string | null; status?: domain.StoryStatus }
 ): Promise<void> {
 	const trimmedChanges =
 		changes.title !== undefined ? { ...changes, title: changes.title } : changes;

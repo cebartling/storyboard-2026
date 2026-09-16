@@ -4,6 +4,7 @@ import {
 	retailCommerceBlueprint,
 	retailCommerceDependencies,
 	retailCommerceSliceNames,
+	retailCommerceStatuses,
 	storyDescription
 } from './retail-commerce';
 import type { Story, StoryMap } from '$lib/domain/story-map';
@@ -244,6 +245,47 @@ describe('buildRetailCommerceMap', () => {
 			for (const [blocker, blocked] of retailCommerceDependencies) {
 				expect(titles.has(blocker), blocker).toBe(true);
 				expect(titles.has(blocked), blocked).toBe(true);
+			}
+		});
+	});
+
+	// Same reasoning as dependencies above: the seed is the only board that
+	// shows the feature without someone setting it up first.
+	describe('statuses', () => {
+		it('gives the named stories their status and everything else the default', () => {
+			const map = buildRetailCommerceMap();
+			const statusByTitle = new Map(map.stories.map((s) => [s.title, s.status]));
+
+			for (const [title, status] of retailCommerceStatuses) {
+				expect(statusByTitle.get(title), title).toBe(status);
+			}
+			const named = new Set(retailCommerceStatuses.map(([title]) => title));
+			for (const story of map.stories) {
+				if (!named.has(story.title)) expect(story.status, story.title).toBe('todo');
+			}
+		});
+
+		it('shows every status somewhere on the board', () => {
+			// The point of seeding them at all: a board that only ever paints two
+			// colours demonstrates nothing.
+			const map = buildRetailCommerceMap();
+
+			expect(new Set(map.stories.map((s) => s.status))).toEqual(
+				new Set(['backlog', 'todo', 'in-progress', 'in-review', 'done'])
+			);
+		});
+
+		it('names only stories that are on the map', () => {
+			// A renamed story would otherwise silently lose its status, with the
+			// board simply painting one card the default.
+			const titles = new Set(
+				retailCommerceBlueprint.flatMap((a) =>
+					a.steps.flatMap((s) => s.stories.map((x) => x.title))
+				)
+			);
+
+			for (const [title] of retailCommerceStatuses) {
+				expect(titles.has(title), title).toBe(true);
 			}
 		});
 	});

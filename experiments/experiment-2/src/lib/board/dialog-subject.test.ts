@@ -49,7 +49,8 @@ describe('subjectStatus', () => {
 					kind: 'editStory',
 					storyId: c.storyId,
 					title: 'Keyword search',
-					description: 'By name'
+					description: 'By name',
+					status: 'todo'
 				})
 			],
 			['viewStory', (c) => ({ kind: 'viewStory', storyId: c.storyId })]
@@ -86,7 +87,8 @@ describe('subjectStatus', () => {
 				kind: 'editStory',
 				storyId: c.storyId,
 				title: 'Keyword search',
-				description: 'By name'
+				description: 'By name',
+				status: 'todo'
 			};
 			const edited = buildBoardViewModel({
 				...c.map,
@@ -99,8 +101,32 @@ describe('subjectStatus', () => {
 					kind: 'editStory',
 					storyId: c.storyId,
 					title: 'Search by SKU',
-					description: null
+					description: null,
+					status: 'todo'
 				}
+			});
+		});
+
+		it('reports a story whose status a collaborator changed', () => {
+			// Status is posted by the same form as title and description (ADR 0021),
+			// so "Save mine anyway" would overwrite it. Without this the overwrite
+			// would happen with no warning to either editor.
+			const c = board();
+			const dialog: BoardDialog = {
+				kind: 'editStory',
+				storyId: c.storyId,
+				title: 'Keyword search',
+				description: 'By name',
+				status: 'todo'
+			};
+			const moved = buildBoardViewModel({
+				...c.map,
+				stories: c.map.stories.map((s) => ({ ...s, status: 'done' as const }))
+			});
+
+			expect(subjectStatus(dialog, moved)).toEqual({
+				status: 'changed',
+				current: { ...dialog, status: 'done' }
 			});
 		});
 
@@ -112,7 +138,8 @@ describe('subjectStatus', () => {
 				kind: 'editStory',
 				storyId: c.storyId,
 				title: 'Keyword search',
-				description: 'By name'
+				description: 'By name',
+				status: 'todo'
 			};
 			const moved = buildBoardViewModel({
 				...c.map,
@@ -147,7 +174,8 @@ describe('subjectStatus', () => {
 					kind: 'editStory',
 					storyId: c.storyId,
 					title: 'Keyword search',
-					description: null
+					description: null,
+					status: 'todo'
 				})
 			],
 			// Not a subject of its own, but its parent is gone: adding a step to a

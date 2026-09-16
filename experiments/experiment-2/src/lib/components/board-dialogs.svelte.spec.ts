@@ -5,6 +5,7 @@ import { tick } from 'svelte';
 import BoardDialogs, { type BoardDialog, actionError } from './board-dialogs.svelte';
 import type { SubjectStatus } from '$lib/board/dialog-subject';
 import type { StoryId } from '$lib/domain/ids';
+import type { StoryStatus } from '$lib/domain/story-map';
 import type { BoardViewModel } from '$lib/board/board-view-model';
 import type { Candidate } from '$lib/board/dependency-candidates';
 
@@ -24,7 +25,7 @@ async function open(
 	dialog: BoardDialog,
 	boardVersion = 3,
 	extra: Partial<{
-		story: { title: string; description: string | null } | null;
+		story: { title: string; description: string | null; status: StoryStatus } | null;
 		subject: SubjectStatus | null;
 		dependencies: BoardViewModel['dependencies'];
 		candidates: Candidate[];
@@ -139,7 +140,8 @@ describe('BoardDialogs', () => {
 			kind: 'editStory',
 			storyId: 'st-1',
 			title: 'Search by keyword',
-			description: 'Matches product name only.'
+			description: 'Matches product name only.',
+			status: 'in-progress'
 		});
 
 		const edit = form(dialogEl, '?/editStory');
@@ -153,12 +155,39 @@ describe('BoardDialogs', () => {
 		expect(hidden(form(dialogEl, '?/deleteStory'), 'storyId')).toBe('st-1');
 	});
 
+	it('editStory preselects the story’s current status (ADR 0021)', async () => {
+		const dialogEl = await open({
+			kind: 'editStory',
+			storyId: 'st-3',
+			title: 'Search by keyword',
+			description: null,
+			status: 'in-review'
+		});
+
+		const select = form(dialogEl, '?/editStory').querySelector(
+			'select[name="status"]'
+		) as HTMLSelectElement;
+
+		expect(select.value).toBe('in-review');
+		// All five, in workflow order: the dialog is the only place a status is
+		// set, so a missing option is a status nobody can reach.
+		expect([...select.options].map((o) => o.value)).toEqual([
+			'backlog',
+			'todo',
+			'in-progress',
+			'in-review',
+			'done'
+		]);
+		expect([...select.options].map((o) => o.textContent?.trim())).toContain('In progress');
+	});
+
 	it('editStory renders an empty description field for a story that has none', async () => {
 		const dialogEl = await open({
 			kind: 'editStory',
 			storyId: 'st-2',
 			title: 'Filter by category',
-			description: null
+			description: null,
+			status: 'todo'
 		});
 
 		const textarea = form(dialogEl, '?/editStory').querySelector(
@@ -191,7 +220,13 @@ describe('actionError', () => {
 			{ kind: 'addSlice' },
 			{ kind: 'editSlice', sliceId: 'sl-1', name: 'Release 1' },
 			{ kind: 'addStory', stepId: 's-1', sliceId: null, scopeLabel: 'Search' },
-			{ kind: 'editStory', storyId: 'st-1', title: 'Keyword search', description: null },
+			{
+				kind: 'editStory',
+				storyId: 'st-1',
+				title: 'Keyword search',
+				description: null,
+				status: 'todo'
+			},
 			// It renders forms now (ADR 0019) — a remove per edge, and the picker —
 			// so it is held to the same rule as every other editor. Needs a story
 			// and an edge, or it renders nothing to check.
@@ -202,7 +237,7 @@ describe('actionError', () => {
 			'%s sends the board version with every form it renders',
 			async (_kind, dialog) => {
 				const dialogEl = await open(dialog, 3, {
-					story: { title: 'Keyword search', description: null },
+					story: { title: 'Keyword search', description: null, status: 'todo' },
 					dependencies: [
 						{
 							blockerId: 'st-1' as StoryId,
@@ -245,7 +280,11 @@ describe('actionError', () => {
 	describe('viewStory', () => {
 		it('renders the description as markdown, not as source text', async () => {
 			const dialogEl = await open({ kind: 'viewStory', storyId: 's-1' }, 3, {
-				story: { title: 'Search by keyword', description: 'Needs **fuzzy** matching' }
+				story: {
+					title: 'Search by keyword',
+					description: 'Needs **fuzzy** matching',
+					status: 'todo'
+				}
 			});
 
 			const body = dialogEl.querySelector('.prose-note');
@@ -256,7 +295,7 @@ describe('actionError', () => {
 
 		it('renders a list as list items', async () => {
 			const dialogEl = await open({ kind: 'viewStory', storyId: 's-2' }, 3, {
-				story: { title: 'Search', description: '- by name\n- by SKU' }
+				story: { title: 'Search', description: '- by name\n- by SKU', status: 'todo' }
 			});
 
 			expect(dialogEl.querySelectorAll('.prose-note li')).toHaveLength(2);
@@ -264,7 +303,7 @@ describe('actionError', () => {
 
 		it('shows the story title', async () => {
 			const dialogEl = await open({ kind: 'viewStory', storyId: 's-3' }, 3, {
-				story: { title: 'Search by keyword', description: 'x' }
+				story: { title: 'Search by keyword', description: 'x', status: 'todo' }
 			});
 
 			expect(dialogEl.textContent).toContain('Search by keyword');
@@ -274,7 +313,7 @@ describe('actionError', () => {
 		// rather than degenerate and gets a sentence instead of a blank panel.
 		it('says so when there is no description', async () => {
 			const dialogEl = await open({ kind: 'viewStory', storyId: 's-4' }, 3, {
-				story: { title: 'Search', description: null }
+				story: { title: 'Search', description: null, status: 'todo' }
 			});
 
 			expect(dialogEl.querySelector('.prose-note')).toBeNull();
@@ -288,7 +327,8 @@ describe('actionError', () => {
 				story: {
 					title: 'Search',
 					description:
-						'<script>globalThis.pwned = true;</script><img src=x onerror="globalThis.pwned = true">'
+						'<script>globalThis.pwned = true;</script><img src=x onerror="globalThis.pwned = true">',
+					status: 'todo'
 				}
 			});
 
@@ -302,7 +342,7 @@ describe('actionError', () => {
 		it('offers an edit trigger that swaps to the story editor', async () => {
 			let opened: BoardDialog | null = null;
 			await open({ kind: 'viewStory', storyId: 's-6' }, 3, {
-				story: { title: 'Search', description: 'x' },
+				story: { title: 'Search', description: 'x', status: 'in-review' },
 				onOpenDialog: (next) => (opened = next)
 			});
 
@@ -312,7 +352,8 @@ describe('actionError', () => {
 				kind: 'editStory',
 				storyId: 's-6',
 				title: 'Search',
-				description: 'x'
+				description: 'x',
+				status: 'in-review'
 			});
 		});
 
@@ -321,7 +362,7 @@ describe('actionError', () => {
 		// here and edited elsewhere.
 		it('has no form until it has a dependency to remove', async () => {
 			const dialogEl = await open({ kind: 'viewStory', storyId: 's-7' }, 3, {
-				story: { title: 'Search', description: 'x' }
+				story: { title: 'Search', description: 'x', status: 'todo' }
 			});
 
 			expect(dialogEl.querySelector('form')).toBeNull();
@@ -344,7 +385,7 @@ describe('actionError', () => {
 		// notice for one kind, it did not remove it.
 		it('still shows the editing banner when an editor is open', async () => {
 			const dialogEl = await open(
-				{ kind: 'editStory', storyId: 's-9', title: 'Search', description: null },
+				{ kind: 'editStory', storyId: 's-9', title: 'Search', description: null, status: 'todo' },
 				3,
 				{ subject: { status: 'deleted' } }
 			);
@@ -361,7 +402,7 @@ describe('actionError', () => {
 			blockedId: 'st-2' as StoryId,
 			blockedTitle: 'Search by keyword'
 		};
-		const story = { title: 'Create a product', description: null };
+		const story = { title: 'Create a product', description: null, status: 'todo' as const };
 		const candidates: Candidate[] = [
 			{
 				id: 'st-3' as StoryId,

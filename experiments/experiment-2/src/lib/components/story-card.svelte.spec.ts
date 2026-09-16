@@ -182,4 +182,77 @@ describe('StoryCard', () => {
 			);
 		});
 	});
+
+	describe('status (ADR 0021)', () => {
+		it('names the status in words, not only in colour', async () => {
+			// The WCAG 1.4.1 half of the feature. A tint with no chip would leave
+			// the status unreadable to anyone who cannot tell the tints apart, and
+			// invisible to a screen reader entirely.
+			render(StoryCard, {
+				id: 'story-20',
+				title: 'Checkout as guest',
+				status: 'in-progress',
+				onEdit: () => {},
+				onView: () => {}
+			});
+
+			await expect
+				.element(page.getByTestId('status-chip-story-20'))
+				.toHaveTextContent('In progress');
+			await expect
+				.element(page.getByRole('img', { name: 'Status: In progress' }))
+				.toBeInTheDocument();
+		});
+
+		it('falls back to the default when no status is given', async () => {
+			// `DndStoryItem` fixtures predate the field. Absent must mean `todo`,
+			// never an empty chip.
+			render(StoryCard, {
+				id: 'story-21',
+				title: 'Checkout as guest',
+				onEdit: () => {},
+				onView: () => {}
+			});
+
+			await expect.element(page.getByTestId('status-chip-story-21')).toHaveTextContent('To do');
+		});
+
+		it('tints the card body per status', async () => {
+			// Two different statuses must not paint the same card, which is what a
+			// template-literal class name would silently produce: Tailwind emits no
+			// CSS for a class it never sees written out.
+			render(StoryCard, {
+				id: 'story-22',
+				title: 'Checkout as guest',
+				status: 'done',
+				onEdit: () => {},
+				onView: () => {}
+			});
+
+			const card = page.getByTestId('story-story-22').element();
+
+			expect(card.className).toContain('bg-status-done/8');
+			expect(card.className).not.toContain('bg-accent-soft');
+		});
+
+		it('does not claim a testid the pan handler treats as a card', async () => {
+			// Same trap as the dependency badge: BoardViewport's
+			// INTERACTIVE_SELECTOR matches '[data-testid^="story-"]', so a
+			// `story-`-prefixed chip would make the board refuse to pan from it.
+			render(StoryCard, {
+				id: 'story-23',
+				title: 'Checkout as guest',
+				status: 'backlog',
+				onEdit: () => {},
+				onView: () => {}
+			});
+
+			const chip = page.getByTestId('status-chip-story-23').element();
+
+			expect(chip.getAttribute('data-testid')?.startsWith('story-')).toBe(false);
+			expect(page.getByTestId('story-story-23').element().querySelectorAll('button')).toHaveLength(
+				2
+			);
+		});
+	});
 });

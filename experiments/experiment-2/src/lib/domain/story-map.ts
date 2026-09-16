@@ -37,12 +37,40 @@ export interface Slice {
 	rank: Rank;
 }
 
+/**
+ * Where a story has got to (ADR 0021).
+ *
+ * Declared as a `const` array with the type derived from it, rather than the
+ * other way round: the `<select>` in the edit dialog and `requireStatus` in the
+ * route both need to enumerate the values at runtime, and deriving the union
+ * from the array is what stops those two lists from drifting apart from this
+ * one.
+ */
+export const STORY_STATUSES = ['backlog', 'todo', 'in-progress', 'in-review', 'done'] as const;
+
+export type StoryStatus = (typeof STORY_STATUSES)[number];
+
+/**
+ * The status every story starts in, and the one a document written before this
+ * field existed reads back as. See ADR 0021 for why it is `todo` rather than
+ * `backlog`.
+ */
+export const DEFAULT_STORY_STATUS: StoryStatus = 'todo';
+
+export function isStoryStatus(value: unknown): value is StoryStatus {
+	return STORY_STATUSES.includes(value as StoryStatus);
+}
+
 export interface Story {
 	id: StoryId;
 	stepId: StepId;
 	title: string;
 	description: string | null;
 	sliceId: SliceId | null;
+	/** Never absent in the domain. The two edges that can produce a story
+	 *  without one — `addStory` and the repository's `toDomain` — both default
+	 *  it, because there are no migrations (ADR 0003). */
+	status: StoryStatus;
 	rank: Rank;
 }
 
@@ -271,7 +299,7 @@ export function addStory(
 	map: StoryMap,
 	stepId: StepId,
 	title: string,
-	options: { description?: string | null; sliceId?: SliceId | null } = {}
+	options: { description?: string | null; sliceId?: SliceId | null; status?: StoryStatus } = {}
 ): { map: StoryMap; story: Story } {
 	findStep(map, stepId); // throws if not found
 	const sliceId = options.sliceId ?? null;
@@ -283,6 +311,7 @@ export function addStory(
 		title: requireName(title, 'Story title'),
 		description: options.description ?? null,
 		sliceId,
+		status: options.status ?? DEFAULT_STORY_STATUS,
 		rank: rankAtEnd(storyRanksInScope(map, stepId, sliceId))
 	};
 	return { map: { ...map, stories: [...map.stories, story] }, story };
@@ -385,7 +414,7 @@ export function renameSlice(map: StoryMap, sliceId: SliceId, name: string): Stor
 export function editStory(
 	map: StoryMap,
 	storyId: StoryId,
-	changes: { title?: string; description?: string | null }
+	changes: { title?: string; description?: string | null; status?: StoryStatus }
 ): StoryMap {
 	findStory(map, storyId);
 	const title = changes.title === undefined ? undefined : requireName(changes.title, 'Story title');
@@ -400,7 +429,8 @@ export function editStory(
 						// required field. `description` needs the `!== undefined` form
 						// because `null` is a legal value that must still clear it.
 						title: title ?? s.title,
-						description: changes.description !== undefined ? changes.description : s.description
+						description: changes.description !== undefined ? changes.description : s.description,
+						status: changes.status ?? s.status
 					}
 				: s
 		)

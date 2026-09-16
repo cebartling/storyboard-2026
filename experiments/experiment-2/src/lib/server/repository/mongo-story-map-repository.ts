@@ -2,7 +2,7 @@ import { MongoServerError, type Db, type MongoClient } from 'mongodb';
 import { ConflictError, ForbiddenError } from '$lib/domain/errors';
 import type { MapId, UserId } from '$lib/domain/ids';
 import type { Caller, MapAccess, MapSummary, Role, StoryMapRepository } from '$lib/domain/ports';
-import { inRankOrder, type StoryMap } from '$lib/domain/story-map';
+import { DEFAULT_STORY_STATUS, inRankOrder, type StoryMap } from '$lib/domain/story-map';
 import { collections, memberId, type Collections, type MapDoc } from '../db/collections';
 
 /** MongoDB's duplicate-key error, the one the unique indexes raise. */
@@ -218,7 +218,16 @@ function toDomain(doc: MapDoc): StoryMap {
 		version: doc.version,
 		activities: doc.activities as StoryMap['activities'],
 		slices: doc.slices as StoryMap['slices'],
-		stories: doc.stories as StoryMap['stories'],
+		// Mapped, not cast like its neighbours, for the reason the `dependencies`
+		// note below gives: `status` postdates the documents already in the
+		// collection, so a blind cast would typecheck and hand the domain
+		// `undefined` for a field the domain declares non-optional. Here the
+		// symptom would be quieter than a 500 — a card with no tint and an empty
+		// status chip — which is exactly why it is worth spelling out.
+		stories: doc.stories.map((s) => ({
+			...s,
+			status: s.status ?? DEFAULT_STORY_STATUS
+		})) as StoryMap['stories'],
 		// `?? []`, not a cast like its neighbours. They can cast because they were
 		// always written; this field was not, so a cast would typecheck and hand
 		// the domain `undefined`. The first `map.dependencies.filter(...)` is

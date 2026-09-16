@@ -23,7 +23,13 @@ import {
 import type { ActivityId, ClientId, MapId, SliceId, StepId, StoryId } from '$lib/domain/ids';
 
 import { buildBoardViewModel } from '$lib/board/board-view-model';
-import { optionalNeighbour, requireDirection, requireString, requireVersion } from './form-fields';
+import {
+	optionalNeighbour,
+	requireDirection,
+	requireStatus,
+	requireString,
+	requireVersion
+} from './form-fields';
 import { InvariantError } from '$lib/domain/errors';
 import { requireCaller } from '$lib/server/auth/require-caller';
 import { runAction } from '../../run-action';
@@ -290,6 +296,9 @@ export const actions: Actions = {
 				typeof descriptionRaw === 'string' && descriptionRaw.trim().length > 0
 					? descriptionRaw.trim()
 					: null;
+			// Required, not optional: the dialog's <select> always has a value, so
+			// a missing one is a malformed request rather than "leave it alone".
+			const status = requireStatus(form.get('status'));
 			await editStory(
 				deps.storyMapRepository,
 				caller,
@@ -298,7 +307,8 @@ export const actions: Actions = {
 				storyId,
 				{
 					title,
-					description
+					description,
+					status
 				}
 			);
 			return expectedVersion;
