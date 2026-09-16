@@ -29,6 +29,8 @@
 	};
 </script>
 
+<svelte:head><title>Story maps · Storyboard 2026</title></svelte:head>
+
 <div class="mx-auto flex w-full max-w-2xl flex-col gap-6">
 	<div>
 		<h1>Story maps</h1>
