@@ -56,14 +56,31 @@
      every card wore before. `todo` is deliberately the amber that colour was,
      so a board nobody has triaged looks exactly as it did. -->
 <div
-	class="group text-ink flex cursor-grab flex-col gap-1.5 rounded-md border px-2.5 py-2 text-sm shadow-xs transition hover:shadow-md active:cursor-grabbing {presentation.card}"
+	class="group text-ink flex cursor-grab items-start justify-between gap-2 rounded-md border px-2.5 py-2 text-sm shadow-xs transition hover:shadow-md active:cursor-grabbing {presentation.card}"
 	data-testid="story-{id}"
 	aria-label={title}
 >
-	<div class="flex items-start justify-between gap-2">
-		<span class="flex-1 leading-snug break-words">{title}</span>
-		{#if blockedByCount > 0}
-			<!-- A <span>, not a button: the board is read-only (ADR 0011) and the list
+	<span class="flex-1 leading-snug break-words">{title}</span>
+	<!-- Inline, on the title's row. Its own row below would read better on a
+		     crowded card, but it would also make every card taller, and the board
+		     e2e's drag helper aims at a card's midpoint — a second row moves that
+		     point past `svelte-dnd-action`'s swap boundary and reorders silently
+		     stop working.
+
+		     Same `story-`-prefix warning as the deps badge below: BoardViewport's
+		     INTERACTIVE_SELECTOR would treat the chip as a card and refuse to pan
+		     from it. A <span role="img"> rather than a button, because the board
+		     grid is read-only (ADR 0011) — status is changed in the edit dialog. -->
+	<span
+		class={presentation.chip}
+		data-testid="status-chip-{id}"
+		role="img"
+		aria-label="Status: {presentation.label}"
+	>
+		{presentation.label}
+	</span>
+	{#if blockedByCount > 0}
+		<!-- A <span>, not a button: the board is read-only (ADR 0011) and the list
 		     is already one click away behind the view trigger, so a third target
 		     on a dense grid item buys nothing.
 
@@ -71,17 +88,17 @@
 		     INTERACTIVE_SELECTOR is '[data-testid^="story-"], button, a', so that
 		     prefix would make the pan handler treat this as a card and refuse to
 		     pan from it. -->
-			<span
-				class="border-danger/25 bg-danger/8 text-danger inline-flex shrink-0 items-center gap-0.5 rounded border px-1 py-0.5 text-[0.7rem] font-medium"
-				data-testid="deps-badge-{id}"
-				role="img"
-				aria-label={blockedLabel}
-				use:tooltip={blockedLabel}
-			>
-				<Link2 class="size-3" />{blockedByCount}
-			</span>
-		{/if}
-		<!-- Buttons, not a whole-card click: `svelte-dnd-action` owns the card
+		<span
+			class="border-danger/25 bg-danger/8 text-danger inline-flex shrink-0 items-center gap-0.5 rounded border px-1 py-0.5 text-[0.7rem] font-medium"
+			data-testid="deps-badge-{id}"
+			role="img"
+			aria-label={blockedLabel}
+			use:tooltip={blockedLabel}
+		>
+			<Link2 class="size-3" />{blockedByCount}
+		</span>
+	{/if}
+	<!-- Buttons, not a whole-card click: `svelte-dnd-action` owns the card
 	     body's pointer stream, and there is no click-vs-drag threshold to tell
 	     a tap from the start of a drag. Staying <button>s also keeps them in
 	     BoardViewport's INTERACTIVE_SELECTOR, so panning never steals them.
@@ -94,41 +111,24 @@
 	     fires `:hover`, so an ungated `opacity-0` would leave an invisible but
 	     still tappable button on a card the user is trying to drag.
 	     `.btn-icon` keeps the target at the WCAG 2.2 24x24 minimum. -->
-		<div class="flex shrink-0 items-center gap-0.5">
-			<button
-				type="button"
-				class="btn btn-icon btn-quiet rounded border-none bg-transparent group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:hover)]:opacity-0"
-				aria-label="View story {title}"
-				use:tooltip={'View story'}
-				onclick={onView}
-			>
-				<FileText class="size-3.5" />
-			</button>
-			<button
-				type="button"
-				class="btn btn-icon btn-quiet rounded border-none bg-transparent group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:hover)]:opacity-0"
-				aria-label="Edit story {title}"
-				use:tooltip={'Edit story'}
-				onclick={onEdit}
-			>
-				<Pencil class="size-3.5" />
-			</button>
-		</div>
+	<div class="flex shrink-0 items-center gap-0.5">
+		<button
+			type="button"
+			class="btn btn-icon btn-quiet rounded border-none bg-transparent group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:hover)]:opacity-0"
+			aria-label="View story {title}"
+			use:tooltip={'View story'}
+			onclick={onView}
+		>
+			<FileText class="size-3.5" />
+		</button>
+		<button
+			type="button"
+			class="btn btn-icon btn-quiet rounded border-none bg-transparent group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:hover)]:opacity-0"
+			aria-label="Edit story {title}"
+			use:tooltip={'Edit story'}
+			onclick={onEdit}
+		>
+			<Pencil class="size-3.5" />
+		</button>
 	</div>
-	<!-- Its own row, not inline beside the title: the row above already carries
-	     the deps badge and two triggers, and "In progress" wedged in there wraps
-	     the title on a dense grid.
-
-	     Same `story-`-prefix warning as the deps badge above: BoardViewport's
-	     INTERACTIVE_SELECTOR would treat the chip as a card and refuse to pan
-	     from it. A <span role="img"> rather than a button, because the board
-	     grid is read-only (ADR 0011) — status is changed in the edit dialog. -->
-	<span
-		class="self-start {presentation.chip}"
-		data-testid="status-chip-{id}"
-		role="img"
-		aria-label="Status: {presentation.label}"
-	>
-		{presentation.label}
-	</span>
 </div>
