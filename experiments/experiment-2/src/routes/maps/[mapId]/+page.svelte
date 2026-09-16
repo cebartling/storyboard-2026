@@ -355,6 +355,10 @@
 	}
 </script>
 
+<!-- The map's own name, so several board tabs are tellable apart. It tracks a
+	 rename, since `data.board.name` is the same reactive source the `h1` reads. -->
+<svelte:head><title>{data.board.name} · Storyboard 2026</title></svelte:head>
+
 <div class="flex h-[calc(100vh-11rem)] min-h-0 flex-col gap-6">
 	<div class="flex flex-wrap items-end justify-between gap-4">
 		<div>

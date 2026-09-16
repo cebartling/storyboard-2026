@@ -55,3 +55,20 @@ test('deletes a map from the list, behind a confirmation', async ({ page }) => {
 	await page.reload();
 	await expect(page.getByRole('link', { name: mapName })).toHaveCount(0);
 });
+
+// PIN-233: both of these pages shipped without a `<title>`, so every board tab
+// read as the bare URL — worst on the board, which is the page people keep
+// several tabs of, one per map.
+test('titles the map list and the board', async ({ page }) => {
+	await page.goto('/');
+	await expect(page).toHaveTitle('Story maps · Storyboard 2026');
+
+	const mapName = `E2E title map ${Date.now()}`;
+	await page.getByLabel('New map name').fill(mapName);
+	await page.getByRole('button', { name: 'Create map' }).click();
+	await expect(page).toHaveURL(/\/maps\/[^/]+$/);
+
+	// The board names itself, which is the whole point — two map tabs have to be
+	// tellable apart.
+	await expect(page).toHaveTitle(`${mapName} · Storyboard 2026`);
+});
