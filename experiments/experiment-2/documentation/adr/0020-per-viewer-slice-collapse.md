@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted, 2026-09-14
+Accepted, 2026-09-14. Extended by [0022](0022-condensed-slice-density.md), which turns the
+collapsed/expanded bit into a three-value density and moves the storage to
+`slice-density-storage.ts` under a new key. Everything below still holds — 0022 adds a
+middle state rather than revisiting the decision that this is per-viewer state at all.
 
 ## Context
 

@@ -612,10 +612,13 @@ test('deleting a slice keeps its stories, and deleting a story removes it', asyn
 	expect(pageErrors.map((e) => e.message)).toEqual([]);
 });
 
-// ADR 0020: collapsing is this viewer's presentation state, kept in
-// localStorage — it survives a reload and writes nothing to the map.
-test('collapse a slice hides its stories and persists across reload', async ({ page }) => {
-	await createMap(page, `E2E collapse slice ${Date.now()}`);
+// ADRs 0020 and 0022: density is this viewer's presentation state, kept in
+// localStorage — it survives a reload and writes nothing to the map. One
+// control cycles expanded → condensed → collapsed → expanded.
+test('cycle a slice through condensed and collapsed, persisting across reload', async ({
+	page
+}) => {
+	await createMap(page, `E2E slice density ${Date.now()}`);
 	await addActivity(page, 'Search');
 	await addStep(page, 'Find a product');
 	await addSlice(page, 'Release 1');
@@ -627,23 +630,49 @@ test('collapse a slice hides its stories and persists across reload', async ({ p
 	const cellStories = page
 		.getByTestId(`cell-${stepId}-${sliceId}`)
 		.locator('[data-testid^="story-"]');
+	const addStoryButton = page.getByTestId(`add-story-${stepId}-${sliceId}`);
+	const deck = page.getByTestId(`condensed-cell-${stepId}-${sliceId}`);
+	const deckCount = page.getByTestId(`condensed-count-${stepId}-${sliceId}`);
 	const summary = page.getByTestId(`collapsed-cell-${stepId}-${sliceId}`);
 	await expect(cellStories).toHaveText([/Keyword search/]);
 	const version = await board.getAttribute('data-board-version');
 
+	// Condensed: the stories still read, but the band takes no drops and
+	// offers no way to add one — a deck is not a smaller drop target.
+	await page.getByRole('button', { name: 'Condense slice Release 1' }).click();
+	await expect(deckCount).toHaveText('1 story');
+	await expect(page.getByTestId(`cell-${stepId}-${sliceId}`)).toHaveCount(0);
+	await expect(addStoryButton).toHaveCount(0);
+
+	// Peeking the stack fans it out, and a card in it opens the read-only
+	// detail dialog (ADR 0018).
+	await deck.hover();
+	await expect(deck.locator('[data-testid^="deck-story-"]')).toHaveCount(1);
+	await page.getByRole('button', { name: 'View story Keyword search' }).click();
+	const detail = dialog(page);
+	await expect(detail).toBeVisible();
+	await expect(detail).toContainText('Keyword search');
+	await page.keyboard.press('Escape');
+	await expect(detail).toBeHidden();
+
+	await page.reload();
+	await expect(deckCount).toHaveText('1 story');
+	await expect(board).toHaveAttribute('data-board-version', version!);
+
 	await page.getByRole('button', { name: 'Collapse slice Release 1' }).click();
-	await expect(cellStories).toHaveCount(0);
+	await expect(deck).toHaveCount(0);
 	await expect(summary).toHaveText('1 story');
 
 	await page.reload();
 	await expect(summary).toHaveText('1 story');
-	const expand = page.getByRole('button', { name: 'Expand slice Release 1' });
-	await expect(expand).toHaveAttribute('aria-expanded', 'false');
 	await expect(board).toHaveAttribute('data-board-version', version!);
 
-	await expand.click();
+	await page.getByRole('button', { name: 'Expand slice Release 1' }).click();
 	await expect(summary).toHaveCount(0);
+	await expect(deck).toHaveCount(0);
 	await expect(cellStories).toHaveText([/Keyword search/]);
+	await expect(addStoryButton).toBeVisible();
+	await expect(board).toHaveAttribute('data-board-version', version!);
 });
 
 // The bug ADR 0014 §3 exists to close, driven end to end: two editors on one

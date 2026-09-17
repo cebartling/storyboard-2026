@@ -7,7 +7,7 @@
 	import { DEFAULT_STORY_STATUS } from '$lib/domain/story-map';
 	import { subjectStatus } from '$lib/board/dialog-subject';
 	import { candidateStories } from '$lib/board/dependency-candidates';
-	import { SvelteSet } from 'svelte/reactivity';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { trailingThrottle } from '$lib/collab/throttle';
 	import PresenceList from '$lib/components/presence-list.svelte';
 	import RemoteCursors from '$lib/components/remote-cursors.svelte';
@@ -25,9 +25,17 @@
 	import { createCamera } from '$lib/canvas/camera.svelte';
 	import { persistCamera } from '$lib/canvas/camera-persistence.svelte';
 	import { toMinimapModel } from '$lib/canvas/minimap-model';
-	import { loadCollapsedSlices, saveCollapsedSlices } from '$lib/board/slice-collapse-storage';
+	import { loadSliceDensities, saveSliceDensities } from '$lib/board/slice-density-storage';
+	import {
+		nextSliceDensity,
+		sliceDensityAction,
+		sliceDensityName,
+		type SliceDensity
+	} from '$lib/board/slice-density';
+	import StoryDeck from '$lib/components/story-deck.svelte';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import Layers from '@lucide/svelte/icons/layers';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Plus from '@lucide/svelte/icons/plus';
 	import { tooltip } from '$lib/actions/tooltip';
@@ -100,11 +108,12 @@
 	}
 
 	// ---------------------------------------------------------------------
-	// Slice collapse (ADR 0020): this viewer's presentation state only. It is
-	// never posted, so it survives refetches and never reaches a collaborator.
+	// Slice density (ADRs 0020, 0022): this viewer's presentation state only.
+	// It is never posted, so it survives refetches and never reaches a
+	// collaborator. A row with no entry is expanded.
 	// ---------------------------------------------------------------------
 
-	const collapsedSlices = new SvelteSet<string>();
+	const sliceDensities = new SvelteMap<string, SliceDensity>();
 
 	/** `localStorage` can throw merely on access in some locked-down browsers. */
 	function boardStorage(): Storage | null {
@@ -119,30 +128,34 @@
 	// rerun the restore below.
 	const mapId = $derived(data.board.id);
 
-	// Client-only: the server render has no storage, so a collapsed slice paints
-	// expanded for a frame before this runs.
+	// Client-only: the server render has no storage, so a condensed or collapsed
+	// slice paints expanded for a frame before this runs.
 	$effect(() => {
 		const storage = boardStorage();
-		const saved = storage ? loadCollapsedSlices(storage, mapId) : new Set<string>();
+		const saved = storage ? loadSliceDensities(storage, mapId) : new Map<string, SliceDensity>();
 		untrack(() => {
-			collapsedSlices.clear();
-			for (const id of saved) collapsedSlices.add(id);
+			sliceDensities.clear();
+			for (const [id, density] of saved) sliceDensities.set(id, density);
 		});
 	});
 
-	function toggleSlice(sliceId: string) {
-		if (collapsedSlices.has(sliceId)) collapsedSlices.delete(sliceId);
-		else collapsedSlices.add(sliceId);
+	/** Walks expanded → condensed → collapsed → expanded for one row. */
+	function cycleSlice(sliceId: string) {
+		const next = nextSliceDensity(sliceDensities.get(sliceId));
+		if (next === undefined) sliceDensities.delete(sliceId);
+		else sliceDensities.set(sliceId, next);
 		const storage = boardStorage();
-		if (storage) saveCollapsedSlices(storage, mapId, collapsedSlices);
+		if (storage) saveSliceDensities(storage, mapId, sliceDensities);
 	}
 
-	// One track per row rather than `repeat()`: a collapsed row must be allowed
-	// to shrink below the 140px an expanded band reserves for dropping into.
+	// One track per row rather than `repeat()`: only an expanded row reserves
+	// the 140px a drop needs. Neither of the other two densities has a drop
+	// zone, and the deck's fanned-out panel is out of flow, so both shrink to
+	// their content.
 	const rowTracks = $derived(
 		data.board.rows
 			.map((row) =>
-				row.sliceId && collapsedSlices.has(row.sliceId) ? 'auto' : 'minmax(140px, auto)'
+				row.sliceId && sliceDensities.has(row.sliceId) ? 'auto' : 'minmax(140px, auto)'
 			)
 			.join(' ')
 	);
@@ -504,19 +517,25 @@
 						style="grid-column: 1; grid-row: {row.gridRow};"
 					>
 						{#if row.sliceId}
-							{@const collapsed = collapsedSlices.has(row.sliceId)}
-							{@const toggleLabel = `${collapsed ? 'Expand' : 'Collapse'} slice ${row.name}`}
-							<div class="flex items-start gap-1">
+							{@const density = sliceDensities.get(row.sliceId)}
+							{@const cycleLabel = `${sliceDensityAction(nextSliceDensity(density))} slice ${row.name}`}
+							<div class="flex items-start gap-1" data-density={sliceDensityName(density)}>
+								<!-- One control cycling three states (ADR 0022), not three
+								     targets on a gutter that is already crowded. It carries
+								     no `aria-expanded`: that is binary and would have to
+								     lie about one of the three, so the label names the
+								     state the next press moves to instead. -->
 								<button
 									type="button"
 									class="btn btn-icon btn-quiet shrink-0"
-									aria-expanded={!collapsed}
-									aria-label={toggleLabel}
-									use:tooltip={toggleLabel}
-									onclick={() => toggleSlice(row.sliceId!)}
+									aria-label={cycleLabel}
+									use:tooltip={cycleLabel}
+									onclick={() => cycleSlice(row.sliceId!)}
 								>
-									{#if collapsed}
+									{#if density === 'collapsed'}
 										<ChevronRight class="size-3.5" />
+									{:else if density === 'condensed'}
+										<Layers class="size-3.5" />
 									{:else}
 										<ChevronDown class="size-3.5" />
 									{/if}
@@ -543,11 +562,12 @@
 				{/each}
 
 				{#each data.board.cells as cell (`${cell.stepId}-${cell.sliceId ?? 'unsliced'}`)}
+					{@const cellDensity = cell.sliceId ? sliceDensities.get(cell.sliceId) : undefined}
 					<div
 						class="board-cell flex flex-col gap-2 bg-white p-1.5"
 						style="grid-column: {cell.gridColumn}; grid-row: {cell.gridRow};"
 					>
-						{#if cell.sliceId && collapsedSlices.has(cell.sliceId)}
+						{#if cell.sliceId && cellDensity === 'collapsed'}
 							<!-- Collapsed (ADR 0020): no add button and no drop zone, so
 							     nothing can be dropped into a band the viewer cannot see. -->
 							<p
@@ -557,6 +577,17 @@
 								{cell.stories.length}
 								{cell.stories.length === 1 ? 'story' : 'stories'}
 							</p>
+						{:else if cell.sliceId && cellDensity === 'condensed'}
+							<!-- Condensed (ADR 0022): the stories still read, as a deck. The
+							     band is as undroppable as a collapsed one — the deck is the
+							     middle density, not a smaller drop target. -->
+							<StoryDeck
+								stories={cell.stories}
+								stepId={cell.stepId}
+								sliceId={cell.sliceId}
+								cellLabel={cellLabel(cell.stepId, cell.sliceId)}
+								onViewStory={(storyId) => (dialog = { kind: 'viewStory', storyId })}
+							/>
 						{:else}
 							<!-- Every cell, not just the unsliced band: adding straight
 						     into a release slice was impossible with the old inline

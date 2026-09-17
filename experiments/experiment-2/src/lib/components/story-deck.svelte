@@ -1,0 +1,137 @@
+<script lang="ts">
+	import { STORY_STATUS_PRESENTATION } from '$lib/board/story-status';
+	import { DEFAULT_STORY_STATUS } from '$lib/domain/story-map';
+	import type { DndStoryItem } from './story-dnd-zone.svelte';
+
+	// Presentational only: one cell's stories at the condensed density (ADR
+	// 0022). Read-only by construction — a condensed band has no drop zone and
+	// no "Add story", exactly as a collapsed one does not (ADR 0020), so this
+	// component knows nothing about `svelte-dnd-action`.
+	interface Props {
+		stories: DndStoryItem[];
+		stepId: string;
+		sliceId: string;
+		/** "Activity / Step, Release 1" — names the deck for a screen reader. */
+		cellLabel: string;
+		/** Opens the read-only detail dialog (ADR 0018), the only place a
+		 *  condensed story's description is legible. */
+		onViewStory: (storyId: string) => void;
+	}
+
+	let { stories, stepId, sliceId, cellLabel, onViewStory }: Props = $props();
+
+	// How many card edges peek out behind the top one. Three is where the stack
+	// stops reading as depth and starts reading as noise, and a deeper stack
+	// would not change the count line underneath it anyway.
+	const PEEK_DEPTH = 3;
+
+	const countLabel = $derived(`${stories.length} ${stories.length === 1 ? 'story' : 'stories'}`);
+
+	/** Pixel offsets of the card edges behind the top one, nearest edge first. */
+	const peekOffsets = $derived(
+		Array.from(
+			{ length: Math.min(Math.max(stories.length - 1, 0), PEEK_DEPTH - 1) },
+			(_, index) => (index + 1) * 3
+		)
+	);
+
+	// A `$state` boolean rather than `group-hover:` alone, because a touch
+	// device never fires `:hover` — the trap `story-card.svelte` guards its
+	// hover-revealed buttons against with `[@media(hover:hover)]`. Here the
+	// stack itself is a button, so a tap opens the same panel a hover does.
+	let peeking = $state(false);
+
+	/** Ignores focus moving between the panel's own buttons. */
+	function closeOnFocusLeaving(event: FocusEvent & { currentTarget: HTMLElement }) {
+		const next = event.relatedTarget;
+		if (next instanceof Node && event.currentTarget.contains(next)) return;
+		peeking = false;
+	}
+
+	function presentationFor(story: DndStoryItem) {
+		return STORY_STATUS_PRESENTATION[story.status ?? DEFAULT_STORY_STATUS];
+	}
+</script>
+
+<!-- The testids deliberately do not start with `story-`. BoardViewport's
+     INTERACTIVE_SELECTOR is '[data-testid^="story-"], button, a', so that
+     prefix would make the pan handler treat deck chrome as a card and refuse
+     to pan from it — the same warning `story-card.svelte` carries for its
+     status chip and dependency badge. -->
+<div
+	class="relative"
+	data-testid="condensed-cell-{stepId}-{sliceId}"
+	role="group"
+	aria-label="{cellLabel}, condensed"
+	onpointerenter={() => (peeking = true)}
+	onpointerleave={() => (peeking = false)}
+	onfocusin={() => (peeking = true)}
+	onfocusout={closeOnFocusLeaving}
+>
+	<!-- The resting stack: the top story's card with the edges of the ones
+	     behind it offset below and to the right. Its contents are decorative —
+	     every story is reachable in the panel, so repeating the top one here as
+	     its own target would double the tab stops for one cell. -->
+	{#if stories.length > 0}
+		{@const top = stories[0]}
+		{@const topPresentation = presentationFor(top)}
+		<button
+			type="button"
+			class="relative block w-full cursor-pointer text-left"
+			style="margin-bottom: {peekOffsets.at(-1) ?? 0}px;"
+			aria-label="Show the {countLabel} in {cellLabel}"
+			aria-expanded={peeking}
+			onclick={() => (peeking = !peeking)}
+		>
+			{#each peekOffsets as offset (offset)}
+				<span
+					class="absolute inset-x-0 top-0 h-full rounded-md border border-line bg-white"
+					style="transform: translate({offset}px, {offset}px);"
+					aria-hidden="true"
+				></span>
+			{/each}
+			<span
+				class="relative flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs {topPresentation.card}"
+				aria-hidden="true"
+			>
+				<span class="text-ink flex-1 truncate">{top.title}</span>
+				<span class={topPresentation.chip}>{topPresentation.label}</span>
+			</span>
+		</button>
+	{/if}
+
+	<p class="text-ink-muted px-2 py-1 text-xs" data-testid="condensed-count-{stepId}-{sliceId}">
+		{countLabel}
+	</p>
+
+	<!-- Fanned out into an overlay rather than in flow: expanding the cell
+	     itself would push every row below the pointer down as the viewer scans
+	     the board, which is the opposite of what condensing it was for.
+
+	     `opacity-0 pointer-events-none` rather than `hidden`, so the buttons
+	     stay in the tab order — reaching one is what opens the panel for a
+	     keyboard user. -->
+	<div
+		class="absolute inset-x-0 top-0 z-20 flex flex-col gap-0.5 rounded-md border border-line bg-white p-1 shadow-lg transition-opacity {peeking
+			? 'opacity-100'
+			: 'pointer-events-none opacity-0'} {stories.length === 0 ? 'hidden' : ''}"
+	>
+		{#each stories as story (story.id)}
+			{@const presentation = presentationFor(story)}
+			<button
+				type="button"
+				class="text-ink flex w-full cursor-pointer items-center gap-1.5 rounded border px-2 py-1 text-left text-xs {presentation.card}"
+				data-testid="deck-story-{story.id}"
+				aria-label="View story {story.title}"
+				onclick={() => onViewStory(story.id)}
+			>
+				<span class="flex-1 truncate">{story.title}</span>
+				<!-- The chip stays: ADR 0021 rules out colour as the only carrier of
+				     a status, and the panel is where a condensed story is read. -->
+				<span class={presentation.chip} role="img" aria-label="Status: {presentation.label}">
+					{presentation.label}
+				</span>
+			</button>
+		{/each}
+	</div>
+</div>
