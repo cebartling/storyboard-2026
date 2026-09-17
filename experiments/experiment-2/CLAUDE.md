@@ -23,8 +23,8 @@ entities and invariants, `architecture.md` for the layering, and `adr/` for why.
 is the one that constrains most changes; ADR 0010 (canvas) and ADR 0011 (dialog editing)
 constrain most board work; ADR 0018 (Markdown descriptions) owns the app's only `{@html}`,
 ADR 0019 (story dependencies) is the one place the board writes from a read-only dialog,
-and ADRs 0020 and 0021 are the same question answered both ways — slice collapse belongs to
-the viewer, story status belongs to the map.
+and ADRs 0020/0022 and 0021 are the same question answered both ways — slice density belongs
+to the viewer, story status belongs to the map.
 
 ## Commands
 
@@ -103,9 +103,12 @@ the seed, so no test or fixture breaks if you delete it.
   ADR 0010. Adding a control to a cell or header means adding a `BoardDialog` case, not an
   inline form. Adding a case means three edits, all enforced by the compiler: the union
   member, the `TITLES` entry, and a `subjectStatus` case in `src/lib/board/dialog-subject.ts`.
-- **Slice collapse is per-viewer, client-only state** (ADR 0020), in `localStorage` via
-  `src/lib/board/slice-collapse-storage.ts`. The board view model is built on the server
-  and knows nothing about it; the route applies it. Never post it.
+- **Slice density is per-viewer, client-only state** (ADRs 0020, 0022), in `localStorage` via
+  `src/lib/board/slice-density-storage.ts`, with the cycle in `slice-density.ts`. One control
+  walks each slice row through expanded → condensed (a card deck) → collapsed (a count); an
+  absent entry is expanded. Neither non-expanded state takes a drop or offers "Add story".
+  The board view model is built on the server and knows nothing about density; the route
+  applies it. Never post it.
 - **Story dependencies are directional blocks-edges on the aggregate** (ADR 0019), edited in
   the story detail dialog. Three things about them are easy to get wrong:
   - **`deleteSlice` must not prune edges** — it un-slices stories rather than deleting them, so

@@ -158,6 +158,14 @@ without a page navigation nothing else reruns `load()`. The `SubmitFunction` ret
 callback, which suppresses `enhance`'s default `applyAction` — the dialog owns its own
 error, and the default would render the same message a second time in the board's banner.
 
+How much of a release slice row is shown is the one thing on the grid that is neither the
+map's nor a dialog's. One control per row cycles a **density** — expanded (full cards, the
+"Add story" button, a drop zone), condensed (`story-deck.svelte`: a stacked card deck that
+fans into an overlay on hover, tap or focus), collapsed (a story count) — held per viewer in
+`localStorage` by `src/lib/board/slice-density-storage.ts` and never posted (ADRs 0020,
+0022). Only the expanded density takes a drop, which is what lets the other two shrink their
+grid row to `auto`.
+
 ## Board canvas: pan, zoom, and the minimap
 
 `src/routes/maps/[mapId]/+page.svelte` used to wrap the board grid directly in
