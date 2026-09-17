@@ -39,6 +39,14 @@
 	// device never fires `:hover` — the trap `story-card.svelte` guards its
 	// hover-revealed buttons against with `[@media(hover:hover)]`. Here the
 	// stack itself is a button, so a tap opens the same panel a hover does.
+	//
+	// The stack's click *opens*, and never toggles. A toggle cannot be reached
+	// in the open state anyway — the panel covers the stack — and with a mouse
+	// it could only ever fire after `pointerenter` had already opened the
+	// panel, so its one effect would be to shut what hovering just opened. On
+	// touch the ordering of `pointerleave` against `click` is the UA's to
+	// decide, and an open-only click lands the same either way. Closing is
+	// `pointerleave`'s job, or `focusout`'s once a tap has focused the button.
 	let peeking = $state(false);
 
 	/** Ignores focus moving between the panel's own buttons. */
@@ -81,7 +89,7 @@
 			style="margin-bottom: {peekOffsets.at(-1) ?? 0}px;"
 			aria-label="Show the {countLabel} in {cellLabel}"
 			aria-expanded={peeking}
-			onclick={() => (peeking = !peeking)}
+			onclick={() => (peeking = true)}
 		>
 			<!-- The edges wear the top card's tint rather than the cell's own white:
 			     a white box with a hairline border, offset a few pixels over a white
@@ -117,9 +125,16 @@
 
 	     `opacity-0 pointer-events-none` rather than `hidden`, so the buttons
 	     stay in the tab order — reaching one is what opens the panel for a
-	     keyboard user. -->
+	     keyboard user.
+
+	     `z-[5]` puts the panel over the neighbouring cells, which are all
+	     `z-auto`, and under every sticky part of the grid: the row-label gutter
+	     at `z-10`, the step and activity headers at `z-20`, the corner at
+	     `z-30`. Matching a header's `z-20` would not tie — the cells are
+	     emitted after the header rows, so the later node would win and a deck
+	     peeked near the top of the board would paint over the headers. -->
 	<div
-		class="absolute inset-x-0 top-0 z-20 flex flex-col gap-0.5 rounded-md border border-line bg-white p-1 shadow-lg transition-opacity {peeking
+		class="absolute inset-x-0 top-0 z-[5] flex flex-col gap-0.5 rounded-md border border-line bg-white p-1 shadow-lg transition-opacity {peeking
 			? 'opacity-100'
 			: 'pointer-events-none opacity-0'} {stories.length === 0 ? 'hidden' : ''}"
 	>

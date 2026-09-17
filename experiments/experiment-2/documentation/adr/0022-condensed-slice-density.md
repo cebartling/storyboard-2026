@@ -44,14 +44,23 @@ add + drop zone   read-only, no drops      no drops
   band reserves.
 - **Peeking fans the deck into an overlay, not into the flow.** Expanding the cell itself
   would push every row below the pointer down as the viewer scans, which is the opposite of
-  what condensing it was for. The panel is `absolute … z-20` inside the cell; it beats the
-  `z-10` sticky headers because the cell is `position: relative` with no `z-index` and so
-  creates no stacking context of its own.
+  what condensing it was for. The panel is `absolute … z-[5]` inside the cell, which works
+  because the cell is `position: relative` with no `z-index` and so creates no stacking
+  context of its own. The value sits deliberately between the cells it must cover — all
+  `z-auto` — and every sticky part of the grid it must not: the row-label gutter at `z-10`,
+  the step and activity headers at `z-20`, the corner at `z-30`. A panel sharing the
+  headers' `z-20` would not tie with them; the cells are emitted after the header rows, so
+  the later node would win and a deck peeked near the top of the board would paint over the
+  headers.
 - **The panel is `opacity-0 pointer-events-none`, never `hidden`.** Its buttons stay in the
   tab order, and reaching one is what opens the panel for a keyboard user. Reveal is a
   `$state` boolean driven by pointer _and_ focus _and_ a click on the stack, because a touch
   device never fires `:hover` — the trap `story-card.svelte` already guards its hover-
-  revealed buttons against.
+  revealed buttons against. **The stack's click opens; it never toggles.** In the open state
+  the panel covers the stack, so a toggle is unreachable there anyway, and with a mouse it
+  could only ever fire after `pointerenter` had already opened the panel — its one effect
+  would be to shut what hovering just opened. Closing is `pointerleave`'s job, or
+  `focusout`'s once a tap has focused the button.
 - **The control carries no `aria-expanded`.** It is binary and would have to lie about one
   of three states. Its label names the state the next press moves to (`"Condense slice
 Release 1"`), and the row exposes `data-density` for tests.

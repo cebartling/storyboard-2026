@@ -1,3 +1,4 @@
+import { tick } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
@@ -90,6 +91,32 @@ describe('StoryDeck', () => {
 		await expect
 			.element(page.getByRole('button', { name: /^Show the 3 stories/ }))
 			.toHaveAttribute('aria-expanded', 'true');
+	});
+
+	// The stack's click opens and never toggles. Reaching it with a mouse means
+	// hovering it first, which has already opened the panel, so a toggle's only
+	// reachable effect would be to shut what the hover just opened.
+	it('keeps the panel open when the stack itself is clicked', async () => {
+		renderDeck();
+
+		const stack = page.getByRole('button', { name: /^Show the 3 stories/ });
+
+		// `pointerenter` does not bubble, and the handler is on the cell, so a
+		// synthetic event has to be aimed there rather than at the stack.
+		page
+			.getByTestId('condensed-cell-step-1-slice-1')
+			.element()
+			.dispatchEvent(new PointerEvent('pointerenter'));
+		await tick();
+		expect(stack.element().getAttribute('aria-expanded')).toBe('true');
+
+		(stack.element() as HTMLElement).click();
+		// Read the attribute after a flush rather than through a retrying
+		// `expect.element`, which would settle on the pre-click DOM and pass
+		// against a toggle too — the bug this test exists to catch.
+		await tick();
+
+		expect(stack.element().getAttribute('aria-expanded')).toBe('true');
 	});
 
 	it('draws no stack for an empty cell, only the count', async () => {
