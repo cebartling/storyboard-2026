@@ -57,12 +57,24 @@ Every story starts in `todo`, and a document written before this field reads bac
 `todo`. There are no migrations here (ADR 0003), so defaulting happens where data enters
 the domain: `addStory`, and the repository's `toDomain`.
 
-`toDomain` maps the stories rather than casting them, unlike its neighbours. The cast is
-what makes this dangerous: `doc.stories as StoryMap['stories']` typechecks against a
+`toDomain` maps the stories rather than casting them, unlike its neighbours, and it
+**validates** rather than only filling in a missing field. Both halves matter, and neither
+is theoretical.
+
+The cast is the first trap: `doc.stories as StoryMap['stories']` typechecks against a
 document type whose `status` is optional and hands the domain `undefined` for a field the
-domain declares non-optional. The `dependencies` case in ADR 0019 failed loudly, with a
-500 on the first delete. This one would fail quietly — an untinted card and a blank chip —
-so it is spelled out.
+domain declares non-optional. The `dependencies` case in ADR 0019 failed loudly, with a 500
+on the first delete. This one fails quietly and _misleadingly_: `StoryCard`'s prop default
+turns `undefined` into "To do" on screen, while `dialog-subject` compares `undefined`
+against `'todo'` and reports every open editor as stale — a bug that shows up nowhere near
+the field that caused it.
+
+Defaulting only `undefined` is the second. With no migrations and no schema (ADR 0003),
+this adapter is the only thing enforcing the set, and the moment a status is renamed every
+document still holding the old string flows straight through. There is no presentation
+entry for it, so reading `.card` off `undefined` throws during render: not one card drawn
+wrong, but a board that will not load. `isStoryStatus` is the guard, at the edge where
+untrusted data enters.
 
 `todo`'s colour is the amber every card already wore. That is the point of choosing it as
 the default over `backlog`: a board nobody has triaged looks exactly as it did the day

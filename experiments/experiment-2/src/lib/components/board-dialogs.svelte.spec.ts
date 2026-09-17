@@ -181,6 +181,52 @@ describe('BoardDialogs', () => {
 		expect([...select.options].map((o) => o.textContent?.trim())).toContain('In progress');
 	});
 
+	// "Use their version" (ADR 0014 §3) swaps the dialog for one rebuilt from the
+	// live board. The editStory branch is not re-created, so every field has to
+	// actually adopt the replacement — and a <select> is the one that can
+	// silently refuse to.
+	it('editStory adopts the other editor’s status when their version is taken', async () => {
+		const opened: BoardDialog = {
+			kind: 'editStory',
+			storyId: 'st-4',
+			title: 'Search by keyword',
+			description: null,
+			status: 'todo'
+		};
+		const dialogEl = await open(opened, 3);
+		const select = form(dialogEl, '?/editStory').querySelector(
+			'select[name="status"]'
+		) as HTMLSelectElement;
+
+		// The user picks a status of their own, which is what makes the element
+		// dirty — an unvisited <select> would follow its `selected` attribute.
+		select.value = 'done';
+		select.dispatchEvent(new Event('change', { bubbles: true }));
+		await tick();
+
+		// Bob renamed the story; his status is the one it opened with.
+		await dialogEl.rerender({
+			dialog: { ...opened, title: "Bob's title" },
+			boardVersion: 4
+		});
+		await tick();
+
+		expect((dialogEl.querySelector('input[name="title"]') as HTMLInputElement).value).toBe(
+			"Bob's title"
+		);
+		// Re-queried rather than reusing `select`: adopting the other version
+		// replaces the element, and the old node would answer for a form that is
+		// no longer on screen.
+		const adopted = form(dialogEl, '?/editStory').querySelector(
+			'select[name="status"]'
+		) as HTMLSelectElement;
+		// The field that would otherwise post `done` on top of Bob's version,
+		// with the "someone else changed this" banner already dismissed.
+		expect(adopted.value).toBe('todo');
+		// And it is what the form would actually submit.
+		expect(new FormData(form(dialogEl, '?/editStory')).get('status')).toBe('todo');
+	});
+
 	it('editStory renders an empty description field for a story that has none', async () => {
 		const dialogEl = await open({
 			kind: 'editStory',

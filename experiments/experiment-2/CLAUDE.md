@@ -119,10 +119,14 @@ the seed, so no test or fixture breaks if you delete it.
   shown on the card as a tint _and_ a text chip. Three things about it are easy to get wrong:
   - **The card must never carry the status in colour alone** (WCAG 1.4.1). The chip's text
     and the card's accessible name are the channel; the tint is a scanning aid.
-  - **`toDomain` defaults it rather than casting.** There are no migrations, so documents
-    predate the field. Its neighbours cast; a cast here typechecks and hands the domain
-    `undefined` for a non-optional field, and the symptom is a blank chip rather than a
-    throw.
+  - **`toDomain` validates it rather than casting or merely defaulting.** There are no
+    migrations and no schema, so that one `isStoryStatus` call is the only thing enforcing
+    the set. A cast typechecks and hands the domain `undefined`, which the card's prop
+    default then hides — the card reads "To do" while `dialog-subject` compares `undefined`
+    against `'todo'` and reports every open editor as stale. And a value that is merely
+    unrecognised, which is what a renamed status leaves behind in every existing document,
+    has no `STORY_STATUS_PRESENTATION` entry: the card throws on render and the whole board
+    stops loading.
   - **The chip stays on the title's row.** A second row makes every card ~25px taller,
     which moves a card's midpoint past `svelte-dnd-action`'s swap boundary and makes the
     drag e2e's reorders silently stop working. The ADR has the measurements.

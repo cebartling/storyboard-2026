@@ -622,13 +622,26 @@
 				     buttons on the card: the board grid is read-only (ADR 0011), and
 				     the value is one of a closed set the server re-checks anyway. -->
 				<label for="dialog-story-status" class="field-label">Status</label>
-				<select id="dialog-story-status" name="status" class="input">
-					{#each STORY_STATUS_OPTIONS as option (option.value)}
-						<option value={option.value} selected={option.value === dialog.status}
-							>{option.label}</option
-						>
-					{/each}
-				</select>
+				<!-- Keyed on `dialog` so "Use their version" (ADR 0014 §3) gets a
+				     *new* <select>, and neither one-way form survives without it.
+				     `selected` compiles to the content attribute, which a browser
+				     ignores once the user has touched the control; `value` is only
+				     written when Svelte's own value changes, and the case that
+				     matters is the one where it has not — the other editor renamed
+				     the story and left the status alone. Either way the field would
+				     keep the user's local pick and post it over the top with the
+				     banner already dismissed. The text inputs are immune because
+				     Svelte writes those through the `value` property, which is
+				     exactly why the inconsistency is easy to miss. -->
+				{#key dialog}
+					<select id="dialog-story-status" name="status" class="input">
+						{#each STORY_STATUS_OPTIONS as option (option.value)}
+							<option value={option.value} selected={option.value === dialog.status}
+								>{option.label}</option
+							>
+						{/each}
+					</select>
+				{/key}
 			</div>
 			<div class="flex flex-col gap-1.5">
 				<label for="dialog-story-description" class="field-label">Description</label>
