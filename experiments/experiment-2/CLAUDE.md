@@ -22,7 +22,9 @@ vocabulary (note: we say **Step** where Patton says _user task_), `domain-model.
 entities and invariants, `architecture.md` for the layering, and `adr/` for why. ADR 0006
 is the one that constrains most changes; ADR 0010 (canvas) and ADR 0011 (dialog editing)
 constrain most board work; ADR 0018 (Markdown descriptions) owns the app's only `{@html}`,
-and ADR 0019 (story dependencies) is the one place the board writes from a read-only dialog.
+ADR 0019 (story dependencies) is the one place the board writes from a read-only dialog,
+and ADRs 0020 and 0021 are the same question answered both ways — slice collapse belongs to
+the viewer, story status belongs to the map.
 
 ## Commands
 
@@ -43,6 +45,7 @@ versions before 10 reject this directory's `pnpm-workspace.yaml` with
 | **Single e2e test**              | `corepack pnpm playwright test -g "drag story to slice"`                                   |
 | **Single canvas e2e test**       | `corepack pnpm playwright test -g "pan and zoom persist"`                                  |
 | **Single story-detail e2e test** | `corepack pnpm playwright test -g "renders a story description as Markdown"`               |
+| **Single story-status e2e test** | `corepack pnpm playwright test -g "sets a story status and paints the card"`               |
 | Collaboration demo (headed)      | `corepack pnpm demo`                                                                       |
 | Types                            | `corepack pnpm check`                                                                      |
 | Lint / format                    | `corepack pnpm lint` / `corepack pnpm format`                                              |
@@ -112,6 +115,21 @@ the seed, so no test or fixture breaks if you delete it.
     two-story cycles and rejects a redundant transitive edge.
   - **The detail dialog stays open across its writes** and re-snapshots the version. Every other
     editor closes; this one would close the view the reader is standing in.
+- **Story status is a shared field on the aggregate** (ADR 0021), set in the edit dialog and
+  shown on the card as a tint _and_ a text chip. Three things about it are easy to get wrong:
+  - **The card must never carry the status in colour alone** (WCAG 1.4.1). The chip's text
+    and the card's accessible name are the channel; the tint is a scanning aid.
+  - **`toDomain` validates it rather than casting or merely defaulting.** There are no
+    migrations and no schema, so that one `isStoryStatus` call is the only thing enforcing
+    the set. A cast typechecks and hands the domain `undefined`, which the card's prop
+    default then hides — the card reads "To do" while `dialog-subject` compares `undefined`
+    against `'todo'` and reports every open editor as stale. And a value that is merely
+    unrecognised, which is what a renamed status leaves behind in every existing document,
+    has no `STORY_STATUS_PRESENTATION` entry: the card throws on render and the whole board
+    stops loading.
+  - **The chip stays on the title's row.** A second row makes every card ~25px taller,
+    which moves a card's midpoint past `svelte-dnd-action`'s swap boundary and makes the
+    drag e2e's reorders silently stop working. The ADR has the measurements.
 - **Story descriptions are Markdown, rendered only in the `viewStory` dialog** (ADR 0018).
   `src/lib/markdown/render-markdown.ts` parses with `marked` and sanitises with DOMPurify
   against an explicit allowlist; it is the app's **only** `{@html}` and there is no CSP

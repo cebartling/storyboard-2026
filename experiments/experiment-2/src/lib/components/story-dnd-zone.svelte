@@ -1,4 +1,6 @@
 <script lang="ts" module>
+	import type { StoryStatus } from '$lib/domain/story-map';
+
 	// The thin wrapper around `svelte-dnd-action` the plan calls for (step 8):
 	// every other component and route deals only in these two shapes, never
 	// in the library's own `DndEvent`/`TRIGGERS` types, so swapping the
@@ -10,6 +12,8 @@
 		description: string | null;
 		/** Optional so existing fixtures keep typechecking; absent means zero. */
 		blockedByCount?: number;
+		/** Optional for the same reason; absent means the default status. */
+		status?: StoryStatus;
 	}
 
 	export interface MoveDetail {
@@ -126,6 +130,7 @@
 			id={item.id}
 			title={item.title}
 			blockedByCount={item.blockedByCount}
+			status={item.status}
 			onEdit={() => onEditStory(item)}
 			onView={() => onViewStory(item)}
 		/>

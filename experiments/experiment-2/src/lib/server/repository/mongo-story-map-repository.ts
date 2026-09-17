@@ -2,7 +2,12 @@ import { MongoServerError, type Db, type MongoClient } from 'mongodb';
 import { ConflictError, ForbiddenError } from '$lib/domain/errors';
 import type { MapId, UserId } from '$lib/domain/ids';
 import type { Caller, MapAccess, MapSummary, Role, StoryMapRepository } from '$lib/domain/ports';
-import { inRankOrder, type StoryMap } from '$lib/domain/story-map';
+import {
+	DEFAULT_STORY_STATUS,
+	inRankOrder,
+	isStoryStatus,
+	type StoryMap
+} from '$lib/domain/story-map';
 import { collections, memberId, type Collections, type MapDoc } from '../db/collections';
 
 /** MongoDB's duplicate-key error, the one the unique indexes raise. */
@@ -218,7 +223,23 @@ function toDomain(doc: MapDoc): StoryMap {
 		version: doc.version,
 		activities: doc.activities as StoryMap['activities'],
 		slices: doc.slices as StoryMap['slices'],
-		stories: doc.stories as StoryMap['stories'],
+		// Mapped, not cast like its neighbours, for the reason the `dependencies`
+		// note below gives: `status` postdates the documents already in the
+		// collection, so a blind cast would typecheck and hand the domain
+		// `undefined` for a field the domain declares non-optional.
+		//
+		// Validated rather than merely defaulted, because `??` only answers for a
+		// missing field and this is the one edge where the value can be anything.
+		// Nothing but this adapter enforces the set — there are no migrations and
+		// no schema (ADR 0003) — so a status retired or renamed in a later release
+		// leaves every document still holding the old string. Passed through, it
+		// reaches `STORY_STATUS_PRESENTATION[status]`, which has no entry for it,
+		// and reading `.card` off `undefined` throws while rendering: not a
+		// mis-drawn card but a board that will not load at all.
+		stories: doc.stories.map((s) => ({
+			...s,
+			status: isStoryStatus(s.status) ? s.status : DEFAULT_STORY_STATUS
+		})) as StoryMap['stories'],
 		// `?? []`, not a cast like its neighbours. They can cast because they were
 		// always written; this field was not, so a cast would typecheck and hand
 		// the domain `undefined`. The first `map.dependencies.filter(...)` is

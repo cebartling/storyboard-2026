@@ -152,4 +152,43 @@ describe('MongoStoryMapRepository (storage-specific)', () => {
 
 		expect(access!.map.dependencies).toEqual([]);
 	});
+
+	it('defaults a story’s status for a document written before the field existed', async () => {
+		// The `status` counterpart of the case above, and the quieter of the two:
+		// a story that came back with `status` undefined would render an untinted
+		// card and an empty chip rather than throwing, so nothing else in the
+		// suite would notice.
+		//
+		// Same technique — `$unset` through the driver, because `save` always
+		// writes the field and this shape is unreachable through the repository.
+		const activity = addActivity(createStoryMap('Legacy'), 'Browse');
+		const step = addStep(activity.map, activity.activity.id, 'Search');
+		const story = addStory(step.map, step.step.id, 'Filter by size', { status: 'done' });
+		const saved = await repository.save(caller, story.map);
+		await collections(db).maps.updateOne({ _id: saved.id }, { $unset: { 'stories.0.status': '' } });
+
+		const access = await repository.load(caller, saved.id);
+
+		expect(access!.map.stories[0].status).toBe('todo');
+	});
+
+	it('defaults a story’s status when the stored value is not one of the five', async () => {
+		// Not a hypothetical: `story-status.test.ts` guards against a *renamed*
+		// status, and with no migrations and no schema (ADR 0003) a rename leaves
+		// every existing document holding the old string. Passed through, it has
+		// no entry in `STORY_STATUS_PRESENTATION` and the card throws on
+		// `.card` — so the whole board 500s rather than drawing one story wrong.
+		const activity = addActivity(createStoryMap('Legacy'), 'Browse');
+		const step = addStep(activity.map, activity.activity.id, 'Search');
+		const story = addStory(step.map, step.step.id, 'Filter by size');
+		const saved = await repository.save(caller, story.map);
+		await collections(db).maps.updateOne(
+			{ _id: saved.id },
+			{ $set: { 'stories.0.status': 'shipped' } }
+		);
+
+		const access = await repository.load(caller, saved.id);
+
+		expect(access!.map.stories[0].status).toBe('todo');
+	});
 });

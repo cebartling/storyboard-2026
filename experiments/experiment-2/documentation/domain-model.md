@@ -42,8 +42,12 @@ Story {
   title: string
   description: string | null
   sliceId: string | null      // null = unsliced band
+  status: StoryStatus         // ADR 0021; 'todo' by default
   rank: string                // fractional rank, scoped to (stepId, sliceId)
 }
+
+StoryStatus =                 // ADR 0021
+  'backlog' | 'todo' | 'in-progress' | 'in-review' | 'done'
 
 Dependency {                  // ADR 0019
   blockerId: string           // the Story that must come first
@@ -60,6 +64,9 @@ Enforced in domain code (`src/lib/domain/`), not left to the database to catch:
   `(stepId, sliceId)`.
 - `Story.sliceId` is either `null` or references a `Slice` belonging to the same
   `StoryMap` as the story's `Step`/`Activity`. Cross-map slice assignment is invalid.
+- `Story.status` is one of the five `StoryStatus` values and is never absent. A new story
+  is `todo`, as is one loaded from a document written before the field existed — there are
+  no migrations, so the repository defaults it on the way in (ADR 0021).
 - Deleting an `Activity` cascades to its `Step`s and their `Story`s.
 - Deleting a `Slice` does **not** delete its `Story`s — it sets their `sliceId` to `null`
   (un-slicing), matching pulling a strip of tape off a physical wall.

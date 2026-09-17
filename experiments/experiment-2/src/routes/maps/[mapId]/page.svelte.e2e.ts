@@ -677,6 +677,11 @@ test("an editor open across someone else's change is refused instead of overwrit
 		);
 		body.set('storyId', id);
 		body.set('title', "Bob's title");
+		// Bob is posting what Bob's dialog would post. `status` is required by
+		// the action (ADR 0021), so leaving it out here would not simulate a
+		// second editor at all — it would simulate a 400, and Alice's save would
+		// then succeed for want of anything to conflict with.
+		body.set('status', 'todo');
 		await fetch('?/editStory', { method: 'POST', body });
 	}, storyId);
 

@@ -87,11 +87,22 @@ export function subjectStatus(dialog: BoardDialog, board: BoardViewModel): Subje
 			if (!story) return { status: 'deleted' };
 			// A move changes which cell holds the story but not the story itself,
 			// and is not something the editor needs to warn about.
-			return story.title === dialog.title && story.description === dialog.description
+			// Status is compared alongside title and description because the same
+			// form posts all three (ADR 0021): a collaborator moving the story to
+			// "Done" while this editor is open would otherwise be reverted by
+			// "Save mine anyway" with nothing warning either of them.
+			return story.title === dialog.title &&
+				story.description === dialog.description &&
+				story.status === dialog.status
 				? { status: 'current' }
 				: {
 						status: 'changed',
-						current: { ...dialog, title: story.title, description: story.description }
+						current: {
+							...dialog,
+							title: story.title,
+							description: story.description,
+							status: story.status
+						}
 					};
 		}
 	}

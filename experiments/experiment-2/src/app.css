@@ -21,6 +21,26 @@
 	--color-accent-soft: oklch(0.97 0.04 85);
 	--color-danger: oklch(0.55 0.19 25);
 
+	/* One token per story status (ADR 0021), each used three ways on a card: the
+	   `text-status-` utility at full strength for the chip label, and the
+	   `bg-status-` and `border-status-` ones at 8% and 25% for the tint — the
+	   same alpha pattern the dependency badge already uses with
+	   `--color-danger`. (Spelled out in prose rather than with a wildcard,
+	   because a `*` followed by a slash would end this comment.)
+
+	   Every one sits at lightness ~0.5 so the chip label clears 4.5:1 against
+	   its own 8% tint on `--color-canvas`. `--color-status-todo` is the amber of
+	   `--color-accent` darkened to reach that ratio, because `todo` is the
+	   default and its cards must keep looking like the sticky notes they are
+	   today. Hues are spread far enough apart to survive the common forms of
+	   colour blindness, but the chip text is what actually carries the meaning
+	   (WCAG 1.4.1) — the tint is a scanning aid, not the message. */
+	--color-status-backlog: oklch(0.5 0.02 260);
+	--color-status-todo: oklch(0.5 0.1 85);
+	--color-status-in-progress: oklch(0.5 0.16 250);
+	--color-status-in-review: oklch(0.5 0.17 300);
+	--color-status-done: oklch(0.5 0.13 150);
+
 	--font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 

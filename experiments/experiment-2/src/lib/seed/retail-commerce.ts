@@ -25,7 +25,8 @@ import {
 	addStep,
 	addStory,
 	createStoryMap,
-	type StoryMap
+	type StoryMap,
+	type StoryStatus
 } from '$lib/domain/story-map';
 
 /** An acceptance criterion and whether it is already met. */
@@ -80,6 +81,28 @@ export const retailCommerceDependencies: [blocker: string, blocked: string][] = 
 	['Pay by card', 'See an order confirmation page'],
 	// A return needs an order that arrived.
 	['See what was delivered', 'Request a return online']
+];
+
+/**
+ * A few stories that are not at the start of the board, by title (ADR 0021).
+ *
+ * Deliberately few, and by title, for exactly the reasons the dependency list
+ * above gives. A seeded board should *show* the five colours rather than model
+ * a real delivery state, and every story left out of this list keeps the
+ * default `todo` — which is also what the earliest slice ought to look like.
+ */
+export const retailCommerceStatuses: [title: string, status: StoryStatus][] = [
+	// The storefront and the catalogue came first, and are finished.
+	['See the homepage', 'done'],
+	['Create a product', 'done'],
+	['Set a list price', 'done'],
+	// Checkout is the slice being built right now.
+	['Add an item to the cart', 'in-progress'],
+	['See cart line items and total', 'in-progress'],
+	['Pay by card', 'in-review'],
+	// And the later releases have not been picked up at all.
+	['Request a return online', 'backlog'],
+	['See what was delivered', 'backlog']
 ];
 
 /**
@@ -1645,6 +1668,8 @@ export function buildRetailCommerceMap(createdAt: Date = new Date()): StoryMap {
 		sliceIdByName.set(name, added.slice.id);
 	}
 
+	const statusByTitle = new Map(retailCommerceStatuses);
+
 	for (const activityBlueprint of retailCommerceBlueprint) {
 		const addedActivity = addActivity(map, activityBlueprint.name);
 		map = addedActivity.map;
@@ -1658,7 +1683,9 @@ export function buildRetailCommerceMap(createdAt: Date = new Date()): StoryMap {
 					storyBlueprint.slice === null ? null : sliceIdByName.get(storyBlueprint.slice)!;
 				map = addStory(map, addedStep.step.id, storyBlueprint.title, {
 					description: storyDescription(storyBlueprint),
-					sliceId
+					sliceId,
+					// Absent from the list means the default, which is most of them.
+					status: statusByTitle.get(storyBlueprint.title)
 				}).map;
 			}
 		}

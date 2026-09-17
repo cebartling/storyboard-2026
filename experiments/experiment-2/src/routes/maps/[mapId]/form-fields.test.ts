@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { InvariantError } from '$lib/domain/errors';
-import { optionalNeighbour, requireDirection, requireString, requireVersion } from './form-fields';
+import { STORY_STATUSES } from '$lib/domain/story-map';
+import {
+	optionalNeighbour,
+	requireDirection,
+	requireStatus,
+	requireString,
+	requireVersion
+} from './form-fields';
 
 describe('requireString', () => {
 	it('returns the trimmed value', () => {
@@ -52,5 +59,23 @@ describe('requireDirection', () => {
 		['nothing at all', null]
 	])('rejects %s', (_label, value) => {
 		expect(() => requireDirection(value)).toThrow(InvariantError);
+	});
+});
+
+describe('requireStatus', () => {
+	it.each(STORY_STATUSES)('accepts %s', (value) => {
+		expect(requireStatus(value)).toBe(value);
+	});
+
+	// Same rule as `requireDirection`: the set is closed, so an unrecognised
+	// value is a malformed request. Defaulting it would quietly move the story
+	// to `todo`, undoing whatever status it actually had.
+	it.each([
+		['a label rather than a value', 'In progress'],
+		['an unknown status', 'shipped'],
+		['the empty string', ''],
+		['nothing at all', null]
+	])('rejects %s', (_label, value) => {
+		expect(() => requireStatus(value)).toThrow(InvariantError);
 	});
 });

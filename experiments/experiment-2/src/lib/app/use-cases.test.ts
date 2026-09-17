@@ -306,6 +306,18 @@ describe('mutating use cases', () => {
 		const story = after.stories.find((s) => s.id === ctx.storyId)!;
 		expect(story.title).toBe('Keyword search');
 		expect(story.description).toBe('Accepts partial words');
+		// And the status it was never given stays where it was (ADR 0021).
+		expect(story.status).toBe('todo');
+	});
+
+	it('editStory persists a status change', async () => {
+		const ctx = await seeded();
+		await useCases.editStory(ctx.repository, caller, ctx.mapId, ctx.version, ctx.storyId, {
+			status: 'in-progress'
+		});
+
+		const after = (await ctx.repository.load(caller, ctx.mapId))!.map;
+		expect(after.stories.find((s) => s.id === ctx.storyId)!.status).toBe('in-progress');
 	});
 });
 

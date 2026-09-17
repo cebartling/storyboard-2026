@@ -1,4 +1,6 @@
 <script lang="ts" module>
+	import type { StoryStatus } from '$lib/domain/story-map';
+
 	/**
 	 * Which board editor is open, and the data it needs to prefill. One
 	 * discriminated union rather than a boolean-and-id per editor: only one
@@ -13,7 +15,13 @@
 		| { kind: 'addSlice' }
 		| { kind: 'editSlice'; sliceId: string; name: string }
 		| { kind: 'addStory'; stepId: string; sliceId: string | null; scopeLabel: string }
-		| { kind: 'editStory'; storyId: string; title: string; description: string | null }
+		| {
+				kind: 'editStory';
+				storyId: string;
+				title: string;
+				description: string | null;
+				status: StoryStatus;
+		  }
 		/**
 		 * The read-only story detail view (ADR 0018). Carries only the id, unlike
 		 * every `edit*` kind: an editor snapshots its subject so it can tell that
@@ -57,6 +65,7 @@
 	import type { SubjectStatus } from '$lib/board/dialog-subject';
 	import { renderMarkdown } from '$lib/markdown/render-markdown';
 	import { filterCandidates, type Candidate } from '$lib/board/dependency-candidates';
+	import { STORY_STATUS_OPTIONS } from '$lib/board/story-status';
 	import { tooltip } from '$lib/actions/tooltip';
 	import type { BoardViewModel } from '$lib/board/board-view-model';
 	import Plus from '@lucide/svelte/icons/plus';
@@ -101,7 +110,7 @@
 		 * follows a collaborator's edit instead of going stale; `null` once the
 		 * story is gone.
 		 */
-		story?: { title: string; description: string | null } | null;
+		story?: { title: string; description: string | null; status: StoryStatus } | null;
 		/** Every edge on the board, both endpoints resolved (ADR 0019). */
 		dependencies?: BoardDependency[];
 		/** Stories this one could legally be linked to. */
@@ -609,6 +618,32 @@
 				/>
 			</div>
 			<div class="flex flex-col gap-1.5">
+				<!-- The only place a status is set (ADR 0021). A <select>, not five
+				     buttons on the card: the board grid is read-only (ADR 0011), and
+				     the value is one of a closed set the server re-checks anyway. -->
+				<label for="dialog-story-status" class="field-label">Status</label>
+				<!-- Keyed on `dialog` so "Use their version" (ADR 0014 §3) gets a
+				     *new* <select>, and neither one-way form survives without it.
+				     `selected` compiles to the content attribute, which a browser
+				     ignores once the user has touched the control; `value` is only
+				     written when Svelte's own value changes, and the case that
+				     matters is the one where it has not — the other editor renamed
+				     the story and left the status alone. Either way the field would
+				     keep the user's local pick and post it over the top with the
+				     banner already dismissed. The text inputs are immune because
+				     Svelte writes those through the `value` property, which is
+				     exactly why the inconsistency is easy to miss. -->
+				{#key dialog}
+					<select id="dialog-story-status" name="status" class="input">
+						{#each STORY_STATUS_OPTIONS as option (option.value)}
+							<option value={option.value} selected={option.value === dialog.status}
+								>{option.label}</option
+							>
+						{/each}
+					</select>
+				{/key}
+			</div>
+			<div class="flex flex-col gap-1.5">
 				<label for="dialog-story-description" class="field-label">Description</label>
 				<textarea
 					id="dialog-story-description"
@@ -801,7 +836,8 @@
 							kind: 'editStory',
 							storyId: dialog.storyId,
 							title: story.title,
-							description: story.description
+							description: story.description,
+							status: story.status
 						})}>Edit story</button
 				>
 			</div>

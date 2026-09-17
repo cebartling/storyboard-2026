@@ -16,6 +16,7 @@ import {
 	findActivity,
 	findStory,
 	inRankOrder,
+	isStoryStatus,
 	moveActivity,
 	moveSlice,
 	moveStep,
@@ -24,6 +25,7 @@ import {
 	renameSlice,
 	removeDependency,
 	renameStep,
+	STORY_STATUSES,
 	type StoryMap
 } from './story-map';
 
@@ -92,6 +94,18 @@ describe('addActivity / addStep / addSlice / addStory', () => {
 		expect(story.stepId).toBe(stepId);
 	});
 
+	it('adds a story in the default status', () => {
+		const { map, stepId } = mapWithOneStep();
+		const { story } = addStory(map, stepId, 'A story');
+		expect(story.status).toBe('todo');
+	});
+
+	it('adds a story in an explicit status', () => {
+		const { map, stepId } = mapWithOneStep();
+		const { story } = addStory(map, stepId, 'A story', { status: 'in-review' });
+		expect(story.status).toBe('in-review');
+	});
+
 	it('rejects addStory for an unknown step', () => {
 		const map = createStoryMap('m');
 		expect(() => addStory(map, 'nope' as never, 'Story')).toThrow(/Step not found/);
@@ -148,6 +162,34 @@ describe('rename / edit', () => {
 		const updated = findStory(map3, story.id);
 		expect(updated.title).toBe('Updated');
 		expect(updated.description).toBe('now has one');
+	});
+
+	it('edits a story status', () => {
+		const { map, stepId } = mapWithOneStep();
+		const { map: map2, story } = addStory(map, stepId, 'Original');
+		const map3 = editStory(map2, story.id, { status: 'done' });
+		expect(findStory(map3, story.id).status).toBe('done');
+	});
+
+	// The regression the `?? s.status` form exists to prevent: the edit dialog
+	// posts every field, but the detail dialog and any future caller need not,
+	// and an omitted status must not reset a story to `todo`.
+	it('leaves status alone when an edit does not mention it', () => {
+		const { map, stepId } = mapWithOneStep();
+		const { map: map2, story } = addStory(map, stepId, 'Original', { status: 'in-progress' });
+		const map3 = editStory(map2, story.id, { title: 'Updated' });
+		const updated = findStory(map3, story.id);
+		expect(updated.title).toBe('Updated');
+		expect(updated.status).toBe('in-progress');
+	});
+});
+
+describe('isStoryStatus', () => {
+	it('accepts every declared status and rejects anything else', () => {
+		for (const status of STORY_STATUSES) expect(isStoryStatus(status)).toBe(true);
+		expect(isStoryStatus('In progress')).toBe(false);
+		expect(isStoryStatus('')).toBe(false);
+		expect(isStoryStatus(undefined)).toBe(false);
 	});
 });
 

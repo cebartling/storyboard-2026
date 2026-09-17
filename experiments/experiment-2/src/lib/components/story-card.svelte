@@ -3,6 +3,8 @@
 	import FileText from '@lucide/svelte/icons/file-text';
 	import Link2 from '@lucide/svelte/icons/link-2';
 	import { tooltip } from '$lib/actions/tooltip';
+	import { STORY_STATUS_PRESENTATION } from '$lib/board/story-status';
+	import { DEFAULT_STORY_STATUS, type StoryStatus } from '$lib/domain/story-map';
 
 	// Presentational only: a single Story card. The card is read-only (ADR
 	// 0011) — editing and deleting both happen in the story dialog, which the
@@ -23,21 +25,60 @@
 		 * Optional because `DndStoryItem` fixtures predate it; absent means zero.
 		 */
 		blockedByCount?: number;
+		/**
+		 * Where the story has got to (ADR 0021). Shown as a tint *and* a text
+		 * chip: colour alone would be the only carrier of the meaning, which
+		 * WCAG 1.4.1 rules out.
+		 *
+		 * Optional for the same reason `blockedByCount` is — `DndStoryItem`
+		 * fixtures predate it — and absent means the default, never blank.
+		 */
+		status?: StoryStatus;
 	}
 
-	let { id, title, onEdit, onView, blockedByCount = 0 }: Props = $props();
+	let {
+		id,
+		title,
+		onEdit,
+		onView,
+		blockedByCount = 0,
+		status = DEFAULT_STORY_STATUS
+	}: Props = $props();
 
 	const blockedLabel = $derived(
 		`Blocked by ${blockedByCount} ${blockedByCount === 1 ? 'story' : 'stories'}`
 	);
+
+	const presentation = $derived(STORY_STATUS_PRESENTATION[status]);
 </script>
 
+<!-- The tint is the status's (ADR 0021), replacing the single accent colour
+     every card wore before. `todo` is deliberately the amber that colour was,
+     so a board nobody has triaged looks exactly as it did. -->
 <div
-	class="group border-accent/50 bg-accent-soft text-ink flex cursor-grab items-start justify-between gap-2 rounded-md border px-2.5 py-2 text-sm shadow-xs transition hover:shadow-md active:cursor-grabbing"
+	class="group text-ink flex cursor-grab items-start justify-between gap-2 rounded-md border px-2.5 py-2 text-sm shadow-xs transition hover:shadow-md active:cursor-grabbing {presentation.card}"
 	data-testid="story-{id}"
 	aria-label={title}
 >
 	<span class="flex-1 leading-snug break-words">{title}</span>
+	<!-- Inline, on the title's row. Its own row below would read better on a
+		     crowded card, but it would also make every card taller, and the board
+		     e2e's drag helper aims at a card's midpoint — a second row moves that
+		     point past `svelte-dnd-action`'s swap boundary and reorders silently
+		     stop working.
+
+		     Same `story-`-prefix warning as the deps badge below: BoardViewport's
+		     INTERACTIVE_SELECTOR would treat the chip as a card and refuse to pan
+		     from it. A <span role="img"> rather than a button, because the board
+		     grid is read-only (ADR 0011) — status is changed in the edit dialog. -->
+	<span
+		class={presentation.chip}
+		data-testid="status-chip-{id}"
+		role="img"
+		aria-label="Status: {presentation.label}"
+	>
+		{presentation.label}
+	</span>
 	{#if blockedByCount > 0}
 		<!-- A <span>, not a button: the board is read-only (ADR 0011) and the list
 		     is already one click away behind the view trigger, so a third target
