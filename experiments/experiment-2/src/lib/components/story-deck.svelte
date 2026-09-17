@@ -31,7 +31,7 @@
 	const peekOffsets = $derived(
 		Array.from(
 			{ length: Math.min(Math.max(stories.length - 1, 0), PEEK_DEPTH - 1) },
-			(_, index) => (index + 1) * 3
+			(_, index) => (index + 1) * 4
 		)
 	);
 
@@ -83,9 +83,16 @@
 			aria-expanded={peeking}
 			onclick={() => (peeking = !peeking)}
 		>
+			<!-- The edges wear the top card's tint rather than the cell's own white:
+			     a white box with a hairline border, offset a few pixels over a white
+			     cell, is invisible, and an invisible stack is just a card.
+
+			     `inset-0`, not `top-0 h-full`: the stack's height comes from the top
+			     card, so a percentage height would resolve against an `auto` parent
+			     and collapse every edge to nothing. -->
 			{#each peekOffsets as offset (offset)}
 				<span
-					class="absolute inset-x-0 top-0 h-full rounded-md border border-line bg-white"
+					class="absolute inset-0 rounded-md border {topPresentation.card}"
 					style="transform: translate({offset}px, {offset}px);"
 					aria-hidden="true"
 				></span>
