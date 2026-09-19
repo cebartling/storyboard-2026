@@ -89,3 +89,7 @@ map you are not a member of, as it is on the board (ADR 0015).
 - **The slice row label has a third control.** Edit slice and the release view link sit side by
   side under the density control. The link's testid starts with `release-view-link-`, not
   `story-`, so `BoardViewport` does not mistake it for a card.
+- **A middle-click on a link inside the board is left to the browser.** The link is the first
+  `<a href>` on the board, and `BoardViewport` had cancelled every middle press and auxclick
+  to pan, so "open in a new tab" did nothing — at odds with the shareable URL this page is
+  for. Middle-drag still pans from anywhere else, cards and buttons included.

@@ -137,7 +137,7 @@ describe('BoardViewport', () => {
 		expect(viewportEl.scrollTop).toBe(50);
 	});
 
-	it('pans on a middle-button drag regardless of target', async () => {
+	it('pans on a middle-button drag from any target but a link', async () => {
 		const camera = createCamera();
 		render(BoardViewport, { camera, children: worldSnippet });
 
@@ -170,6 +170,53 @@ describe('BoardViewport', () => {
 
 		expect(viewportEl.scrollLeft).toBe(50);
 		expect(viewportEl.scrollTop).toBe(30);
+	});
+
+	it('leaves a middle-click on a link to the browser, so it opens in a new tab', async () => {
+		const camera = createCamera();
+		const linkSnippet = createRawSnippet(() => ({
+			render: () => `
+				<div style="width: 2000px; height: 2000px;">
+					<a href="/elsewhere" data-testid="inner-link">Elsewhere</a>
+				</div>
+			`
+		}));
+		render(BoardViewport, { camera, children: linkSnippet });
+
+		const viewportEl = page.getByTestId('board-viewport').element() as HTMLElement;
+		viewportEl.style.width = '400px';
+		viewportEl.style.height = '400px';
+		viewportEl.style.overflow = 'auto';
+		viewportEl.setPointerCapture = () => {};
+		viewportEl.releasePointerCapture = () => {};
+		const linkEl = page.getByTestId('inner-link').element() as HTMLElement;
+
+		const down = new PointerEvent('pointerdown', {
+			pointerId: 5,
+			button: 1,
+			clientX: 200,
+			clientY: 200,
+			bubbles: true,
+			cancelable: true
+		});
+		linkEl.dispatchEvent(down);
+		linkEl.dispatchEvent(
+			new PointerEvent('pointermove', {
+				pointerId: 5,
+				button: 1,
+				clientX: 150,
+				clientY: 170,
+				bubbles: true
+			})
+		);
+		const aux = new MouseEvent('auxclick', { button: 1, bubbles: true, cancelable: true });
+		linkEl.dispatchEvent(aux);
+
+		// Cancelling either event is what stopped the browser opening the tab.
+		expect(down.defaultPrevented).toBe(false);
+		expect(aux.defaultPrevented).toBe(false);
+		expect(viewportEl.scrollLeft).toBe(0);
+		expect(viewportEl.scrollTop).toBe(0);
 	});
 
 	it('pans on a space+left-button drag', async () => {
