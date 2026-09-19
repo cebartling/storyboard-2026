@@ -6,9 +6,10 @@ import {
 	addSlice,
 	addStep,
 	addStory,
-	createStoryMap
+	createStoryMap,
+	editStory
 } from '$lib/domain/story-map';
-import type { StoryMap } from '$lib/domain/story-map';
+import type { StoryMap, StoryStatus } from '$lib/domain/story-map';
 import type { SliceId, StoryId } from '$lib/domain/ids';
 
 /**
@@ -44,6 +45,9 @@ function fixture() {
 		},
 		blocks(blockerId: StoryId, blockedId: StoryId) {
 			map = addDependency(map, blockerId, blockedId);
+		},
+		setStatus(id: StoryId, status: StoryStatus) {
+			map = editStory(map, id, { status });
 		},
 		get map() {
 			return map;
@@ -159,6 +163,21 @@ describe('buildReleaseViewModel', () => {
 			{ kind: 'outside', id: earlier, title: 'Earlier', sliceName: 'R1', contradicts: false },
 			{ kind: 'outside', id: later, title: 'Later', sliceName: 'R3', contradicts: true },
 			{ kind: 'outside', id: unsliced, title: 'Unsliced', sliceName: null, contradicts: true }
+		]);
+	});
+
+	it('does not flag a later blocker that is already done', () => {
+		const f = fixture();
+		const later = f.story('Save card', 'Pay', 'R3');
+		const story = f.story('Checkout', 'Pay', 'R2');
+		f.blocks(later, story);
+		f.setStatus(later, 'done');
+
+		const [checkout] = buildReleaseViewModel(f.map, f.slices.R2)!.stories;
+
+		// Finished work is not something the release waits on, wherever it was planned.
+		expect(checkout.blockers).toEqual([
+			{ kind: 'outside', id: later, title: 'Save card', sliceName: 'R3', contradicts: false }
 		]);
 	});
 

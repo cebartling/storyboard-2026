@@ -18,8 +18,9 @@ export type BlockerVM =
 			title: string;
 			/** `null` is the unsliced band. */
 			sliceName: string | null;
-			/** The blocker sits in a later slice or is unsliced, so this release
-			 *  cannot ship as planned: it waits on work planned after it. */
+			/** The blocker sits in a later slice or is unsliced and is not done,
+			 *  so this release cannot ship as planned: it waits on work planned
+			 *  after it. */
 			contradicts: boolean;
 	  };
 
@@ -155,7 +156,7 @@ export function buildReleaseViewModel(map: StoryMap, sliceId: SliceId): ReleaseV
 				id: blocker.id,
 				title: blocker.title,
 				sliceName: blockerSlice?.name ?? null,
-				contradicts: sliceRank > release.index
+				contradicts: sliceRank > release.index && blocker.status !== 'done'
 			}
 		};
 	};

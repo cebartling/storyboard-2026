@@ -60,7 +60,9 @@ badge (ADR 0019): what a story waits on, not what it blocks.
 - **A blocker outside the slice** is shown with the name of its slice.
 - **A blocker in a later slice or unsliced contradicts the release order.** It gets a warning
   icon, the danger colour, and text saying it is planned after this release. The text carries
-  the meaning (WCAG 1.4.1). A blocker in an earlier slice is expected and is not flagged.
+  the meaning (WCAG 1.4.1). A blocker in an earlier slice is expected and is not flagged,
+  and nor is one that is already `done`, wherever it was planned: the release is not waiting
+  on it.
 
 ### Real slices only
 
