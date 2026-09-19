@@ -11,3 +11,4 @@ required to build or run one, and experiments do not depend on each other.
 | Experiment | Subject |
 |---|---|
 | [experiment-1](experiments/experiment-1/) | Jeff Patton's user story mapping technique, implemented as a SvelteKit vertical slice. See its [documentation](experiments/experiment-1/documentation/). |
+| [experiment-2](experiments/experiment-2/) | The same vertical slice with MongoDB in place of SQLite, to find out whether experiment-1's ports actually insulated its domain from persistence. See its [documentation](experiments/experiment-2/documentation/). |

@@ -71,10 +71,12 @@ that policy lives in two implementations, which is why both are held to
 
 ## Did the ports work? (measured, not asserted)
 
-`experiment-2` replaced the entire persistence layer. Across `src/lib/domain/`,
+`experiment-2` replaced the entire persistence layer. Measured at the port commit
+(`fc07a08`) and not since — this experiment has grown features experiment-1 never had, so
+the counts below are a record of the swap, not a current diff. Across `src/lib/domain/`,
 `src/lib/app/`, `src/lib/board/`, `src/lib/canvas/`, `src/lib/collab/`,
-`src/lib/components/`, `src/lib/seed/` and `src/routes/`, **69 of 80 files are
-byte-identical to experiment-1**. Nine of the eleven differences are the port swap itself:
+`src/lib/components/`, `src/lib/seed/` and `src/routes/`, **69 of 80 files were
+byte-identical to experiment-1**. Nine of the eleven differences were the port swap itself:
 four `await`s (`Auth` was synchronous only because better-sqlite3 is), one new domain
 function (`inRankOrder`), the in-memory double and its contract test, one test fixture's
 error string, and one word in a comment. The other two are test files a later self-review
