@@ -183,8 +183,8 @@ waits._
 
 **There is no way to see the whole graph at once.** The direct cost of rejecting arrows: the
 relationship is visible one story at a time, and a badge tells you that something blocks this
-card without telling you what. A dependency list or an ordering view is the obvious follow-up. _Update: ADR 0023 is
-that ordering view, for one slice at a time._
+card without telling you what. A dependency list or an ordering view is the obvious follow-up.
+_Update: ADR 0023 is that ordering view, for one slice at a time._
 
 **Fixing this exposed an unrelated pre-existing bug and it was fixed first.** The dialog that
 stays open across a write is the only place a second write can be made from one open dialog, and

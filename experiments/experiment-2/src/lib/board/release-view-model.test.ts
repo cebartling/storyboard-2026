@@ -169,4 +169,32 @@ describe('buildReleaseViewModel', () => {
 
 		expect(buildReleaseViewModel(f.map, f.slices.R1)!.stories[0].blockers).toEqual([]);
 	});
+
+	it('lists blockers from one other slice in reading order, not the order the edges were added', () => {
+		const f = fixture();
+		const story = f.story('Checkout', 'Pay', 'R1');
+		const saveCard = f.story('Save card', 'Pay', 'R3');
+		const wishlist = f.story('Wishlist', 'Browse', 'R3');
+		f.blocks(saveCard, story);
+		f.blocks(wishlist, story);
+
+		const [checkout] = buildReleaseViewModel(f.map, f.slices.R1)!.stories;
+
+		expect(checkout.blockers.map((b) => b.title)).toEqual(['Wishlist', 'Save card']);
+	});
+
+	it('throws, naming the stuck stories, when the stored edges form a cycle', () => {
+		const f = fixture();
+		const browse = f.story('Browse catalogue', 'Browse', 'R1');
+		const pay = f.story('Pay by card', 'Pay', 'R1');
+		f.blocks(pay, browse);
+		// addDependency refuses the closing edge, so only a hand-edited document
+		// can hold one. The view must say so rather than drop the two stories.
+		const cyclic: StoryMap = {
+			...f.map,
+			dependencies: [...f.map.dependencies, { blockerId: browse, blockedId: pay }]
+		};
+
+		expect(() => buildReleaseViewModel(cyclic, f.slices.R1)).toThrow(`${browse}, ${pay}`);
+	});
 });

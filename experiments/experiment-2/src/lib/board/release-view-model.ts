@@ -50,8 +50,9 @@ export interface ReleaseViewModel {
  * cannot be built before A.
  */
 export function buildReleaseViewModel(map: StoryMap, sliceId: SliceId): ReleaseViewModel | null {
-	const sliceIndex = map.slices.findIndex((s) => s.id === sliceId);
-	if (sliceIndex === -1) return null;
+	const sliceOrder = new Map(map.slices.map((s, i) => [s.id, { index: i, name: s.name }]));
+	const release = sliceOrder.get(sliceId);
+	if (!release) return null;
 
 	// Activities and steps arrive in rank order (`inRankOrder` on load, and the
 	// `add*` functions append), which is the order the board reads them in.
@@ -72,14 +73,26 @@ export function buildReleaseViewModel(map: StoryMap, sliceId: SliceId): ReleaseV
 	const inSlice = map.stories.filter((s) => s.sliceId === sliceId).sort(readingOrder);
 	const inSliceIds = new Set(inSlice.map((s) => s.id));
 
+	// Both directions, built once: the walk below follows successors, and each
+	// row's blocker list reads predecessors. Filtering every edge per row would
+	// be O(stories x edges), which `buildBoardViewModel` avoids for the same reason.
 	const successors = new Map<StoryId, StoryId[]>();
+	const predecessors = new Map<StoryId, StoryId[]>();
+	const append = (into: Map<StoryId, StoryId[]>, key: StoryId, value: StoryId) => {
+		const list = into.get(key);
+		if (list) list.push(value);
+		else into.set(key, [value]);
+	};
 	for (const d of map.dependencies) {
-		successors.set(d.blockerId, [...(successors.get(d.blockerId) ?? []), d.blockedId]);
+		append(successors, d.blockerId, d.blockedId);
+		append(predecessors, d.blockedId, d.blockerId);
 	}
 
 	// For each story in the slice, every other story in the slice it reaches
-	// must come after it. The graph is acyclic (ADR 0019), so `seen` only saves
-	// work on diamonds; it is not what stops the walk.
+	// must come after it. `seen` saves re-walking a diamond, and it is also what
+	// stops the walk on a hand-edited cycle, which addDependency would have
+	// refused (ADR 0019) — so that the stall check below can report it rather
+	// than this loop spinning forever.
 	const mustFollow = new Map<StoryId, Set<StoryId>>(inSlice.map((s) => [s.id, new Set()]));
 	const waitingOn = new Map<StoryId, number>(inSlice.map((s) => [s.id, 0]));
 	for (const from of inSlice) {
@@ -119,46 +132,47 @@ export function buildReleaseViewModel(map: StoryMap, sliceId: SliceId): ReleaseV
 
 	const position = new Map(ordered.map((s, i) => [s.id, i + 1]));
 	const storyById = new Map(map.stories.map((s) => [s.id, s]));
-	const sliceOrder = new Map(map.slices.map((s, i) => [s.id, { index: i, name: s.name }]));
 
 	// In-slice blockers first, by position; then the rest by slice, unsliced
-	// last — the order a reader would go and look for them.
-	const toBlocker = (blocker: Story): { sortKey: number; vm: BlockerVM } => {
+	// last, and in reading order within a slice — the order a reader would go
+	// and look for them.
+	const toBlocker = (blocker: Story): { sortKey: number; story: Story; vm: BlockerVM } => {
 		if (blocker.sliceId === sliceId) {
 			const at = position.get(blocker.id)!;
 			return {
 				sortKey: at,
+				story: blocker,
 				vm: { kind: 'inSlice', id: blocker.id, title: blocker.title, position: at }
 			};
 		}
-		const slice = blocker.sliceId === null ? undefined : sliceOrder.get(blocker.sliceId);
-		const sliceRank = slice?.index ?? map.slices.length;
+		const blockerSlice = blocker.sliceId === null ? undefined : sliceOrder.get(blocker.sliceId);
+		const sliceRank = blockerSlice?.index ?? map.slices.length;
 		return {
 			sortKey: ordered.length + 1 + sliceRank,
+			story: blocker,
 			vm: {
 				kind: 'outside',
 				id: blocker.id,
 				title: blocker.title,
-				sliceName: slice?.name ?? null,
-				contradicts: sliceRank > sliceIndex
+				sliceName: blockerSlice?.name ?? null,
+				contradicts: sliceRank > release.index
 			}
 		};
 	};
 
 	return {
 		sliceId,
-		name: map.slices[sliceIndex].name,
+		name: release.name,
 		stories: ordered.map((story) => {
 			const place = stepPlace.get(story.stepId)!;
-			const blockers = map.dependencies
-				.filter((d) => d.blockedId === story.id)
+			const blockers = (predecessors.get(story.id) ?? [])
 				// Defensive, as in `buildBoardViewModel`: a partial fixture can
 				// leave an edge whose blocker is gone.
-				.flatMap((d) => {
-					const blocker = storyById.get(d.blockerId);
+				.flatMap((blockerId) => {
+					const blocker = storyById.get(blockerId);
 					return blocker ? [toBlocker(blocker)] : [];
 				})
-				.sort((a, b) => a.sortKey - b.sortKey)
+				.sort((a, b) => a.sortKey - b.sortKey || readingOrder(a.story, b.story))
 				.map((b) => b.vm);
 			return {
 				id: story.id,
