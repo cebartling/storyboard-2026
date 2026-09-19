@@ -178,11 +178,13 @@ headroom, not a guarantee, and it is the same headroom ADR 0003 already relies o
 **A dependency that contradicts slice order is stored and shown, not flagged.** Nothing stops a
 blocker sitting in Release 2 while the story it blocks sits in Release 1. The data model
 supports checking it — that is most of why the edges are directional — and it is deliberately
-not built yet.
+not built yet. _Update: ADR 0023's release view flags it, from the side of the release that
+waits._
 
 **There is no way to see the whole graph at once.** The direct cost of rejecting arrows: the
 relationship is visible one story at a time, and a badge tells you that something blocks this
-card without telling you what. A dependency list or an ordering view is the obvious follow-up.
+card without telling you what. A dependency list or an ordering view is the obvious follow-up. _Update: ADR 0023 is
+that ordering view, for one slice at a time._
 
 **Fixing this exposed an unrelated pre-existing bug and it was fixed first.** The dialog that
 stays open across a write is the only place a second write can be made from one open dialog, and

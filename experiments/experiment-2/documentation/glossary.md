@@ -70,3 +70,7 @@ under the step that produces it) and gets a `sliceId` that can be null (unsliced
 the backlog row) or set to a `Slice` belonging to the same map. Deleting a `Slice`
 un-slices its stories rather than deleting them — this matches pulling a strip of tape off
 a physical wall: the cards fall back to the unsliced row, they don't get thrown away.
+
+The **release view** of a slice (ADR 0023) lists its stories in an order they can be built
+in: after everything that blocks them, and otherwise in reading order across the backbone.
+It flags a story that waits on work planned in a later slice, or not planned at all.
