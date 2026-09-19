@@ -89,3 +89,33 @@ export async function firstSliceId(page: Page): Promise<string> {
 		.getAttribute('data-testid');
 	return testid!.replace('row-label-', '');
 }
+
+/** Opens a story's read-only detail dialog, and returns it. */
+export async function openStory(page: Page, title: string) {
+	await page.getByRole('button', { name: `View story ${title}` }).click();
+	const detail = dialog(page);
+	await expect(detail).toBeVisible();
+	return detail;
+}
+
+/**
+ * Links two stories from `from`'s detail dialog, and leaves it open. It does
+ * not assert the link was made, because a refused link is a result some specs
+ * test for.
+ */
+export async function link(
+	page: Page,
+	from: string,
+	direction: 'blocks' | 'blockedBy',
+	to: string
+) {
+	const detail = await openStory(page, from);
+	await detail.getByRole('button', { name: 'Add dependency' }).click();
+	await detail
+		.getByLabel(direction === 'blocks' ? 'This story blocks' : 'This story is blocked by')
+		.check();
+	await detail.getByLabel('Find a story').fill(to);
+	await detail.getByRole('radio', { name: new RegExp(to) }).check();
+	await detail.getByRole('button', { name: 'Add', exact: true }).click();
+	return detail;
+}

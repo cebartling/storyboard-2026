@@ -1,6 +1,15 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../../../e2e/auth-fixture';
-import { addActivity, addStep, addStory, createMap, dialog, firstStepId } from './board-helpers';
+import {
+	addActivity,
+	addStep,
+	addStory,
+	createMap,
+	dialog,
+	firstStepId,
+	link,
+	openStory
+} from './board-helpers';
 
 /**
  * Directional blocks-edges between stories (ADR 0019), created and removed in
@@ -10,26 +19,6 @@ import { addActivity, addStep, addStory, createMap, dialog, firstStepId } from '
  * editor closes on success. That makes two of these tests about the dialog
  * surviving its own mutations rather than about dependencies as such.
  */
-
-async function openStory(page: Page, title: string) {
-	await page.getByRole('button', { name: `View story ${title}` }).click();
-	const detail = dialog(page);
-	await expect(detail).toBeVisible();
-	return detail;
-}
-
-/** Links two stories from `from`'s detail dialog, and leaves it open. */
-async function link(page: Page, from: string, direction: 'blocks' | 'blockedBy', to: string) {
-	const detail = await openStory(page, from);
-	await detail.getByRole('button', { name: 'Add dependency' }).click();
-	await detail
-		.getByLabel(direction === 'blocks' ? 'This story blocks' : 'This story is blocked by')
-		.check();
-	await detail.getByLabel('Find a story').fill(to);
-	await detail.getByRole('radio', { name: new RegExp(to) }).check();
-	await detail.getByRole('button', { name: 'Add', exact: true }).click();
-	return detail;
-}
 
 /** A board with one step and the named stories on it. */
 async function boardWith(page: Page, ...titles: string[]) {

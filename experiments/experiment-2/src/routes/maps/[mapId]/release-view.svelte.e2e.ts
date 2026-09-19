@@ -6,9 +6,9 @@ import {
 	addStep,
 	addStory,
 	createMap,
-	dialog,
 	firstSliceId,
-	firstStepId
+	firstStepId,
+	link
 } from './board-helpers';
 
 /**
@@ -16,15 +16,9 @@ import {
  * blocker planned after the release called out.
  */
 
-/** Records "`blocked` is blocked by `blocker`" from `blocked`'s detail dialog. */
+/** Records "`blocked` is blocked by `blocker`", checks it took, and closes the dialog. */
 async function blockedBy(page: Page, blocked: string, blocker: string) {
-	await page.getByRole('button', { name: `View story ${blocked}` }).click();
-	const detail = dialog(page);
-	await detail.getByRole('button', { name: 'Add dependency' }).click();
-	await detail.getByLabel('This story is blocked by').check();
-	await detail.getByLabel('Find a story').fill(blocker);
-	await detail.getByRole('radio', { name: new RegExp(blocker) }).check();
-	await detail.getByRole('button', { name: 'Add', exact: true }).click();
+	const detail = await link(page, blocked, 'blockedBy', blocker);
 	await expect(detail.getByTestId('blocked-by-list')).toContainText(blocker);
 	await detail.getByRole('button', { name: 'Close' }).click();
 	await expect(detail).toBeHidden();
