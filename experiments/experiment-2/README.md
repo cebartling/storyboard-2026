@@ -14,6 +14,18 @@ You can create a map, build a backbone of **activities** and the **steps** benea
 add **story** cards under any step, drag cards to reorder them, and drag them onto release
 **slice** bands. Order and slice membership are server-derived and survive a reload.
 
+A story card opens a detail dialog with a Markdown **description** and the stories it is
+**blocked by** ([ADRs 0018](./documentation/adr/0018-markdown-story-descriptions.md),
+[0019](./documentation/adr/0019-story-dependencies.md)), and carries a **status** that
+colours the card ([ADR 0021](./documentation/adr/0021-story-status.md)). Each slice row
+cycles between three **densities** — full cards, a condensed deck, or a count — kept per
+viewer rather than on the map ([ADRs 0020](./documentation/adr/0020-per-viewer-slice-collapse.md),
+[0022](./documentation/adr/0022-condensed-slice-density.md)), and each slice has a read-only
+**release view** listing its stories in dependency order
+([ADR 0023](./documentation/adr/0023-slice-release-view.md)). Maps are shared: boards stay in
+sync over SSE, with presence and live cursors
+([ADR 0014](./documentation/adr/0014-collaboration-model.md)).
+
 Nothing outside this directory is needed to build or run it, and nothing here is shared
 with other experiments (ADR 0001).
 

@@ -127,7 +127,7 @@ differently:
   Top-to-bottom priority of stories under one step, within one release band.
 
 Ranks are lexicographic fractional strings (`fractional-indexing`'s `generateKeyBetween`),
-stored as `TEXT`. Dropping a card between two existing cards computes a new rank strictly
+stored as strings on the map document. Dropping a card between two existing cards computes a new rank strictly
 between its neighbours' ranks — a single-row write, no renumbering of siblings. See ADR
 0005 for why this was chosen over integer `position` columns.
 
