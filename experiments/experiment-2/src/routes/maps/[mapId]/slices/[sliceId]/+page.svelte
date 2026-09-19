@@ -39,9 +39,10 @@
 				<li class="flex gap-4 px-5 py-3.5" data-testid="release-story-{story.id}">
 					<span class="text-ink-muted w-6 shrink-0 text-right text-sm tabular-nums">{i + 1}.</span>
 					<div class="flex min-w-0 flex-1 flex-col gap-1">
-						<div class="flex flex-wrap items-center gap-2">
-							<span class="text-ink text-sm font-medium" data-testid="release-story-title"
-								>{story.title}</span
+						<div class="flex items-start justify-between gap-2">
+							<span
+								class="text-ink min-w-0 text-sm font-medium break-words"
+								data-testid="release-story-title">{story.title}</span
 							>
 							<span class={status.chip}>{status.label}</span>
 						</div>
