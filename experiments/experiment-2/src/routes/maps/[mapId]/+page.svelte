@@ -2,6 +2,7 @@
 	import { tick, untrack } from 'svelte';
 	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { useMapSync } from '$lib/collab/map-sync-lifecycle.svelte';
 	import type { ClientId, StoryId } from '$lib/domain/ids';
 	import { DEFAULT_STORY_STATUS } from '$lib/domain/story-map';
@@ -36,6 +37,7 @@
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import Layers from '@lucide/svelte/icons/layers';
+	import ListOrdered from '@lucide/svelte/icons/list-ordered';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Plus from '@lucide/svelte/icons/plus';
 	import { tooltip } from '$lib/actions/tooltip';
@@ -542,16 +544,32 @@
 								</button>
 								<span class="text-ink text-sm font-semibold break-words">{row.name}</span>
 							</div>
-							<button
-								type="button"
-								class="btn btn-icon btn-quiet self-start"
-								aria-label="Edit slice"
-								use:tooltip={'Edit slice'}
-								onclick={() =>
-									(dialog = { kind: 'editSlice', sliceId: row.sliceId!, name: row.name })}
-							>
-								<Pencil class="size-3.5" />
-							</button>
+							<div class="flex gap-1 self-start">
+								<button
+									type="button"
+									class="btn btn-icon btn-quiet"
+									aria-label="Edit slice"
+									use:tooltip={'Edit slice'}
+									onclick={() =>
+										(dialog = { kind: 'editSlice', sliceId: row.sliceId!, name: row.name })}
+								>
+									<Pencil class="size-3.5" />
+								</button>
+								<!-- A page, not a dialog (ADR 0023). The testid must not start
+								     with `story-`, which BoardViewport treats as a card. -->
+								<a
+									href={resolve('/maps/[mapId]/slices/[sliceId]', {
+										mapId: data.board.id,
+										sliceId: row.sliceId
+									})}
+									class="btn btn-icon btn-quiet"
+									aria-label="Release view of {row.name}"
+									data-testid="release-view-link-{row.sliceId}"
+									use:tooltip={'Release view, in dependency order'}
+								>
+									<ListOrdered class="size-3.5" />
+								</a>
+							</div>
 						{:else}
 							<span
 								class="text-ink-muted text-xs font-semibold tracking-wide whitespace-nowrap uppercase"

@@ -166,6 +166,11 @@ fans into an overlay on hover, tap or focus), collapsed (a story count) — held
 0022). Only the expanded density takes a drop, which is what lets the other two shrink their
 grid row to `auto`.
 
+A slice's **release view** is its own page, `src/routes/maps/[mapId]/slices/[sliceId]/`,
+linked from the slice's row label (ADR 0023). It is read-only and not live. It renders
+`src/lib/board/release-view-model.ts`, a pure builder like `board-view-model.ts`, which lists
+the slice's stories in dependency order and flags blockers planned after the release.
+
 ## Board canvas: pan, zoom, and the minimap
 
 `src/routes/maps/[mapId]/+page.svelte` used to wrap the board grid directly in

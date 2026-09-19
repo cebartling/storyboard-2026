@@ -56,6 +56,13 @@
 		return target instanceof Element && target.closest(INTERACTIVE_SELECTOR) !== null;
 	}
 
+	// A middle-click on a link is "open in a new tab", which the browser does
+	// only if neither the press nor the auxclick is cancelled. Middle-drag still
+	// pans from everywhere else, cards and buttons included.
+	function isLinkTarget(target: EventTarget | null): boolean {
+		return target instanceof Element && target.closest('a[href]') !== null;
+	}
+
 	// Deliberately not BUTTON: a button does not consume +/-/0/1, and the zoom
 	// controls advertise those very keys with `aria-keyshortcuts`, so clicking a
 	// zoom button must not silence the shortcut it just announced. Space is the
@@ -213,6 +220,7 @@
 		const isLeft = e.button === 0;
 
 		if (isMiddle) {
+			if (isLinkTarget(e.target)) return;
 			e.preventDefault();
 		} else if (isLeft) {
 			if (!spaceHeld && isInteractiveTarget(e.target)) return; // never steal dnd/forms/buttons
@@ -290,9 +298,10 @@
 		isPanning = false;
 	}
 
-	// Suppresses the browser's middle-click autoscroll widget.
+	// Suppresses the browser's middle-click autoscroll widget, except on a link,
+	// where cancelling it would also cancel the new tab.
 	function onAuxClick(e: MouseEvent) {
-		if (e.button === 1) e.preventDefault();
+		if (e.button === 1 && !isLinkTarget(e.target)) e.preventDefault();
 	}
 
 	// --- Space-held tracking + keyboard zoom shortcuts -----------------------

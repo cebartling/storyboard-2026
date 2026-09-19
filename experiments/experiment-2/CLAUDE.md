@@ -33,26 +33,27 @@ so the pinned version is used — a bare `pnpm` picks up whatever is on your PAT
 versions before 10 reject this directory's `pnpm-workspace.yaml` with
 `packages field missing or empty`.
 
-| Task                             | Command                                                                                    |
-| -------------------------------- | ------------------------------------------------------------------------------------------ |
-| Dev server                       | `corepack pnpm dev`                                                                        |
-| Full suite                       | `corepack pnpm test` (Vitest then Playwright)                                              |
-| All unit + component             | `corepack pnpm test:unit -- --run`                                                         |
-| All e2e                          | `corepack pnpm test:e2e`                                                                   |
-| **Single unit test**             | `corepack pnpm vitest run src/lib/domain/story-map.test.ts -t "moves story between steps"` |
-| **Single canvas unit test**      | `corepack pnpm vitest run src/lib/canvas/camera-math.test.ts`                              |
-| **Single canvas component test** | `corepack pnpm vitest run src/lib/components/board-viewport.svelte.spec.ts`                |
-| **Single e2e test**              | `corepack pnpm playwright test -g "drag story to slice"`                                   |
-| **Single canvas e2e test**       | `corepack pnpm playwright test -g "pan and zoom persist"`                                  |
-| **Single story-detail e2e test** | `corepack pnpm playwright test -g "renders a story description as Markdown"`               |
-| **Single story-status e2e test** | `corepack pnpm playwright test -g "sets a story status and paints the card"`               |
-| Collaboration demo (headed)      | `corepack pnpm demo`                                                                       |
-| Types                            | `corepack pnpm check`                                                                      |
-| Lint / format                    | `corepack pnpm lint` / `corepack pnpm format`                                              |
-| Start / stop MongoDB             | `corepack pnpm db:up` / `corepack pnpm db:down`                                            |
-| Wipe MongoDB                     | `corepack pnpm db:reset` (drops the volume, waits for PRIMARY)                             |
-| Seed sample data                 | `corepack pnpm db:seed <owner-email>` (account must exist)                                 |
-| Seed data **and** demo logins    | `corepack pnpm db:seed --with-accounts` (localhost only)                                   |
+| Task                              | Command                                                                                    |
+| --------------------------------- | ------------------------------------------------------------------------------------------ |
+| Dev server                        | `corepack pnpm dev`                                                                        |
+| Full suite                        | `corepack pnpm test` (Vitest then Playwright)                                              |
+| All unit + component              | `corepack pnpm test:unit -- --run`                                                         |
+| All e2e                           | `corepack pnpm test:e2e`                                                                   |
+| **Single unit test**              | `corepack pnpm vitest run src/lib/domain/story-map.test.ts -t "moves story between steps"` |
+| **Single canvas unit test**       | `corepack pnpm vitest run src/lib/canvas/camera-math.test.ts`                              |
+| **Single canvas component test**  | `corepack pnpm vitest run src/lib/components/board-viewport.svelte.spec.ts`                |
+| **Single e2e test**               | `corepack pnpm playwright test -g "drag story to slice"`                                   |
+| **Single canvas e2e test**        | `corepack pnpm playwright test -g "pan and zoom persist"`                                  |
+| **Single story-detail e2e test**  | `corepack pnpm playwright test -g "renders a story description as Markdown"`               |
+| **Single story-status e2e test**  | `corepack pnpm playwright test -g "sets a story status and paints the card"`               |
+| **Single release-view unit test** | `corepack pnpm vitest run src/lib/board/release-view-model.test.ts`                        |
+| Collaboration demo (headed)       | `corepack pnpm demo`                                                                       |
+| Types                             | `corepack pnpm check`                                                                      |
+| Lint / format                     | `corepack pnpm lint` / `corepack pnpm format`                                              |
+| Start / stop MongoDB              | `corepack pnpm db:up` / `corepack pnpm db:down`                                            |
+| Wipe MongoDB                      | `corepack pnpm db:reset` (drops the volume, waits for PRIMARY)                             |
+| Seed sample data                  | `corepack pnpm db:seed <owner-email>` (account must exist)                                 |
+| Seed data **and** demo logins     | `corepack pnpm db:seed --with-accounts` (localhost only)                                   |
 
 **`corepack pnpm db:up` first.** The dev server, the e2e suite and the demo all need the
 Compose container. `test:unit` does not — it starts its own in-process replica set — and
@@ -118,6 +119,11 @@ the seed, so no test or fixture breaks if you delete it.
     two-story cycles and rejects a redundant transitive edge.
   - **The detail dialog stays open across its writes** and re-snapshots the version. Every other
     editor closes; this one would close the view the reader is standing in.
+- **A slice's release view is a read-only page** (ADR 0023),
+  `src/routes/maps/[mapId]/slices/[sliceId]/`, over the pure `src/lib/board/release-view-model.ts`.
+  Its order is a topological sort whose constraints are **transitive through the whole map**: a
+  chain through a story in another slice still orders two stories in this one. Only edges between
+  the slice's own stories would be simpler and wrong. It has no actions and is not live.
 - **Story status is a shared field on the aggregate** (ADR 0021), set in the edit dialog and
   shown on the card as a tint _and_ a text chip. Three things about it are easy to get wrong:
   - **The card must never carry the status in colour alone** (WCAG 1.4.1). The chip's text
