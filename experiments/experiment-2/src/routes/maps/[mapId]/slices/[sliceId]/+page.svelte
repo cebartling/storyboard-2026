@@ -47,7 +47,9 @@
 						</div>
 						<p class="text-ink-muted text-xs">{story.activityName} › {story.stepName}</p>
 						{#if story.blockers.length > 0}
-							<ul class="flex flex-col gap-0.5 text-xs" aria-label="Blocked by">
+							<!-- Unlabelled: each item already starts "Blocked by", and a label
+							     would make a screen reader say it twice. -->
+							<ul class="flex flex-col gap-0.5 text-xs">
 								{#each story.blockers as blocker (blocker.id)}
 									{#if blocker.kind === 'inSlice'}
 										<li class="text-ink-muted">Blocked by #{blocker.position} {blocker.title}</li>
