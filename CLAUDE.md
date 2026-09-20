@@ -9,8 +9,9 @@ Storyboard 2026: user story mapping meets AI.
 ## Repository shape
 
 The root of this repo builds nothing and runs nothing. There is no root package manifest,
-no root test runner, no shared library — only `README.md`, `LICENSE`, `.gitignore`, and
-this file.
+no root test runner, no shared library — only `README.md`, `LICENSE`, `.gitignore`, this
+file, and `.self-review-decisions.md` (findings a self-review raised and deliberately did
+not act on, so later passes skip them — read it before re-raising anything).
 
 All code lives in **self-contained experiments** under `experiments/`. Each has its own
 package manifest, lockfile, toolchain, tests, and `documentation/`. Experiments never
@@ -26,10 +27,20 @@ from the repo root.
 | `experiments/experiment-1/` | SvelteKit 2 + Svelte 5 (runes), Tailwind CSS 4, Drizzle + SQLite, Vitest, Playwright | Jeff Patton's user story mapping technique as a vertical slice, with accounts and shared maps |
 | `experiments/experiment-2/` | The same, with MongoDB 7 (Docker Compose, single-node replica set) in place of Drizzle + SQLite | Whether experiment-1's ports actually insulated its domain from persistence |
 
-The two are deliberately near-identical above the storage layer — that is what makes the
-comparison mean anything. Where they differ outside storage, **experiment-2 is the
-authoritative reading**, because it is the later one. They also number their ADRs
-differently from 0003 on, so cite the experiment as well as the number.
+The two were deliberately near-identical above the storage layer **at the port commit**
+(`fc07a08`), which is what made the comparison mean anything: 69 of 80 files were then
+byte-identical. **They have since diverged, and the divergence is now the normal case.**
+Every feature after the port landed in `experiment-2` alone (its ADRs 0018–0023: Markdown
+descriptions, story dependencies, story status, slice density, the slice release view), so
+across the shared directories 32 of its 101 files are still byte-identical, 48 differ, and
+21 have no counterpart in `experiment-1` at all. Nothing has landed in `experiment-1` since
+its own commit #19.
+
+**Do not treat the two as interchangeable, and do not copy between them on the assumption
+that a file is shared.** Where they differ outside storage, **experiment-2 is the
+authoritative reading**, because it is the later one and the one still being worked on.
+They also number their ADRs differently from 0003 on, so cite the experiment as well as the
+number.
 
 `experiment-1` runs on **Node** (app, tests, e2e) with **Bun** for its scripts (`demo/`,
 `scripts/seed.ts`). The dividing line is `better-sqlite3`, which segfaults Bun on connection
