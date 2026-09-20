@@ -15,9 +15,15 @@ Start here:
 
 Then the decision record:
 
-- **[adr/](./adr/)** — the numbered ADRs (0001–0015) behind the choices above. 0006 is the
+- **[adr/](./adr/)** — the numbered ADRs (0001–0016) behind the choices above. 0006 is the
   direct written answer to "would hexagonal architecture be helpful here?" and is worth
-  reading even if you skip the others.
+  reading even if you skip the others. 0014 put collaboration in scope and is superseded by
+  0015, the collaboration model; 0016 is accounts, sessions and map membership, and is the
+  port-signature change 0006 priced in advance.
+
+  [`experiment-2`](../../experiment-2/documentation/adr/) carries most of these forward with
+  their reasoning intact, but renumbers from 0003 on — its 0003 is MongoDB, and this 0015 and
+  0016 are its 0014 and 0015. Cite the experiment along with the number.
 
 Point-in-time reviews (snapshots, not living documents — read them for open questions, not
 for how the code works today):

@@ -7,8 +7,19 @@ You can create a map, build a backbone of **activities** and the **steps** benea
 add **story** cards under any step, drag cards to reorder them, and drag them onto release
 **slice** bands. Order and slice membership are server-derived and survive a reload.
 
+It requires an account: maps have an owner and editors, and a board stays in sync across
+everyone looking at it over SSE, with presence and live cursors
+([ADR 0015](./documentation/adr/0015-collaboration-model.md),
+[ADR 0016](./documentation/adr/0016-accounts-sessions-and-map-membership.md)).
+
 Nothing outside this directory is needed to build or run it, and nothing here is shared
 with other experiments (ADR 0001).
+
+> **There is a later experiment.** [`experiment-2`](../experiment-2/) is this codebase with
+> MongoDB in place of SQLite, built to find out whether ADR 0006's ports really insulated the
+> domain from persistence. Where the two differ outside storage, experiment-2 is the current
+> reading; this one is kept as it was. The two also number their ADRs differently from 0003
+> on, so cite the experiment along with the number.
 
 ## Running it
 
@@ -25,24 +36,27 @@ corepack pnpm dev
 Migrations apply automatically when the DB module loads, so there is no separate migrate
 step — `dev` and the e2e server both self-migrate against a fresh `DATABASE_URL`.
 
-| Task             | Command                                                                 |
-| ---------------- | ----------------------------------------------------------------------- |
-| Dev server       | `corepack pnpm dev`                                                     |
-| Full suite       | `corepack pnpm test`                                                    |
-| Unit + component | `corepack pnpm test:unit -- --run`                                      |
-| Single unit test | `corepack pnpm vitest run src/lib/domain/story-map.test.ts -t "<name>"` |
-| E2e              | `corepack pnpm test:e2e`                                                |
-| Single e2e test  | `corepack pnpm playwright test -g "<name>"`                             |
-| Types            | `corepack pnpm check`                                                   |
-| Lint / format    | `corepack pnpm lint` / `corepack pnpm format`                           |
-| New migration    | `corepack pnpm db:generate` (commit `drizzle/`)                         |
-| Inspect DB       | `corepack pnpm db:studio`                                               |
-| Seed sample data | `corepack pnpm db:seed`                                                 |
+| Task               | Command                                                                 |
+| ------------------ | ----------------------------------------------------------------------- |
+| Dev server         | `corepack pnpm dev`                                                     |
+| Full suite         | `corepack pnpm test`                                                    |
+| Unit + component   | `corepack pnpm test:unit -- --run`                                      |
+| Single unit test   | `corepack pnpm vitest run src/lib/domain/story-map.test.ts -t "<name>"` |
+| E2e                | `corepack pnpm test:e2e`                                                |
+| Single e2e test    | `corepack pnpm playwright test -g "<name>"`                             |
+| Types              | `corepack pnpm check`                                                   |
+| Lint / format      | `corepack pnpm lint` / `corepack pnpm format`                           |
+| New migration      | `corepack pnpm db:generate` (commit `drizzle/`)                         |
+| Inspect DB         | `corepack pnpm db:studio`                                               |
+| Seed sample data   | `corepack pnpm db:seed <owner-email>`                                   |
+| Collaboration demo | `corepack pnpm demo`                                                    |
 
 `db:seed` writes a sample retail commerce story map — 12 activities, 43 steps, 3 release
-slices and 157 stories — into `DATABASE_URL`, and prints the URL to open it at. It adds a
-new map each time it runs, and the app has no delete-map screen — to start over, delete the
-`local.db` file or point `DATABASE_URL` at a fresh one.
+slices and 157 stories — into `DATABASE_URL`, and prints the URL to open it at. It needs the
+email address of an account that already exists, because every map has an owner (ADR 0016)
+and inventing one would create a login nobody knows the password to: register in the app
+first. It adds a new map each time it runs; a map's owner can delete it from the map list,
+or start over by deleting the `local.db` file or pointing `DATABASE_URL` at a fresh one.
 
 ## Reading it
 
@@ -64,3 +78,8 @@ testing gotchas that changes to this directory need to respect.
 SvelteKit 2 with Svelte 5 in runes mode, Drizzle ORM over SQLite (better-sqlite3), Vitest
 for unit and component tests, Playwright for e2e. `svelte-dnd-action` handles dragging,
 isolated behind a single component so it can be swapped.
+
+The app, its tests and the e2e suite run on **Node**; the scripts under `scripts/` and
+`demo/` run on **Bun**. The dividing line is `better-sqlite3`, which segfaults Bun on
+connection — see [`CLAUDE.md`](./CLAUDE.md) under "Runtimes" before moving anything across
+it. This is also why `corepack pnpm check` runs two typecheck passes.
