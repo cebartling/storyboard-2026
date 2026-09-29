@@ -161,7 +161,11 @@ describe('buildRetailCommerceMap', () => {
 			}
 		});
 
-		it('renders criteria as a GFM task list under a heading', () => {
+		// Criteria are a domain concept now (ADR 0024), so a description is the
+		// narrative and any note — and nothing else. Pinned because the previous
+		// shape is the one every existing seeded map still holds, and a builder
+		// that rendered both would duplicate every criterion on screen.
+		it('renders the narrative alone, with no criteria section', () => {
 			const description = storyDescription({
 				title: 'x',
 				slice: null,
@@ -172,12 +176,19 @@ describe('buildRetailCommerceMap', () => {
 				]
 			});
 
-			expect(description).toBe(
-				'As a shopper I **do a thing** so that it happens.\n\n' +
-					'## Acceptance criteria\n\n' +
-					'- [x] already true\n' +
-					'- [ ] not yet'
+			expect(description).toBe('As a shopper I **do a thing** so that it happens.');
+		});
+
+		it('attaches the blueprint’s criteria to the story, carrying which are met', () => {
+			const map = buildRetailCommerceMap();
+			const blueprint = stories.find((s) => s.criteria.some(([, met]) => met))!;
+			const story = map.stories.find((s) => s.title === blueprint.title)!;
+
+			expect(story.criteria.map((c) => c.text)).toEqual(blueprint.criteria.map(([text]) => text));
+			expect(story.criteria.map((c) => c.satisfied)).toEqual(
+				blueprint.criteria.map(([, met]) => met)
 			);
+			expect(story.description).not.toContain('## Acceptance criteria');
 		});
 
 		it('appends a note as a trailing block when there is one', () => {
@@ -198,9 +209,11 @@ describe('buildRetailCommerceMap', () => {
 			const all = stories.map(storyDescription).join('\n');
 
 			expect(all).toContain('**');
-			expect(all).toContain('## Acceptance criteria');
-			expect(all).toContain('- [x] ');
-			expect(all).toContain('- [ ] ');
+			// No task-list or heading assertions: criteria left the descriptions with
+			// ADR 0024, and they were the only source of both. The renderer still
+			// supports them and `render-markdown.svelte.test.ts` still covers them —
+			// what is gone is this corpus exercising them, which the ADR records as an
+			// accepted cost rather than an oversight.
 			expect(all).toContain('`');
 			expect(all).toContain('| --- |');
 			expect(all).toContain('> ');

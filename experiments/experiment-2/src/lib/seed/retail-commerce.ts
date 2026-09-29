@@ -10,27 +10,42 @@
  * script that writes it to MongoDB is `scripts/seed.ts`.
  *
  * Descriptions are **composed, not written out** (ADR 0018). Each story
- * carries a narrative sentence and its acceptance criteria as data, and
- * `storyDescription` renders them to Markdown. Two reasons: 157 hand-written
- * Markdown blobs would drift into 157 different shapes, and the seed is the
- * only realistic corpus this app has for the description renderer — so it
- * should exercise the constructs the renderer supports (emphasis, headings,
- * task lists, tables, code, links, quotes) rather than 157 bare paragraphs.
+ * carries a narrative sentence, and `storyDescription` renders it to Markdown
+ * with any trailing note. Two reasons: 157 hand-written Markdown blobs would
+ * drift into 157 different shapes, and the seed is the only realistic corpus
+ * this app has for the description renderer — so it should exercise the
+ * constructs the renderer supports (emphasis, tables, code, links, quotes)
+ * rather than 157 bare paragraphs.
+ *
+ * Acceptance criteria used to be rendered into that Markdown as a GFM task
+ * list. They are a domain concept now (ADR 0024), so the blueprint's criteria
+ * become real `AcceptanceCriterion` entities on the story and no longer appear
+ * in its description. The renderer's task-list support is unaffected and still
+ * covered by its own tests; it simply no longer has a corpus here.
  */
 
 import {
+	addAcceptanceCriterion,
 	addActivity,
 	addDependency,
 	addSlice,
 	addStep,
 	addStory,
 	createStoryMap,
+	editAcceptanceCriterion,
+	editStory,
 	type StoryMap,
 	type StoryStatus
 } from '$lib/domain/story-map';
 
-/** An acceptance criterion and whether it is already met. */
-export type Criterion = [text: string, met: boolean];
+/**
+ * One acceptance criterion in the blueprint, and whether it is already met.
+ *
+ * `SeedCriterion` rather than `Criterion` so that grepping for the domain's
+ * `AcceptanceCriterion` cannot land on this positional tuple, which is a
+ * convenience for writing 157 stories out by hand and nothing more.
+ */
+export type SeedCriterion = [text: string, met: boolean];
 
 export interface StoryBlueprint {
 	title: string;
@@ -39,7 +54,7 @@ export interface StoryBlueprint {
 	slice: string | null;
 	/** The Patton sentence: "As a …, I … so that …". Carries its own emphasis. */
 	narrative: string;
-	criteria: Criterion[];
+	criteria: SeedCriterion[];
 	/** An optional trailing block of raw Markdown — a caveat, a table, a link. */
 	note?: string;
 }
@@ -92,8 +107,13 @@ export const retailCommerceDependencies: [blocker: string, blocked: string][] = 
  * default `todo` — which is also what the earliest slice ought to look like.
  */
 export const retailCommerceStatuses: [title: string, status: StoryStatus][] = [
-	// The storefront and the catalogue came first, and are finished.
-	['See the homepage', 'done'],
+	// The storefront and the catalogue came first. Two of the three are finished;
+	// `See the homepage` is not, and cannot be: its Largest Contentful Paint
+	// criterion is still unticked, and ADR 0024 gates `done` on every criterion
+	// being met. It was marked `done` here before criteria became a domain
+	// concept, which made the contradiction unrepresentable rather than absent —
+	// `in-review` is what the blueprint was actually describing.
+	['See the homepage', 'in-review'],
 	['Create a product', 'done'],
 	['Set a list price', 'done'],
 	// Checkout is the slice being built right now.
@@ -113,14 +133,7 @@ export const retailCommerceStatuses: [title: string, status: StoryStatus][] = [
  * blueprint renders to.
  */
 export function storyDescription(story: StoryBlueprint): string {
-	const criteria = story.criteria.map(([text, met]) => `- [${met ? 'x' : ' '}] ${text}`).join('\n');
-
-	return [
-		story.narrative,
-		'## Acceptance criteria',
-		criteria,
-		...(story.note ? [story.note] : [])
-	].join('\n\n');
+	return [story.narrative, ...(story.note ? [story.note] : [])].join('\n\n');
 }
 
 /** Terser than an object literal per story, so the shape of the map stays
@@ -129,7 +142,7 @@ function s(
 	title: string,
 	slice: string | null,
 	narrative: string,
-	criteria: Criterion[],
+	criteria: SeedCriterion[],
 	note?: string
 ): StoryBlueprint {
 	return { title, slice, narrative, criteria, ...(note === undefined ? {} : { note }) };
@@ -1681,12 +1694,33 @@ export function buildRetailCommerceMap(createdAt: Date = new Date()): StoryMap {
 			for (const storyBlueprint of stepBlueprint.stories) {
 				const sliceId =
 					storyBlueprint.slice === null ? null : sliceIdByName.get(storyBlueprint.slice)!;
-				map = addStory(map, addedStep.step.id, storyBlueprint.title, {
+				const addedStory = addStory(map, addedStep.step.id, storyBlueprint.title, {
 					description: storyDescription(storyBlueprint),
-					sliceId,
-					// Absent from the list means the default, which is most of them.
-					status: statusByTitle.get(storyBlueprint.title)
-				}).map;
+					sliceId
+				});
+				map = addedStory.map;
+
+				for (const [text, met] of storyBlueprint.criteria) {
+					const addedCriterion = addAcceptanceCriterion(map, addedStory.story.id, text);
+					map = met
+						? editAcceptanceCriterion(
+								addedCriterion.map,
+								addedStory.story.id,
+								addedCriterion.criterion.id,
+								{ satisfied: true }
+							)
+						: addedCriterion.map;
+				}
+
+				// Applied after the criteria, not through `addStory`, so the seed is
+				// checked by the same gate the app is (ADR 0024): a blueprint that
+				// calls a story `done` while leaving one of its criteria unticked
+				// throws here instead of being quietly demoted. Absent from the list
+				// means the default, which is most of them.
+				const status = statusByTitle.get(storyBlueprint.title);
+				if (status !== undefined) {
+					map = editStory(map, addedStory.story.id, { status });
+				}
 			}
 		}
 	}
