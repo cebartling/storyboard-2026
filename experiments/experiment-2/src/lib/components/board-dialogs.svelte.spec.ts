@@ -4,7 +4,7 @@ import { page } from 'vitest/browser';
 import { tick } from 'svelte';
 import BoardDialogs, { type BoardDialog, actionError } from './board-dialogs.svelte';
 import type { SubjectStatus } from '$lib/board/dialog-subject';
-import type { StoryId } from '$lib/domain/ids';
+import type { AcceptanceCriterionId, StoryId } from '$lib/domain/ids';
 import type { StoryStatus } from '$lib/domain/story-map';
 import type { BoardViewModel } from '$lib/board/board-view-model';
 import type { Candidate } from '$lib/board/dependency-candidates';
@@ -25,7 +25,14 @@ async function open(
 	dialog: BoardDialog,
 	boardVersion = 3,
 	extra: Partial<{
-		story: { title: string; description: string | null; status: StoryStatus } | null;
+		story: {
+			title: string;
+			description: string | null;
+			status: StoryStatus;
+			/** Optional here only: defaulted to `[]` below so the fixtures that
+			 *  predate acceptance criteria (ADR 0024) stay as they were. */
+			criteria?: { id: AcceptanceCriterionId; text: string; satisfied: boolean }[];
+		} | null;
 		subject: SubjectStatus | null;
 		dependencies: BoardViewModel['dependencies'];
 		candidates: Candidate[];
@@ -38,7 +45,9 @@ async function open(
 		clientId: 'test-tab',
 		onClose: () => {},
 		onLateFailure: () => {},
-		...extra
+		...extra,
+		story:
+			extra.story == null ? extra.story : { ...extra.story, criteria: extra.story.criteria ?? [] }
 	});
 	await tick();
 	return Object.assign(page.getByTestId('board-dialog').element() as HTMLDialogElement, {
@@ -283,7 +292,21 @@ describe('actionError', () => {
 			'%s sends the board version with every form it renders',
 			async (_kind, dialog) => {
 				const dialogEl = await open(dialog, 3, {
-					story: { title: 'Keyword search', description: null, status: 'todo' },
+					// One criterion, not none: the criteria rows are forms too (ADR
+					// 0024), and an empty list would leave this assertion passing
+					// without ever seeing them.
+					story: {
+						title: 'Keyword search',
+						description: null,
+						status: 'todo',
+						criteria: [
+							{
+								id: 'ac-1' as AcceptanceCriterionId,
+								text: 'Matches partial words',
+								satisfied: false
+							}
+						]
+					},
 					dependencies: [
 						{
 							blockerId: 'st-1' as StoryId,
@@ -582,6 +605,107 @@ describe('actionError', () => {
 				)?.disabled
 			).toBe(true);
 			expect(trigger).not.toBeNull();
+		});
+	});
+
+	// Acceptance criteria (ADR 0024). Nothing here submits — `use:enhance` would
+	// POST against the test page — so these are about what is rendered and what
+	// each form would carry.
+	describe('acceptance criteria', () => {
+		const twoCriteria = [
+			{ id: 'ac-1' as AcceptanceCriterionId, text: 'Matches partial words', satisfied: true },
+			{ id: 'ac-2' as AcceptanceCriterionId, text: 'Rejects an empty query', satisfied: false }
+		];
+
+		function withCriteria(criteria: typeof twoCriteria) {
+			return open({ kind: 'viewStory', storyId: 'st-1' }, 3, {
+				story: { title: 'Search', description: 'x', status: 'todo', criteria }
+			});
+		}
+
+		it('renders each criterion’s text, in the order given', async () => {
+			const dialogEl = await withCriteria(twoCriteria);
+
+			const items = [...dialogEl.querySelectorAll('[data-testid="acceptance-criteria-list"] li')];
+			expect(items.map((li) => li.textContent?.trim())).toEqual([
+				'Matches partial words',
+				'Rejects an empty query'
+			]);
+		});
+
+		it('says so when a story has none', async () => {
+			const dialogEl = await withCriteria([]);
+
+			expect(dialogEl.textContent).toContain('No acceptance criteria.');
+			expect(dialogEl.querySelector('[data-testid="acceptance-criteria-list"]')).toBeNull();
+		});
+
+		it('counts how many are met', async () => {
+			const dialogEl = await withCriteria(twoCriteria);
+
+			expect(dialogEl.querySelector('[data-testid="criteria-tally"]')?.textContent?.trim()).toBe(
+				'1 of 2 met'
+			);
+		});
+
+		// The toggle posts the *negation* of what is stored. Posting the current
+		// value would make every tick a no-op that looks like it worked.
+		it('posts the opposite of each criterion’s current state', async () => {
+			const dialogEl = await withCriteria(twoCriteria);
+
+			const toggles = [
+				...dialogEl.querySelectorAll<HTMLFormElement>(
+					'form[action="?/setAcceptanceCriterionSatisfied"]'
+				)
+			];
+			expect(toggles.map((f) => hidden(f, 'satisfied'))).toEqual(['false', 'true']);
+			expect(toggles.map((f) => hidden(f, 'criterionId'))).toEqual(['ac-1', 'ac-2']);
+		});
+
+		// WCAG 1.4.1, the lesson ADR 0021 records for the status chip: the tint is
+		// a scanning aid, never the only channel. Here the state reaches assistive
+		// tech through `aria-pressed` and the accessible name.
+		it('carries satisfied state in more than colour', async () => {
+			const dialogEl = await withCriteria(twoCriteria);
+
+			const buttons = [
+				...dialogEl.querySelectorAll<HTMLButtonElement>(
+					'form[action="?/setAcceptanceCriterionSatisfied"] button'
+				)
+			];
+			expect(buttons.map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false']);
+			expect(buttons[0].getAttribute('aria-label')).toContain('not met');
+			expect(buttons[1].getAttribute('aria-label')).toContain('met');
+		});
+
+		// Neighbour ids, never a rank (ADR 0005). The ends of the list have one
+		// neighbour and a disabled button in the other direction.
+		it('posts neighbour ids for a move, and disables the moves that go nowhere', async () => {
+			const dialogEl = await withCriteria(twoCriteria);
+
+			const moves = [
+				...dialogEl.querySelectorAll<HTMLFormElement>('form[action="?/moveAcceptanceCriterion"]')
+			];
+			// Two rows, two directions each.
+			expect(moves).toHaveLength(4);
+			const [firstUp, firstDown, secondUp] = moves;
+			expect(firstUp.querySelector('button')?.disabled).toBe(true);
+			expect(hidden(firstDown, 'afterId')).toBe('');
+			expect(hidden(firstDown, 'beforeId')).toBe('ac-2');
+			expect(hidden(secondUp, 'afterId')).toBe('ac-1');
+			expect(hidden(secondUp, 'beforeId')).toBe('');
+			expect(moves[3].querySelector('button')?.disabled).toBe(true);
+		});
+
+		it('offers no criterion text input until asked for', async () => {
+			const dialogEl = await withCriteria(twoCriteria);
+
+			expect(dialogEl.querySelector('form[action="?/addAcceptanceCriterion"]')).toBeNull();
+			expect(
+				[...dialogEl.querySelectorAll('button')].find((b) =>
+					b.textContent?.includes('Add criterion')
+				)
+			).toBeDefined();
 		});
 	});
 });
