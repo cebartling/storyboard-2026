@@ -365,7 +365,10 @@
 				pickerOpen = false;
 				candidateQuery = '';
 				chosenCandidate = null;
-				editingCriterionId = null;
+				// Only the row that was saved closes its own editor. Clearing this
+				// unconditionally discarded text somebody was part-way through typing
+				// in one row because they ticked or removed another.
+				if (submittedAction === '?/editAcceptanceCriterion') editingCriterionId = null;
 				submitting = false;
 				// Entering criteria is the other repetitive loop on this board — a
 				// story's criteria are written as a list, at a sitting — so the add
@@ -377,7 +380,9 @@
 					formElement.querySelector<HTMLInputElement>('input[name="text"]')?.focus();
 					return;
 				}
-				criterionFormOpen = false;
+				// `criterionFormOpen` is left as it is, for the same reason: a
+				// half-typed new criterion must survive a write somewhere else in the
+				// list. The dialog's close effect is what resets it.
 				// The control that was clicked has just been removed from the DOM,
 				// so focus would fall to <body> inside an inerted page.
 				//
@@ -433,8 +438,42 @@
 	</form>
 {/snippet}
 
+{#snippet criterionMoveForm(
+	criterion: AcceptanceCriterion,
+	storyId: string,
+	direction: 'up' | 'down',
+	neighbours: ReturnType<typeof neighboursForMove>
+)}
+	<!-- Buttons rather than drag. `svelte-dnd-action` is pointer-event based and
+	     ADR 0010 keeps every dnd zone outside the modal's subtree, so a draggable
+	     list in here would be new ground for no gain on a list this short.
+
+	     One snippet for both directions: they differ only in the icon, the label
+	     and which neighbours they carry, and two copies is two places to fix. -->
+	<form method="POST" action="?/moveAcceptanceCriterion" use:enhance={submit} class="shrink-0">
+		<input type="hidden" name="version" value={openedAtVersion} />
+		<input type="hidden" name="storyId" value={storyId} />
+		<input type="hidden" name="criterionId" value={criterion.id} />
+		<input type="hidden" name="beforeId" value={neighbours.beforeId} />
+		<input type="hidden" name="afterId" value={neighbours.afterId} />
+		<button
+			type="submit"
+			class="btn btn-icon btn-quiet rounded"
+			aria-label="Move “{criterion.text}” {direction}"
+			use:tooltip={direction === 'up' ? 'Move up' : 'Move down'}
+			disabled={submitting || subjectDeleted || !neighbours.valid}
+		>
+			{#if direction === 'up'}
+				<ChevronUp class="size-3.5" />
+			{:else}
+				<ChevronDown class="size-3.5" />
+			{/if}
+		</button>
+	</form>
+{/snippet}
+
 {#snippet criterionRow(criterion: AcceptanceCriterion, index: number, storyId: string)}
-	<li class="flex items-start gap-1.5 text-sm" data-testid="criterion-row">
+	<li class="flex items-start gap-1.5 text-sm">
 		<!-- The tick is a submit button, not a bound checkbox: the board writes
 		     through form actions only, and an unchecked checkbox posts nothing at
 		     all, so the intended next value travels in a hidden field instead.
@@ -488,7 +527,12 @@
 				<button type="submit" class="btn btn-primary" disabled={submitting || subjectDeleted}>
 					Save
 				</button>
-				<button type="button" class="btn btn-quiet" onclick={() => (editingCriterionId = null)}>
+				<button
+					type="button"
+					class="btn btn-quiet"
+					disabled={submitting}
+					onclick={() => (editingCriterionId = null)}
+				>
 					Cancel
 				</button>
 			</form>
@@ -501,42 +545,8 @@
 
 			{@const up = neighboursForMove(index, 'up')}
 			{@const down = neighboursForMove(index, 'down')}
-			<!-- Buttons rather than drag. `svelte-dnd-action` is pointer-event based
-			     and ADR 0010 keeps every dnd zone outside the modal's subtree, so a
-			     draggable list in here would be new ground for no gain on a list
-			     this short. -->
-			<form method="POST" action="?/moveAcceptanceCriterion" use:enhance={submit} class="shrink-0">
-				<input type="hidden" name="version" value={openedAtVersion} />
-				<input type="hidden" name="storyId" value={storyId} />
-				<input type="hidden" name="criterionId" value={criterion.id} />
-				<input type="hidden" name="beforeId" value={up.beforeId} />
-				<input type="hidden" name="afterId" value={up.afterId} />
-				<button
-					type="submit"
-					class="btn btn-icon btn-quiet rounded"
-					aria-label="Move “{criterion.text}” up"
-					use:tooltip={'Move up'}
-					disabled={submitting || subjectDeleted || !up.valid}
-				>
-					<ChevronUp class="size-3.5" />
-				</button>
-			</form>
-			<form method="POST" action="?/moveAcceptanceCriterion" use:enhance={submit} class="shrink-0">
-				<input type="hidden" name="version" value={openedAtVersion} />
-				<input type="hidden" name="storyId" value={storyId} />
-				<input type="hidden" name="criterionId" value={criterion.id} />
-				<input type="hidden" name="beforeId" value={down.beforeId} />
-				<input type="hidden" name="afterId" value={down.afterId} />
-				<button
-					type="submit"
-					class="btn btn-icon btn-quiet rounded"
-					aria-label="Move “{criterion.text}” down"
-					use:tooltip={'Move down'}
-					disabled={submitting || subjectDeleted || !down.valid}
-				>
-					<ChevronDown class="size-3.5" />
-				</button>
-			</form>
+			{@render criterionMoveForm(criterion, storyId, 'up', up)}
+			{@render criterionMoveForm(criterion, storyId, 'down', down)}
 
 			<button
 				type="button"
@@ -921,8 +931,9 @@
 				<div class="flex items-baseline justify-between gap-2">
 					<p class="field-label">Acceptance criteria</p>
 					{#if criteria.length > 0}
-						<!-- Also the explanation for a refused `done` (ADR 0024): the
-						     server's message names the same tally this shows. -->
+						<!-- The same list a refused `done` complains about (ADR 0024),
+						     counted the other way round: this says how many criteria are
+						     met, the server's refusal names how many are not. -->
 						<p class="text-ink-muted text-xs" data-testid="criteria-tally">
 							{metCount} of {criteria.length} met
 						</p>
@@ -962,7 +973,12 @@
 						<button type="submit" class="btn btn-primary" disabled={submitting || subjectDeleted}>
 							Add
 						</button>
-						<button type="button" class="btn btn-quiet" onclick={() => (criterionFormOpen = false)}>
+						<button
+							type="button"
+							class="btn btn-quiet"
+							disabled={submitting}
+							onclick={() => (criterionFormOpen = false)}
+						>
 							Cancel
 						</button>
 					</form>
@@ -970,7 +986,7 @@
 					<button
 						type="button"
 						class="btn btn-quiet mt-3"
-						disabled={subjectDeleted}
+						disabled={submitting || subjectDeleted}
 						onclick={() => (criterionFormOpen = true)}
 					>
 						<Plus class="size-3.5" />
