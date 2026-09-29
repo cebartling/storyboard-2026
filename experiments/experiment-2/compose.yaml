@@ -2,23 +2,36 @@
 #
 # ## Why 7 and not 8
 #
-# MongoDB 8 will not start on this machine. Docker Desktop's Linux VM runs
-# kernel 7.0.12-linuxkit, and MongoDB 8 hard-refuses any kernel >= 6.19:
+# MongoDB 8 hard-refuses to start on any kernel >= 6.19, and this machine's is
+# past that:
 #
 #   "MongoDB cannot start: Linux kernel versions 6.19 and newer has a known
 #    incompatibility with this version of MongoDB."
 #   https://jira.mongodb.org/browse/SERVER-121912   (tcmalloc / glibc rseq)
 #
-# Verified as unavoidable rather than assumed: mongo:8, mongo:8.0.29,
-# mongo:8.3.8 and mongodb/mongodb-community-server:8.0-ubi9 all refuse, as does
-# bypassing that image's entrypoint and setting the `GLIBC_TUNABLES=
-# glibc.pthread.rseq=0` workaround its own entrypoint implements. The check is
-# compiled into `mongod`, not into any wrapper.
+# A container shares the host kernel, so what matters is the kernel Docker runs
+# on — not Docker Desktop specifically, which an earlier version of this note
+# blamed. Re-verified 2026-09-29 on native Linux Docker (engine 29.8.1, kernel
+# 7.0.0-31-generic, x86_64, AVX2 present):
+#
+#   mongo:8.0.32   8.0 LTS         refuses — even `mongod --version` does
+#   mongo:8.3.11   current 8.3     refuses
+#   mongo:8.2.12   8.2, end of life  starts, and soaks clean
+#
+# 8.2 is not the escape hatch it looks like, which is why it is not pinned here.
+# SERVER-121912 puts the defect in 8.0+, and it is resolved "Gone away" with no
+# fix version; the 8.2 branch is an end-of-life rapid release that never picked
+# up the startup check. Starting is the check's absence, not the defect's.
+#
+# Also tried, and still true: bypassing the entrypoint to set `GLIBC_TUNABLES=
+# glibc.pthread.rseq=0` does not help. The check is compiled into `mongod`, not
+# into any wrapper, and SERVER-121885 reports crashes with that tunable set
+# anyway.
 #
 # Nothing this experiment needs is 8-only — replica sets, multi-document
 # transactions, partial unique indexes and findOneAndUpdate are all in 7. So the
-# version is pinned here, in one place: when Docker Desktop ships a kernel below
-# 6.19, or MongoDB fixes SERVER-121912, this is a one-line change.
+# version is pinned here, in one place: when MongoDB ships a supported 8.x that
+# starts on a 6.19+ kernel, this is a one-line change.
 #
 # ## Why a replica set
 #
