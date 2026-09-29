@@ -28,6 +28,13 @@ question. Users type that structure whether or not anything renders it; plain te
 away. Markdown is the notation people already reach for, and it is what the reference
 implementation (Cardboard) accepts.
 
+_Update, 2026-09-29: acceptance criteria are a domain concept now (ADR 0024) and no longer
+live in a description. The rest of this ADR stands — a narrative sentence, a note, a table
+or a link is still Markdown, and this is still the app's only `{@html}`. What changed is
+that the motivating example moved out, so the task-list handling below now has no corpus
+outside its own tests. That is recorded as a consequence in 0024 rather than reversed here:
+the construct is still supported, and a description written before 0024 still renders._
+
 Two things make this more than a rendering change:
 
 - **There is no Content-Security-Policy.** Nothing sets one in `vite.config.ts`'s `kit`
@@ -63,7 +70,9 @@ the rendering path sanitises.**
   - **Task lists render as `☐`/`☑` glyphs**, via a renderer override, so no `<input>` is
     ever emitted for the sanitiser to strip. Left alone, `- [x] done` and `- [ ] done`
     render identically, which is worse than showing no box at all — and acceptance criteria
-    written as a task list are the motivating case in this ADR's Context.
+    written as a task list were the motivating case in this ADR's Context. _Update: they are
+    entities as of ADR 0024, so this now covers a task list somebody writes by hand, and
+    every description authored before that ADR._
   - **Tables are allowed** (`table`, `thead`, `tbody`, `tr`, `th`, `td`; all inert, with no
     attribute surface beyond what is already blocked). Flattened into a run of cell text,
     a table loses the only thing that made it one.

@@ -4,14 +4,15 @@ Jeff Patton's story-mapping vocabulary (_User Story Mapping_, O'Reilly 2014), ma
 this codebase's names. Cardboard (cardboardit.com) is the reference implementation of the
 technique this experiment is modeling.
 
-| Patton's term   | This codebase                           | Notes                                                                       |
-| --------------- | --------------------------------------- | --------------------------------------------------------------------------- |
-| Backbone        | `Activity` (top-level, `rank`-ordered)  | The row of big steps across the top of the wall.                            |
-| User task       | **`Step`**                              | See "Why Step, not user task" below.                                        |
-| Story           | `Story`                                 | Belongs to a `Step`, optionally to a `Slice`.                               |
-| Release / slice | `Slice`                                 | A horizontal band; membership is a nullable FK on `Story`, not containment. |
-| Narrative flow  | `Activity.rank`, `Step.rank`            | Left-to-right order across the backbone and within an activity.             |
-| Priority order  | `Story.rank` within `(stepId, sliceId)` | Top-to-bottom order beneath each step.                                      |
+| Patton's term          | This codebase                              | Notes                                                                       |
+| ---------------------- | ------------------------------------------ | --------------------------------------------------------------------------- |
+| Backbone               | `Activity` (top-level, `rank`-ordered)     | The row of big steps across the top of the wall.                            |
+| User task              | **`Step`**                                 | See "Why Step, not user task" below.                                        |
+| Story                  | `Story`                                    | Belongs to a `Step`, optionally to a `Slice`.                               |
+| Release / slice        | `Slice`                                    | A horizontal band; membership is a nullable FK on `Story`, not containment. |
+| Narrative flow         | `Activity.rank`, `Step.rank`               | Left-to-right order across the backbone and within an activity.             |
+| Priority order         | `Story.rank` within `(stepId, sliceId)`    | Top-to-bottom order beneath each step.                                      |
+| Details / confirmation | `Story.criteria` (`AcceptanceCriterion[]`) | What "done" means for one story. See "Acceptance criteria" below.           |
 
 ## Why we say Step, not user task
 
@@ -74,3 +75,25 @@ a physical wall: the cards fall back to the unsliced row, they don't get thrown 
 The **release view** of a slice (ADR 0023) lists its stories in an order they can be built
 in: after everything that blocks them, and otherwise in reading order across the backbone.
 It flags a story that waits on work planned in a later slice, or not planned at all.
+
+## Acceptance criteria
+
+The back of the card, in Patton's physical metaphor: the confirmation half of a story,
+written as short assertions about what finished means. `Story.criteria` (ADR 0024) — ordered
+by `rank` within the one story that owns them, each with a `satisfied` flag, edited in the
+story detail dialog and nowhere else.
+
+**Whether a criterion is met is a fact about the map, not about whoever is looking.** That
+is the same axis ADRs 0020/0022 and 0021 answer in opposite directions: slice density is
+per-viewer and never written, story status and criteria are shared and versioned. Ticking a
+criterion is an ordinary write that advances the map's version, so a collaborator sees it.
+
+They also constrain one thing: a story cannot be marked `done` while any of its criteria is
+unmet, and a `done` story that gains an unmet one drops back to `in review`. Nothing works
+the other way round — ticking the last criterion does not declare the story finished, which
+stays a person's decision.
+
+Criteria used to be written into a story's `description` as a Markdown task list under a
+`## Acceptance criteria` heading, which is why ADR 0018's allowlist permits checkboxes. A map
+seeded or hand-written before ADR 0024 may still show them that way, as prose; there is no
+migration (ADR 0003), and such text is simply a description now.

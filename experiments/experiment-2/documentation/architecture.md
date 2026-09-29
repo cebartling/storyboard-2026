@@ -160,6 +160,15 @@ without a page navigation nothing else reruns `load()`. The `SubmitFunction` ret
 callback, which suppresses `enhance`'s default `applyAction` — the dialog owns its own
 error, and the default would render the same message a second time in the board's banner.
 
+The `viewStory` dialog is the exception to "a dialog is one editor, and closing it ends the
+edit". It is read-only about the story's own fields, but it writes two of its children —
+dependencies (ADR 0019) and acceptance criteria (ADR 0024) — and it deliberately stays open
+across those writes, re-snapshotting the version each time, because closing would take away
+the view the reader is standing in. It is consequently the one place that has to place focus
+itself after a write, and the one place where _which_ section to focus is a decision: the
+control that was clicked no longer exists, and the two child lists are different places to
+land.
+
 How much of a release slice row is shown is the one thing on the grid that is neither the
 map's nor a dialog's. One control per row cycles a **density** — expanded (full cards, the
 "Add story" button, a drop zone), condensed (`story-deck.svelte`: a stacked card deck that
