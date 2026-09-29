@@ -2,7 +2,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Db, MongoClient } from 'mongodb';
 import { ConflictError, ForbiddenError } from '$lib/domain/errors';
 import { newId, type UserId } from '$lib/domain/ids';
-import { addActivity, addStep, addStory, createStoryMap } from '$lib/domain/story-map';
+import {
+	addAcceptanceCriterion,
+	addActivity,
+	addStep,
+	addStory,
+	createStoryMap
+} from '$lib/domain/story-map';
 import { describeStoryMapRepositoryContract } from '$lib/app/story-map-repository-contract';
 import { collections } from '../db/collections';
 import { freshDatabase } from '../test-support/mongo';
@@ -170,6 +176,46 @@ describe('MongoStoryMapRepository (storage-specific)', () => {
 		const access = await repository.load(caller, saved.id);
 
 		expect(access!.map.stories[0].status).toBe('todo');
+	});
+
+	it('defaults a story’s acceptance criteria to [] for a document written before the field existed', async () => {
+		// The `criteria` counterpart of the two cases above. `toDomain` maps rather
+		// than casts for exactly this shape: a cast would typecheck and hand the
+		// domain `undefined`, and the first thing to read it is the detail dialog,
+		// so an ordinary pre-existing map would 500 on opening a story.
+		const activity = addActivity(createStoryMap('Legacy'), 'Browse');
+		const step = addStep(activity.map, activity.activity.id, 'Search');
+		const story = addStory(step.map, step.step.id, 'Filter by size');
+		const saved = await repository.save(caller, story.map);
+		await collections(db).maps.updateOne(
+			{ _id: saved.id },
+			{ $unset: { 'stories.0.criteria': '' } }
+		);
+
+		const access = await repository.load(caller, saved.id);
+
+		expect(access!.map.stories[0].criteria).toEqual([]);
+	});
+
+	it('treats a stored satisfied that is not a boolean as unsatisfied', async () => {
+		// Why `=== true` and not `?? false` in `toDomain`: `??` answers only for a
+		// missing key, and the string `'false'` — what a hand-edited document or a
+		// lenient form parser leaves behind — is truthy. Passed through, it ticks a
+		// criterion nobody met, and with ADR 0024's gate that is a story the board
+		// reports as finished on evidence that does not exist.
+		const activity = addActivity(createStoryMap('Legacy'), 'Browse');
+		const step = addStep(activity.map, activity.activity.id, 'Search');
+		const story = addStory(step.map, step.step.id, 'Filter by size');
+		const added = addAcceptanceCriterion(story.map, story.story.id, 'Results are paginated');
+		const saved = await repository.save(caller, added.map);
+		await collections(db).maps.updateOne(
+			{ _id: saved.id },
+			{ $set: { 'stories.0.criteria.0.satisfied': 'false' } }
+		);
+
+		const access = await repository.load(caller, saved.id);
+
+		expect(access!.map.stories[0].criteria[0].satisfied).toBe(false);
 	});
 
 	it('defaults a story’s status when the stored value is not one of the five', async () => {

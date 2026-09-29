@@ -236,9 +236,18 @@ function toDomain(doc: MapDoc): StoryMap {
 		// reaches `STORY_STATUS_PRESENTATION[status]`, which has no entry for it,
 		// and reading `.card` off `undefined` throws while rendering: not a
 		// mis-drawn card but a board that will not load at all.
+		//
+		// `criteria` rides the same `.map()` for the same reasons twice over: the
+		// array postdates existing documents, so `?? []` answers for its absence;
+		// and `satisfied` is coerced with `=== true` rather than `?? false` because
+		// `??` answers only for a missing key. A stored `"false"`, which is what a
+		// hand-edited document or a future form-parsing bug leaves behind, is a
+		// truthy string — it would tick a criterion nobody met, and with ADR 0024's
+		// gate on `done` that is a story the board reports as finished.
 		stories: doc.stories.map((s) => ({
 			...s,
-			status: isStoryStatus(s.status) ? s.status : DEFAULT_STORY_STATUS
+			status: isStoryStatus(s.status) ? s.status : DEFAULT_STORY_STATUS,
+			criteria: (s.criteria ?? []).map((c) => ({ ...c, satisfied: c.satisfied === true }))
 		})) as StoryMap['stories'],
 		// `?? []`, not a cast like its neighbours. They can cast because they were
 		// always written; this field was not, so a cast would typecheck and hand
@@ -261,7 +270,15 @@ function toDocument(map: StoryMap, version: number): MapDoc {
 		// `sliceId` is written explicitly as `null` for the unsliced band rather
 		// than omitted: Mongo distinguishes a missing field from a null one, and
 		// the unsliced band is where every new story starts.
-		stories: map.stories.map((s) => ({ ...s, sliceId: s.sliceId ?? null })),
+		// `criteria` is named rather than left to the spread, which would carry it
+		// silently: a spread is exempt from excess-property checks, so dropping the
+		// field here would typecheck and simply stop persisting criteria. Naming it
+		// is the only thing that makes this line say what it writes.
+		stories: map.stories.map((s) => ({
+			...s,
+			sliceId: s.sliceId ?? null,
+			criteria: s.criteria
+		})),
 		// No defaulting on the way out: `createStoryMap` guarantees the array.
 		dependencies: map.dependencies
 	};

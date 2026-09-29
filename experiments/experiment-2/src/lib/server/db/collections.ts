@@ -59,6 +59,16 @@ export interface MapDoc {
 		 */
 		status?: StoryStatus;
 		rank: string;
+		/**
+		 * The story's acceptance criteria, in no guaranteed order (ADR 0024) —
+		 * `toDomain`'s `inRankOrder` sorts them.
+		 *
+		 * Optional for the same no-migrations reason as `status` above. `satisfied`
+		 * is optional *within* it as well, and deliberately so: it is the one field
+		 * here whose absence and whose junk value must both read as `false`, so
+		 * `toDomain` coerces with `=== true` rather than trusting the type.
+		 */
+		criteria?: { id: string; text: string; rank: string; satisfied?: boolean }[];
 	}[];
 	/**
 	 * Directional blocks-edges between two stories in this map (ADR 0019). Flat,

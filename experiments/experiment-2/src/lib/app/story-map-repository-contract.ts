@@ -3,11 +3,14 @@ import type { Caller, StoryMapRepository } from '$lib/domain/ports';
 import type { MapId, UserId } from '$lib/domain/ids';
 import { ConflictError, ForbiddenError } from '$lib/domain/errors';
 import {
+	addAcceptanceCriterion,
 	addActivity,
 	addDependency,
 	addStep,
 	addStory,
 	createStoryMap,
+	editAcceptanceCriterion,
+	moveAcceptanceCriterion,
 	moveActivity,
 	moveStep,
 	moveStory
@@ -160,6 +163,43 @@ export function describeStoryMapRepositoryContract(
 			const byTitle = new Map(access!.map.stories.map((s) => [s.title, s.status]));
 			expect(byTitle.get('Search by keyword')).toBe('in-progress');
 			expect(byTitle.get('Sort by price')).toBe('todo');
+		});
+
+		it('round-trips a story’s acceptance criteria, in rank order', async () => {
+			// Same reasoning as the two cases above, plus the half neither of them
+			// can cover: a dependency has no rank, so this is the only contract case
+			// that holds a store to `inRankOrder` reaching a *nested* collection.
+			// Written out of order deliberately — the third criterion is moved to
+			// the front, so an adapter that returns the array as stored fails here.
+			const harness = await createHarness();
+			const owner = await harness.createUser();
+			const activity = addActivity(createStoryMap('Retail'), 'Browse');
+			const step = addStep(activity.map, activity.activity.id, 'Search');
+			const story = addStory(step.map, step.step.id, 'Search by keyword');
+			const first = addAcceptanceCriterion(story.map, story.story.id, 'Results within 2s');
+			const second = addAcceptanceCriterion(first.map, story.story.id, 'Empty search rejected');
+			const third = addAcceptanceCriterion(second.map, story.story.id, 'Results are paginated');
+			const met = editAcceptanceCriterion(third.map, story.story.id, second.criterion.id, {
+				satisfied: true
+			});
+			const reordered = moveAcceptanceCriterion(
+				met,
+				story.story.id,
+				third.criterion.id,
+				null,
+				first.criterion.id
+			);
+
+			const saved = await harness.repository.save(owner, reordered);
+
+			const access = await harness.repository.load(owner, saved.id);
+			const criteria = access!.map.stories[0].criteria;
+			expect(criteria.map((c) => c.text)).toEqual([
+				'Results are paginated',
+				'Results within 2s',
+				'Empty search rejected'
+			]);
+			expect(criteria.map((c) => c.satisfied)).toEqual([false, false, true]);
 		});
 
 		it('lists the most recently created map first', async () => {
