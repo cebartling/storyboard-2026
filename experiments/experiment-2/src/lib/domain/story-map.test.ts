@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ConflictError, InvariantError } from './errors';
 import type { StoryId } from './ids';
 import {
+	addAcceptanceCriterion,
 	addActivity,
 	addDependency,
 	addSlice,
@@ -12,17 +13,20 @@ import {
 	deleteSlice,
 	deleteStep,
 	deleteStory,
+	editAcceptanceCriterion,
 	editStory,
 	findActivity,
 	findStory,
 	inRankOrder,
 	isStoryStatus,
+	moveAcceptanceCriterion,
 	moveActivity,
 	moveSlice,
 	moveStep,
 	moveStory,
 	renameActivity,
 	renameSlice,
+	removeAcceptanceCriterion,
 	removeDependency,
 	renameStep,
 	STORY_STATUSES,
@@ -920,6 +924,362 @@ describe('dependencies', () => {
 			const updated = moveStory(linked, ids[1], stepId, null, ids[0], null);
 
 			expect(updated.dependencies).toHaveLength(1);
+		});
+	});
+});
+
+describe('acceptance criteria', () => {
+	/** A map with one story, ready for criteria to be hung off it. */
+	function mapWithOneStory(title = 'Search by keyword') {
+		const base = mapWithOneStep();
+		const story = addStory(base.map, base.stepId, title);
+		return {
+			map: story.map,
+			storyId: story.story.id,
+			stepId: base.stepId,
+			activityId: base.activityId
+		};
+	}
+
+	function criteriaOf(map: StoryMap, storyId: StoryId) {
+		return findStory(map, storyId).criteria;
+	}
+
+	describe('addAcceptanceCriterion', () => {
+		it('appends a criterion to the end of its story, unsatisfied', () => {
+			const { map, storyId } = mapWithOneStory();
+
+			const first = addAcceptanceCriterion(map, storyId, 'Results appear within 2 seconds');
+			const second = addAcceptanceCriterion(first.map, storyId, 'An empty search is rejected');
+
+			expect(criteriaOf(second.map, storyId).map((c) => c.text)).toEqual([
+				'Results appear within 2 seconds',
+				'An empty search is rejected'
+			]);
+			expect(criteriaOf(second.map, storyId).every((c) => !c.satisfied)).toBe(true);
+		});
+
+		it('appends in rank order, not merely in array order', () => {
+			const { map, storyId } = mapWithOneStory();
+			const first = addAcceptanceCriterion(map, storyId, 'One');
+			const second = addAcceptanceCriterion(first.map, storyId, 'Two');
+
+			const ranks = criteriaOf(second.map, storyId).map((c) => c.rank);
+
+			expect(ranks[0] < ranks[1]).toBe(true);
+		});
+
+		it('trims the text it stores', () => {
+			const { map, storyId } = mapWithOneStory();
+
+			const added = addAcceptanceCriterion(map, storyId, '  Results are paginated  ');
+
+			expect(added.criterion.text).toBe('Results are paginated');
+		});
+
+		it('refuses a criterion that is only whitespace', () => {
+			const { map, storyId } = mapWithOneStory();
+
+			expect(() => addAcceptanceCriterion(map, storyId, '   ')).toThrow(InvariantError);
+		});
+
+		it('refuses a story that is not in this map', () => {
+			const { map } = mapWithOneStory();
+
+			expect(() => addAcceptanceCriterion(map, 'nope' as StoryId, 'Anything')).toThrow(
+				InvariantError
+			);
+		});
+
+		it('does not mutate the map it is given', () => {
+			const { map, storyId } = mapWithOneStory();
+
+			addAcceptanceCriterion(map, storyId, 'Results appear within 2 seconds');
+
+			expect(criteriaOf(map, storyId)).toEqual([]);
+		});
+	});
+
+	describe('editAcceptanceCriterion', () => {
+		it('edits the text without touching satisfied', () => {
+			const { map, storyId } = mapWithOneStory();
+			const added = addAcceptanceCriterion(map, storyId, 'Old wording');
+			const satisfied = editAcceptanceCriterion(added.map, storyId, added.criterion.id, {
+				satisfied: true
+			});
+
+			const updated = editAcceptanceCriterion(satisfied, storyId, added.criterion.id, {
+				text: 'New wording'
+			});
+
+			expect(criteriaOf(updated, storyId)[0].text).toBe('New wording');
+			expect(criteriaOf(updated, storyId)[0].satisfied).toBe(true);
+		});
+
+		it('marks a criterion satisfied without touching its text', () => {
+			const { map, storyId } = mapWithOneStory();
+			const added = addAcceptanceCriterion(map, storyId, 'Results are paginated');
+
+			const updated = editAcceptanceCriterion(added.map, storyId, added.criterion.id, {
+				satisfied: true
+			});
+
+			expect(criteriaOf(updated, storyId)[0]).toMatchObject({
+				text: 'Results are paginated',
+				satisfied: true
+			});
+		});
+
+		// The one case an `??`-shaped assignment survives every other test here:
+		// `changes.satisfied ?? c.satisfied` reads `false` as "not given" only if
+		// the field is ever widened past boolean, and this is what would catch it.
+		it('marks a satisfied criterion unsatisfied again', () => {
+			const { map, storyId } = mapWithOneStory();
+			const added = addAcceptanceCriterion(map, storyId, 'Results are paginated');
+			const satisfied = editAcceptanceCriterion(added.map, storyId, added.criterion.id, {
+				satisfied: true
+			});
+
+			const updated = editAcceptanceCriterion(satisfied, storyId, added.criterion.id, {
+				satisfied: false
+			});
+
+			expect(criteriaOf(updated, storyId)[0].satisfied).toBe(false);
+		});
+
+		it('refuses blank replacement text', () => {
+			const { map, storyId } = mapWithOneStory();
+			const added = addAcceptanceCriterion(map, storyId, 'Results are paginated');
+
+			expect(() =>
+				editAcceptanceCriterion(added.map, storyId, added.criterion.id, { text: '  ' })
+			).toThrow(InvariantError);
+		});
+
+		// The ticket's invariant: a criterion belongs to one story, so an id from
+		// another one is rejected rather than found by a map-wide scan.
+		it('refuses a criterion id that belongs to a different story', () => {
+			const { map, storyId, stepId } = mapWithOneStory();
+			const other = addStory(map, stepId, 'Sort by price');
+			const added = addAcceptanceCriterion(other.map, other.story.id, 'Sorted descending');
+
+			expect(() =>
+				editAcceptanceCriterion(added.map, storyId, added.criterion.id, { satisfied: true })
+			).toThrow(InvariantError);
+		});
+	});
+
+	describe('removeAcceptanceCriterion', () => {
+		it('removes one and leaves its siblings alone', () => {
+			const { map, storyId } = mapWithOneStory();
+			const first = addAcceptanceCriterion(map, storyId, 'One');
+			const second = addAcceptanceCriterion(first.map, storyId, 'Two');
+			const beforeRanks = criteriaOf(second.map, storyId).map((c) => c.rank);
+
+			const updated = removeAcceptanceCriterion(second.map, storyId, first.criterion.id);
+
+			expect(criteriaOf(updated, storyId).map((c) => c.text)).toEqual(['Two']);
+			expect(criteriaOf(updated, storyId)[0].rank).toBe(beforeRanks[1]);
+		});
+
+		it('refuses a criterion that is not there', () => {
+			const { map, storyId } = mapWithOneStory();
+			const added = addAcceptanceCriterion(map, storyId, 'One');
+			const removed = removeAcceptanceCriterion(added.map, storyId, added.criterion.id);
+
+			expect(() => removeAcceptanceCriterion(removed, storyId, added.criterion.id)).toThrow(
+				InvariantError
+			);
+		});
+	});
+
+	describe('moveAcceptanceCriterion', () => {
+		it('reorders a criterion within its story', () => {
+			const { map, storyId } = mapWithOneStory();
+			const first = addAcceptanceCriterion(map, storyId, 'One');
+			const second = addAcceptanceCriterion(first.map, storyId, 'Two');
+			const third = addAcceptanceCriterion(second.map, storyId, 'Three');
+
+			const moved = moveAcceptanceCriterion(
+				third.map,
+				storyId,
+				third.criterion.id,
+				null,
+				first.criterion.id
+			);
+
+			expect(sortByRank(criteriaOf(moved, storyId)).map((c) => c.text)).toEqual([
+				'Three',
+				'One',
+				'Two'
+			]);
+		});
+
+		it('refuses a neighbour that belongs to another story', () => {
+			const { map, storyId, stepId } = mapWithOneStory();
+			const mine = addAcceptanceCriterion(map, storyId, 'Mine');
+			const other = addStory(mine.map, stepId, 'Sort by price');
+			const theirs = addAcceptanceCriterion(other.map, other.story.id, 'Theirs');
+
+			expect(() =>
+				moveAcceptanceCriterion(theirs.map, storyId, mine.criterion.id, theirs.criterion.id, null)
+			).toThrow(InvariantError);
+		});
+	});
+
+	describe('cascades', () => {
+		it('deletes a story’s criteria with the story', () => {
+			const { map, storyId } = mapWithOneStory();
+			const added = addAcceptanceCriterion(map, storyId, 'One');
+
+			const updated = deleteStory(added.map, storyId);
+
+			expect(updated.stories).toEqual([]);
+		});
+
+		it('deletes them with the step, and with the activity', () => {
+			const { map, storyId, stepId, activityId } = mapWithOneStory();
+			const added = addAcceptanceCriterion(map, storyId, 'One');
+
+			expect(deleteStep(added.map, stepId).stories).toEqual([]);
+			expect(deleteActivity(added.map, activityId).stories).toEqual([]);
+		});
+
+		// The mirror of `keeps every edge when a slice is deleted`: a slice delete
+		// un-slices its stories rather than removing them, so their criteria must
+		// still be there afterwards.
+		it('keeps them when a slice is deleted', () => {
+			const base = mapWithOneStep();
+			const slice = addSlice(base.map, 'Release 1');
+			const story = addStory(slice.map, base.stepId, 'Sliced', { sliceId: slice.slice.id });
+			const added = addAcceptanceCriterion(story.map, story.story.id, 'One');
+
+			const updated = deleteSlice(added.map, slice.slice.id);
+
+			expect(criteriaOf(updated, story.story.id).map((c) => c.text)).toEqual(['One']);
+		});
+
+		it('keeps them when a story moves', () => {
+			const { map, storyId, stepId } = mapWithOneStory();
+			const added = addAcceptanceCriterion(map, storyId, 'One');
+
+			const updated = moveStory(added.map, storyId, stepId, null, null, null);
+
+			expect(criteriaOf(updated, storyId).map((c) => c.text)).toEqual(['One']);
+		});
+	});
+
+	describe('the done gate', () => {
+		it('refuses done while a criterion is unmet, naming the tally', () => {
+			const { map, storyId } = mapWithOneStory();
+			const first = addAcceptanceCriterion(map, storyId, 'One');
+			const second = addAcceptanceCriterion(first.map, storyId, 'Two');
+			const partly = editAcceptanceCriterion(second.map, storyId, first.criterion.id, {
+				satisfied: true
+			});
+
+			expect(() => editStory(partly, storyId, { status: 'done' })).toThrow(/1 of 2/);
+		});
+
+		it('allows done once every criterion is satisfied', () => {
+			const { map, storyId } = mapWithOneStory();
+			const added = addAcceptanceCriterion(map, storyId, 'One');
+			const satisfied = editAcceptanceCriterion(added.map, storyId, added.criterion.id, {
+				satisfied: true
+			});
+
+			const updated = editStory(satisfied, storyId, { status: 'done' });
+
+			expect(findStory(updated, storyId).status).toBe('done');
+		});
+
+		it('leaves a story with no criteria freely settable', () => {
+			const { map, storyId } = mapWithOneStory();
+
+			const updated = editStory(map, storyId, { status: 'done' });
+
+			expect(findStory(updated, storyId).status).toBe('done');
+		});
+
+		it('does not gate the other four statuses', () => {
+			const { map, storyId } = mapWithOneStory();
+			const added = addAcceptanceCriterion(map, storyId, 'One');
+
+			for (const status of STORY_STATUSES.filter((s) => s !== 'done')) {
+				expect(findStory(editStory(added.map, storyId, { status }), storyId).status).toBe(status);
+			}
+		});
+
+		it('drops a done story to in review when a criterion is unticked', () => {
+			const { map, storyId } = mapWithOneStory();
+			const added = addAcceptanceCriterion(map, storyId, 'One');
+			const satisfied = editAcceptanceCriterion(added.map, storyId, added.criterion.id, {
+				satisfied: true
+			});
+			const done = editStory(satisfied, storyId, { status: 'done' });
+
+			const updated = editAcceptanceCriterion(done, storyId, added.criterion.id, {
+				satisfied: false
+			});
+
+			expect(findStory(updated, storyId).status).toBe('in-review');
+		});
+
+		it('drops a done story to in review when a criterion is added', () => {
+			const { map, storyId } = mapWithOneStory();
+			const done = editStory(map, storyId, { status: 'done' });
+
+			const updated = addAcceptanceCriterion(done, storyId, 'Something nobody checked');
+
+			expect(findStory(updated.map, storyId).status).toBe('in-review');
+		});
+
+		// No auto-promotion: satisfying the last criterion is not the same act as
+		// declaring the story finished, and only a person does the second one.
+		it('does not promote a story to done when its last criterion is satisfied', () => {
+			const { map, storyId } = mapWithOneStory();
+			const added = addAcceptanceCriterion(map, storyId, 'One');
+			const started = editStory(added.map, storyId, { status: 'in-progress' });
+
+			const updated = editAcceptanceCriterion(started, storyId, added.criterion.id, {
+				satisfied: true
+			});
+
+			expect(findStory(updated, storyId).status).toBe('in-progress');
+		});
+
+		it('leaves a removal from a done-blocked story unpromoted', () => {
+			const { map, storyId } = mapWithOneStory();
+			const added = addAcceptanceCriterion(map, storyId, 'One');
+
+			const updated = removeAcceptanceCriterion(added.map, storyId, added.criterion.id);
+
+			expect(findStory(updated, storyId).status).toBe('todo');
+		});
+	});
+
+	describe('inRankOrder', () => {
+		it('sorts a story’s criteria inside it', () => {
+			const { map, storyId } = mapWithOneStory();
+			const first = addAcceptanceCriterion(map, storyId, 'One');
+			const second = addAcceptanceCriterion(first.map, storyId, 'Two');
+			const third = addAcceptanceCriterion(second.map, storyId, 'Three');
+			const moved = moveAcceptanceCriterion(
+				third.map,
+				storyId,
+				third.criterion.id,
+				null,
+				first.criterion.id
+			);
+			// Written back out of rank order, the way a document store hands it back.
+			const shuffled: StoryMap = {
+				...moved,
+				stories: moved.stories.map((s) => ({ ...s, criteria: [...s.criteria].reverse() }))
+			};
+
+			const sorted = inRankOrder(shuffled);
+
+			expect(criteriaOf(sorted, storyId).map((c) => c.text)).toEqual(['Three', 'One', 'Two']);
 		});
 	});
 });
