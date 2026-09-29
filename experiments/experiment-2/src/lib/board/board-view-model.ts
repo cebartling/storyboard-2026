@@ -1,4 +1,11 @@
-import type { ActivityId, MapId, SliceId, StepId, StoryId } from '$lib/domain/ids';
+import type {
+	AcceptanceCriterionId,
+	ActivityId,
+	MapId,
+	SliceId,
+	StepId,
+	StoryId
+} from '$lib/domain/ids';
 import type { StoryMap, StoryStatus } from '$lib/domain/story-map';
 
 // ---------------------------------------------------------------------------
@@ -52,6 +59,17 @@ export interface CellVM {
 		blocksCount: number;
 		/** Drives the card's tint and status chip (ADR 0021). */
 		status: StoryStatus;
+		/**
+		 * The story's acceptance criteria, in rank order (ADR 0024). Read by the
+		 * detail dialog, which takes its story from here rather than from the
+		 * aggregate — unlike `dependencies`, no top-level collection is needed,
+		 * because a criterion has one parent and appears in exactly one cell.
+		 *
+		 * No `rank`. The array is already ordered, and reordering posts neighbour
+		 * *ids* and lets the server derive the rank (ADR 0005) — a `rank` here
+		 * would be a field the client is not allowed to use.
+		 */
+		criteria: { id: AcceptanceCriterionId; text: string; satisfied: boolean }[];
 	}[];
 }
 
@@ -156,7 +174,12 @@ export function buildBoardViewModel(map: StoryMap): BoardViewModel {
 						description: s.description,
 						blockedByCount: blockedByCount.get(s.id) ?? 0,
 						blocksCount: blocksCount.get(s.id) ?? 0,
-						status: s.status
+						status: s.status,
+						criteria: s.criteria.map((c) => ({
+							id: c.id,
+							text: c.text,
+							satisfied: c.satisfied
+						}))
 					}))
 			});
 		}
