@@ -162,7 +162,7 @@ export const retailCommerceBlueprint: ActivityBlueprint[] = [
 						[
 							['Hero, primary navigation and footer render above the fold', true],
 							['Featured rail is server-rendered, not fetched after paint', true],
-							['Largest Contentful Paint under `2.5s` on a cold 4G load', false]
+							['Largest Contentful Paint under 2.5s on a cold 4G load', false]
 						]
 					),
 					s(
@@ -180,7 +180,7 @@ export const retailCommerceBlueprint: ActivityBlueprint[] = [
 						'As a shopper abroad I see **my currency and language** so prices make sense.',
 						[
 							[
-								'Locale resolves from the `Accept-Language` header, overridable by the shopper',
+								'Locale resolves from the Accept-Language header, overridable by the shopper',
 								false
 							],
 							['Prices convert at the rate stored with the price list, not a live feed', false],
@@ -228,7 +228,7 @@ export const retailCommerceBlueprint: ActivityBlueprint[] = [
 						'As a shopper I see **where I am** in the category tree so I can go back up.',
 						[
 							['Breadcrumbs reflect the path taken, not the product’s primary category', false],
-							['Marked up as `BreadcrumbList` structured data', false]
+							['Marked up as BreadcrumbList structured data', false]
 						]
 					),
 					s(
@@ -338,7 +338,7 @@ export const retailCommerceBlueprint: ActivityBlueprint[] = [
 						'As a shopper I **see photos** of the product so I know what I am buying.',
 						[
 							['At least one image is required to publish a product', true],
-							['Images are served in `webp` with a JPEG fallback', true],
+							['Images are served in webp with a JPEG fallback', true],
 							['Alt text falls back to the product title when unset', false]
 						]
 					),
@@ -611,7 +611,7 @@ export const retailCommerceBlueprint: ActivityBlueprint[] = [
 					s('Enter a promo code', R2, 'As a shopper I **redeem a code** I was sent.', [
 						['Codes are case-insensitive and trimmed', false],
 						['An invalid code says why: expired, not started, or not applicable', false],
-						['Rejected after `5` failed attempts in a session', false]
+						['Rejected after 5 failed attempts in a session', false]
 					]),
 					s(
 						'See the discount on the total',
@@ -843,7 +843,7 @@ export const retailCommerceBlueprint: ActivityBlueprint[] = [
 						R3,
 						'As a merchant I **hold stock while payment completes** so it is not double sold.',
 						[
-							['Reservation expires after `15m` if authorisation never completes', false],
+							['Reservation expires after 15m if authorisation never completes', false],
 							['Expiry releases stock without cancelling the cart', false]
 						]
 					)
@@ -904,7 +904,7 @@ export const retailCommerceBlueprint: ActivityBlueprint[] = [
 						'Add the order to a calendar',
 						null,
 						'As a shopper I **add the expected delivery date** to my calendar.',
-						[['Offered as an `.ics` download rather than a calendar integration', false]]
+						[['Offered as an .ics download rather than a calendar integration', false]]
 					)
 				]
 			}

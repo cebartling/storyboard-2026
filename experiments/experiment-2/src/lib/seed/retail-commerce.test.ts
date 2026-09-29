@@ -179,6 +179,18 @@ describe('buildRetailCommerceMap', () => {
 			expect(description).toBe('As a shopper I **do a thing** so that it happens.');
 		});
 
+		// Criteria render as plain text now (ADR 0024), so Markdown written in one
+		// shows up as literal punctuation on screen. They used to be concatenated
+		// into a Markdown blob, where backticks were correct — seven of them were
+		// left behind by the move, and this is what stops the next one.
+		it('writes criteria as plain text, with no inline Markdown', () => {
+			for (const story of stories) {
+				for (const [text] of story.criteria) {
+					expect(text, `${story.title}: ${text}`).not.toMatch(/[`*_]/);
+				}
+			}
+		});
+
 		it('attaches the blueprint’s criteria to the story, carrying which are met', () => {
 			const map = buildRetailCommerceMap();
 			const blueprint = stories.find((s) => s.criteria.some(([, met]) => met))!;
