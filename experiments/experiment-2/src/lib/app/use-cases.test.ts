@@ -21,6 +21,7 @@ import {
 	type UserId
 } from '$lib/domain/ids';
 import {
+	addAcceptanceCriterion,
 	addActivity,
 	addDependency,
 	addSlice,
@@ -155,6 +156,10 @@ describe('mutating use cases', () => {
 		const third = addStory(map, step.step.id, 'Sort results');
 		map = third.map;
 		map = addDependency(map, story.story.id, other.story.id);
+		// One criterion on the first story, so the cases below have an existing one
+		// to edit, tick and remove without each having to create its own.
+		const criterion = addAcceptanceCriterion(map, story.story.id, 'Matches partial words');
+		map = criterion.map;
 
 		const repository = new InMemoryStoryMapRepository([{ map: map, owner: caller.userId }]);
 		// Read back rather than taken from the map as built: a stored map has been
@@ -169,6 +174,7 @@ describe('mutating use cases', () => {
 			storyId: story.story.id as StoryId,
 			otherStoryId: other.story.id as StoryId,
 			thirdStoryId: third.story.id as StoryId,
+			criterionId: criterion.criterion.id,
 			version: stored.version
 		};
 	}
@@ -246,6 +252,56 @@ describe('mutating use cases', () => {
 				)
 		},
 		{
+			name: 'addAcceptanceCriterion',
+			run: (c) =>
+				useCases.addAcceptanceCriterion(
+					c.repository,
+					caller,
+					c.mapId,
+					c.version,
+					c.storyId,
+					'Rejects an empty query'
+				)
+		},
+		{
+			name: 'editAcceptanceCriterion',
+			run: (c) =>
+				useCases.editAcceptanceCriterion(
+					c.repository,
+					caller,
+					c.mapId,
+					c.version,
+					c.storyId,
+					c.criterionId,
+					'Matches partial words, case-insensitively'
+				)
+		},
+		{
+			name: 'setAcceptanceCriterionSatisfied',
+			run: (c) =>
+				useCases.setAcceptanceCriterionSatisfied(
+					c.repository,
+					caller,
+					c.mapId,
+					c.version,
+					c.storyId,
+					c.criterionId,
+					true
+				)
+		},
+		{
+			name: 'removeAcceptanceCriterion',
+			run: (c) =>
+				useCases.removeAcceptanceCriterion(
+					c.repository,
+					caller,
+					c.mapId,
+					c.version,
+					c.storyId,
+					c.criterionId
+				)
+		},
+		{
 			name: 'moveStory',
 			run: (c) =>
 				useCases.moveStory(
@@ -308,6 +364,55 @@ describe('mutating use cases', () => {
 		expect(story.description).toBe('Accepts partial words');
 		// And the status it was never given stays where it was (ADR 0021).
 		expect(story.status).toBe('todo');
+	});
+
+	// Two use cases call one domain function with disjoint fields, so what is
+	// worth testing is that neither field reaches the other's write.
+	it('setAcceptanceCriterionSatisfied leaves the text alone', async () => {
+		const ctx = await seeded();
+		await useCases.setAcceptanceCriterionSatisfied(
+			ctx.repository,
+			caller,
+			ctx.mapId,
+			ctx.version,
+			ctx.storyId,
+			ctx.criterionId,
+			true
+		);
+
+		const after = (await ctx.repository.load(caller, ctx.mapId))!.map;
+		const criterion = after.stories.find((s) => s.id === ctx.storyId)!.criteria[0];
+		expect(criterion.text).toBe('Matches partial words');
+		expect(criterion.satisfied).toBe(true);
+	});
+
+	it('editAcceptanceCriterion leaves satisfied alone', async () => {
+		const ctx = await seeded();
+		await useCases.setAcceptanceCriterionSatisfied(
+			ctx.repository,
+			caller,
+			ctx.mapId,
+			ctx.version,
+			ctx.storyId,
+			ctx.criterionId,
+			true
+		);
+		const ticked = (await ctx.repository.load(caller, ctx.mapId))!.map.version;
+
+		await useCases.editAcceptanceCriterion(
+			ctx.repository,
+			caller,
+			ctx.mapId,
+			ticked,
+			ctx.storyId,
+			ctx.criterionId,
+			'Matches partial words, case-insensitively'
+		);
+
+		const after = (await ctx.repository.load(caller, ctx.mapId))!.map;
+		const criterion = after.stories.find((s) => s.id === ctx.storyId)!.criteria[0];
+		expect(criterion.text).toBe('Matches partial words, case-insensitively');
+		expect(criterion.satisfied).toBe(true);
 	});
 
 	it('editStory persists a status change', async () => {
