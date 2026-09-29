@@ -302,6 +302,23 @@ describe('mutating use cases', () => {
 				)
 		},
 		{
+			// The fifth criterion use case, and the one whose stale-version refusal
+			// is easiest to miss: the seeded story has a single criterion, so both
+			// neighbours are absent and the rank is simply recomputed.
+			name: 'moveAcceptanceCriterion',
+			run: (c) =>
+				useCases.moveAcceptanceCriterion(
+					c.repository,
+					caller,
+					c.mapId,
+					c.version,
+					c.storyId,
+					c.criterionId,
+					null,
+					null
+				)
+		},
+		{
 			name: 'moveStory',
 			run: (c) =>
 				useCases.moveStory(

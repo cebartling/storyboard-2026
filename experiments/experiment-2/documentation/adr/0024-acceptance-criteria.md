@@ -150,8 +150,9 @@ work and changes nothing. `requireBoolean` refuses a missing value for the same 
 
 Satisfied state is never signalled by colour alone (WCAG 1.4.1, ADR 0021's lesson for the
 status chip): the box changes shape, the text is struck through, `aria-pressed` carries it
-to assistive tech, and a tally counts it. The tally also explains a refused `done`, because
-the server's message names the same numbers.
+to assistive tech, and a tally counts it. The tally also speaks to a refused `done`, over the
+same list counted the other way round: the dialog says how many criteria are met, the
+server's refusal names how many are not.
 
 Add and edit forms are collapsed until asked for, one at a time. `Modal` focuses the first
 non-hidden input when it opens, so a list of live inputs would take focus off the

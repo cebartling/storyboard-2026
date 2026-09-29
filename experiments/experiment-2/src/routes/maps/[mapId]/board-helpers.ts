@@ -126,9 +126,8 @@ export async function link(
  * input is what success looks like here.
  */
 export async function addCriterion(page: Page, story: string, text: string) {
-	const detail = dialog(page);
-	if (!(await detail.isVisible())) await openStory(page, story);
 	const open = dialog(page);
+	if (!(await open.isVisible())) await openStory(page, story);
 	// The form is collapsed until asked for, so the trigger is only there the
 	// first time; afterwards the input is already on screen.
 	const trigger = open.getByRole('button', { name: 'Add criterion' });
@@ -145,7 +144,12 @@ export async function addCriterion(page: Page, story: string, text: string) {
 /** Ticks or unticks a criterion by its text, from an open detail dialog. */
 export async function toggleCriterion(page: Page, text: string) {
 	const open = dialog(page);
-	await open.getByRole('button', { name: new RegExp(`Mark “${text}” (met|not met)`) }).click();
+	// Two exact names rather than one regex over the criterion's text: the text is
+	// free-form, and a `.`, `(` or `?` in it would silently match the wrong button
+	// or none at all.
+	const met = open.getByRole('button', { name: `Mark “${text}” met`, exact: true });
+	const notMet = open.getByRole('button', { name: `Mark “${text}” not met`, exact: true });
+	await met.or(notMet).click();
 	return open;
 }
 
