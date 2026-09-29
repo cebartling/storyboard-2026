@@ -283,8 +283,11 @@ Consequences worth knowing, all of them simplifications relative to experiment-1
 - **The replica set is not optional.** Creating a map writes the map and its owner-membership
   row in a transaction, and transactions need a replica set even with one node. A standalone
   passes every test that does not create a map.
-- **MongoDB 7 is pinned, and 8 does not work here.** Docker Desktop's kernel is past the
-  cutoff MongoDB 8 refuses (SERVER-121912). `compose.yaml` lists everything already tried.
+- **MongoDB 7 is pinned, and 8 does not work here.** MongoDB 8 refuses to start on any
+  kernel `>= 6.19` (SERVER-121912), and a container runs the host's kernel, so this depends
+  on the machine rather than on Docker Desktop. Re-checked 2026-09-29: 8.0 LTS and 8.3 both
+  refuse; only the end-of-life 8.2 starts, and only because that branch lacks the check, so
+  it is not an upgrade path. `compose.yaml` and ADR 0003 list everything tried.
 - **Three constraints are configuration now, not schema** (`src/lib/server/db/indexes.ts`):
   one owner per map, one account per email, and — in application code, since there are no
   foreign keys — the session cascade in `Auth.deleteUser`. The one-owner index is _partial_;

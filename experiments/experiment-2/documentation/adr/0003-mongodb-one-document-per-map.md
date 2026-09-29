@@ -45,14 +45,34 @@ for `PRIMARY`.
 
 ### MongoDB 7, pinned
 
-**MongoDB 8 will not start on this machine.** Docker Desktop's Linux VM runs kernel
-`7.0.12-linuxkit`, and MongoDB 8 hard-refuses any kernel `>= 6.19`
-([SERVER-121912](https://jira.mongodb.org/browse/SERVER-121912), a tcmalloc/glibc `rseq`
-interaction). Verified as unavoidable rather than assumed: `mongo:8`, `mongo:8.0.29`,
-`mongo:8.3.8` and `mongodb/mongodb-community-server:8.0-ubi9` all refuse, as does bypassing
-that image's entrypoint to set the `GLIBC_TUNABLES=glibc.pthread.rseq=0` workaround its own
-entrypoint implements. Nothing in this experiment needs a MongoDB 8 feature, so 7 is pinned
-and the finding is recorded in `compose.yaml` so nobody spends the afternoon again.
+**MongoDB 8 will not start on a kernel this new.** MongoDB 8 hard-refuses any kernel
+`>= 6.19` ([SERVER-121912](https://jira.mongodb.org/browse/SERVER-121912), a tcmalloc/glibc
+`rseq` interaction). A container shares the host kernel, so this is a property of whatever
+Docker runs on, not of Docker Desktop — which an earlier version of this ADR blamed, having
+only tested there.
+
+Re-verified 2026-09-29 on native Linux Docker (engine 29.8.1, kernel `7.0.0-31-generic`,
+x86_64, AVX2 present), against today's tags:
+
+| Image          |                  | Result                                 |
+| -------------- | ---------------- | -------------------------------------- |
+| `mongo:8.0.32` | 8.0 LTS          | refuses — even `mongod --version` does |
+| `mongo:8.3.11` | current 8.3      | refuses                                |
+| `mongo:8.2.12` | 8.2, end of life | starts, and soaked three minutes clean |
+
+**8.2 starting is not a reason to move to it.** SERVER-121912 puts the defect in 8.0+ and is
+resolved _Gone away_ with no fix version; the 8.2 branch is an end-of-life rapid release
+that never picked up the startup check. What 8.2 offers is the check's absence, not the
+defect's — an unpatched release carrying a known crash risk, which is a worse place to be
+than 7.
+
+Bypassing the entrypoint to set the `GLIBC_TUNABLES=glibc.pthread.rseq=0` workaround its own
+entrypoint implements does not help either: the check is compiled into `mongod` rather than
+any wrapper, and [SERVER-121885](https://jira.mongodb.org/browse/SERVER-121885) reports
+crashes with that tunable set regardless.
+
+Nothing in this experiment needs a MongoDB 8 feature, so 7 is pinned and the finding is
+recorded in `compose.yaml` so nobody spends the afternoon again.
 
 ## The result, measured
 
