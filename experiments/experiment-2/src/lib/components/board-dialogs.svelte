@@ -365,9 +365,19 @@
 				pickerOpen = false;
 				candidateQuery = '';
 				chosenCandidate = null;
-				criterionFormOpen = false;
 				editingCriterionId = null;
 				submitting = false;
+				// Entering criteria is the other repetitive loop on this board — a
+				// story's criteria are written as a list, at a sitting — so the add
+				// form does what the add-story dialog does: stays open, clears, and
+				// takes focus back. Its version has just been spent, but the
+				// re-snapshot above has already replaced it.
+				if (submittedAction === '?/addAcceptanceCriterion') {
+					formElement.reset();
+					formElement.querySelector<HTMLInputElement>('input[name="text"]')?.focus();
+					return;
+				}
+				criterionFormOpen = false;
 				// The control that was clicked has just been removed from the DOM,
 				// so focus would fall to <body> inside an inerted page.
 				//
