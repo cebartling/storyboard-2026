@@ -1170,15 +1170,22 @@ describe('acceptance criteria', () => {
 	});
 
 	describe('the done gate', () => {
-		it('refuses done while a criterion is unmet, naming the tally', () => {
+		// Three, with one met, so the unmet count (2) and the met count (1) differ:
+		// the message names how many are *outstanding*, which is the opposite of
+		// the dialog's "N of M met" tally. Two-of-which-one-is-met reads the same
+		// either way round and would pin nothing.
+		it('refuses done while a criterion is unmet, naming how many are outstanding', () => {
 			const { map, storyId } = mapWithOneStory();
 			const first = addAcceptanceCriterion(map, storyId, 'One');
 			const second = addAcceptanceCriterion(first.map, storyId, 'Two');
-			const partly = editAcceptanceCriterion(second.map, storyId, first.criterion.id, {
+			const third = addAcceptanceCriterion(second.map, storyId, 'Three');
+			const partly = editAcceptanceCriterion(third.map, storyId, first.criterion.id, {
 				satisfied: true
 			});
 
-			expect(() => editStory(partly, storyId, { status: 'done' })).toThrow(/1 of 2/);
+			expect(() => editStory(partly, storyId, { status: 'done' })).toThrow(
+				/2 of 3 acceptance criteria are unmet/
+			);
 		});
 
 		it('allows done once every criterion is satisfied', () => {
@@ -1232,6 +1239,31 @@ describe('acceptance criteria', () => {
 			const updated = addAcceptanceCriterion(done, storyId, 'Something nobody checked');
 
 			expect(findStory(updated.map, storyId).status).toBe('in-review');
+		});
+
+		// Exactly two triggers, per ADR 0024: a tick undone, or a criterion added.
+		// Rewording one cannot grow the unmet set, so it must not move the status —
+		// and `done` beside an unmet criterion is a state the read path accepts, so
+		// this is reachable rather than hypothetical.
+		it('leaves a done story alone when a criterion is only reworded', () => {
+			const { map, storyId } = mapWithOneStory();
+			const first = addAcceptanceCriterion(map, storyId, 'One');
+			const second = addAcceptanceCriterion(first.map, storyId, 'Two');
+			// Written directly, the way a stored document holds it: `editStory`
+			// would refuse this combination, which is the point.
+			const done: StoryMap = {
+				...second.map,
+				stories: second.map.stories.map((s) =>
+					s.id === storyId ? { ...s, status: 'done' as const } : s
+				)
+			};
+
+			const updated = editAcceptanceCriterion(done, storyId, first.criterion.id, {
+				text: 'One, reworded'
+			});
+
+			expect(findStory(updated, storyId).status).toBe('done');
+			expect(criteriaOf(updated, storyId)[0].text).toBe('One, reworded');
 		});
 
 		// No auto-promotion: satisfying the last criterion is not the same act as

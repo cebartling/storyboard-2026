@@ -744,8 +744,14 @@ export function editAcceptanceCriterion(
 	findCriterion(story, criterionId); // throws if it belongs to another story
 	const text =
 		changes.text === undefined ? undefined : requireName(changes.text, 'Acceptance criterion');
-	return withStory(map, storyId, (s) =>
-		demoteIfDone({
+	// Only an undone tick can grow the unmet set, so only an undone tick can
+	// demote. ADR 0024 names exactly two triggers — a tick undone, or a criterion
+	// added — and rewording a criterion is neither: a story that legitimately
+	// holds `done` beside an unmet criterion (which the read path must accept)
+	// would otherwise change status because somebody fixed a typo.
+	const undoingATick = changes.satisfied === false;
+	return withStory(map, storyId, (s) => {
+		const next: Story = {
 			...s,
 			criteria: s.criteria.map((c) =>
 				c.id === criterionId
@@ -762,8 +768,9 @@ export function editAcceptanceCriterion(
 						}
 					: c
 			)
-		})
-	);
+		};
+		return undoingATick ? demoteIfDone(next) : next;
+	});
 }
 
 /**
