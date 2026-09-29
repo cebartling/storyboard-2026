@@ -3,6 +3,7 @@ import { InvariantError } from '$lib/domain/errors';
 import { STORY_STATUSES } from '$lib/domain/story-map';
 import {
 	optionalNeighbour,
+	requireBoolean,
 	requireDirection,
 	requireStatus,
 	requireString,
@@ -77,5 +78,25 @@ describe('requireStatus', () => {
 		['nothing at all', null]
 	])('rejects %s', (_label, value) => {
 		expect(() => requireStatus(value)).toThrow(InvariantError);
+	});
+});
+
+describe('requireBoolean', () => {
+	it('reads the two values it accepts', () => {
+		expect(requireBoolean('true', 'Satisfied')).toBe(true);
+		expect(requireBoolean('false', 'Satisfied')).toBe(false);
+	});
+
+	// The absent case is the one that matters: an unchecked checkbox posts no
+	// field at all, so a parser that defaulted it would make unticking a
+	// criterion look like it worked and change nothing (ADR 0024).
+	it.each([
+		['nothing at all', null],
+		['an empty string', ''],
+		['a checkbox’s own value', 'on'],
+		['a number', '1'],
+		['a differently-cased value', 'TRUE']
+	])('rejects %s', (_label, value) => {
+		expect(() => requireBoolean(value, 'Satisfied')).toThrow(InvariantError);
 	});
 });

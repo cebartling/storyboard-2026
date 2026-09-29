@@ -2,6 +2,7 @@ import { error } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { deps } from '$lib/server/deps';
 import {
+	addAcceptanceCriterion,
 	addActivity,
 	addDependency,
 	addStep,
@@ -11,20 +12,33 @@ import {
 	deleteSlice,
 	deleteStep,
 	deleteStory,
+	editAcceptanceCriterion,
 	editStory,
 	loadMap,
+	moveAcceptanceCriterion,
 	moveStory,
 	renameActivity,
 	renameSlice,
+	removeAcceptanceCriterion,
 	removeDependency,
+	setAcceptanceCriterionSatisfied,
 	renameStep,
 	shareMap
 } from '$lib/app/use-cases';
-import type { ActivityId, ClientId, MapId, SliceId, StepId, StoryId } from '$lib/domain/ids';
+import type {
+	AcceptanceCriterionId,
+	ActivityId,
+	ClientId,
+	MapId,
+	SliceId,
+	StepId,
+	StoryId
+} from '$lib/domain/ids';
 
 import { buildBoardViewModel } from '$lib/board/board-view-model';
 import {
 	optionalNeighbour,
+	requireBoolean,
 	requireDirection,
 	requireStatus,
 	requireString,
@@ -357,6 +371,131 @@ export const actions: Actions = {
 				expectedVersion,
 				blockerId,
 				blockedId
+			);
+			return expectedVersion;
+		});
+	},
+
+	addAcceptanceCriterion: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
+		const form = await request.formData();
+		return runAndPublish('addAcceptanceCriterion', params.mapId as MapId, form, async () => {
+			const expectedVersion = requireVersion(form.get('version'));
+			const storyId = requireString(form.get('storyId'), 'storyId') as StoryId;
+			const text = requireString(form.get('text'), 'Acceptance criterion');
+			await addAcceptanceCriterion(
+				deps.storyMapRepository,
+				caller,
+				params.mapId as MapId,
+				expectedVersion,
+				storyId,
+				text
+			);
+			return expectedVersion;
+		});
+	},
+
+	editAcceptanceCriterion: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
+		const form = await request.formData();
+		return runAndPublish('editAcceptanceCriterion', params.mapId as MapId, form, async () => {
+			const expectedVersion = requireVersion(form.get('version'));
+			// Both ids: the criterion is looked up inside the story rather than
+			// across the map, which is what rejects an id borrowed from another
+			// story instead of quietly finding it (ADR 0024).
+			const storyId = requireString(form.get('storyId'), 'storyId') as StoryId;
+			const criterionId = requireString(
+				form.get('criterionId'),
+				'criterionId'
+			) as AcceptanceCriterionId;
+			const text = requireString(form.get('text'), 'Acceptance criterion');
+			await editAcceptanceCriterion(
+				deps.storyMapRepository,
+				caller,
+				params.mapId as MapId,
+				expectedVersion,
+				storyId,
+				criterionId,
+				text
+			);
+			return expectedVersion;
+		});
+	},
+
+	setAcceptanceCriterionSatisfied: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
+		const form = await request.formData();
+		return runAndPublish(
+			'setAcceptanceCriterionSatisfied',
+			params.mapId as MapId,
+			form,
+			async () => {
+				const expectedVersion = requireVersion(form.get('version'));
+				const storyId = requireString(form.get('storyId'), 'storyId') as StoryId;
+				const criterionId = requireString(
+					form.get('criterionId'),
+					'criterionId'
+				) as AcceptanceCriterionId;
+				// The intended next value, posted in a hidden field. Not read off a
+				// checkbox's own presence: an unchecked box posts nothing, so that
+				// shape cannot express "untick this" at all (see `requireBoolean`).
+				const satisfied = requireBoolean(form.get('satisfied'), 'Satisfied');
+				await setAcceptanceCriterionSatisfied(
+					deps.storyMapRepository,
+					caller,
+					params.mapId as MapId,
+					expectedVersion,
+					storyId,
+					criterionId,
+					satisfied
+				);
+				return expectedVersion;
+			}
+		);
+	},
+
+	removeAcceptanceCriterion: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
+		const form = await request.formData();
+		return runAndPublish('removeAcceptanceCriterion', params.mapId as MapId, form, async () => {
+			const expectedVersion = requireVersion(form.get('version'));
+			const storyId = requireString(form.get('storyId'), 'storyId') as StoryId;
+			const criterionId = requireString(
+				form.get('criterionId'),
+				'criterionId'
+			) as AcceptanceCriterionId;
+			await removeAcceptanceCriterion(
+				deps.storyMapRepository,
+				caller,
+				params.mapId as MapId,
+				expectedVersion,
+				storyId,
+				criterionId
+			);
+			return expectedVersion;
+		});
+	},
+
+	moveAcceptanceCriterion: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
+		const form = await request.formData();
+		return runAndPublish('moveAcceptanceCriterion', params.mapId as MapId, form, async () => {
+			const expectedVersion = requireVersion(form.get('version'));
+			const storyId = requireString(form.get('storyId'), 'storyId') as StoryId;
+			const criterionId = requireString(
+				form.get('criterionId'),
+				'criterionId'
+			) as AcceptanceCriterionId;
+			// Neighbour ids, never a rank: the server derives the rank (ADR 0005).
+			await moveAcceptanceCriterion(
+				deps.storyMapRepository,
+				caller,
+				params.mapId as MapId,
+				expectedVersion,
+				storyId,
+				criterionId,
+				optionalNeighbour(form.get('beforeId')),
+				optionalNeighbour(form.get('afterId'))
 			);
 			return expectedVersion;
 		});

@@ -69,3 +69,22 @@ export function requireDirection(value: FormDataEntryValue | null): DependencyDi
 	}
 	return raw;
 }
+
+/**
+ * Whether a criterion is being ticked or unticked (ADR 0024).
+ *
+ * Strict over exactly `'true'` and `'false'`, and that matters more here than
+ * for the closed sets above. An unchecked HTML checkbox posts *nothing at all*,
+ * so a parser that defaulted a missing value to `false` could not tell "untick
+ * this" from "this field never arrived" — and the failure mode is the quiet
+ * one: unticking would appear to work and change nothing. The form posts the
+ * intended next value in a hidden field precisely so that this can refuse the
+ * absence.
+ */
+export function requireBoolean(value: FormDataEntryValue | null, field: string): boolean {
+	const raw = requireString(value, field);
+	if (raw !== 'true' && raw !== 'false') {
+		throw new InvariantError(`${field} must be "true" or "false", got ${raw}.`);
+	}
+	return raw === 'true';
+}
