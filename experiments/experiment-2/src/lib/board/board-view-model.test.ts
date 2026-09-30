@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { buildBoardViewModel } from './board-view-model';
 import {
+	addAcceptanceCriterion,
 	addActivity,
 	addDependency,
 	addSlice,
 	addStep,
 	addStory,
-	createStoryMap
+	createStoryMap,
+	editAcceptanceCriterion,
+	inRankOrder
 } from '$lib/domain/story-map';
 import type { StoryMap } from '$lib/domain/story-map';
 
@@ -189,5 +192,33 @@ describe('dependencies', () => {
 
 		expect(storyIn(board, 'Started').status).toBe('in-progress');
 		expect(storyIn(board, 'Untouched').status).toBe('todo');
+	});
+
+	it('carries each story’s acceptance criteria onto its cell, in rank order', () => {
+		// The detail dialog reads criteria from here, not from the aggregate, so a
+		// cell that dropped them would show every story as having none (ADR 0024).
+		// Written back out of order first, the way a document store returns it.
+		let map = createStoryMap('Retail');
+		const activity = addActivity(map, 'Browse');
+		map = activity.map;
+		const step = addStep(map, activity.activity.id, 'Search');
+		map = step.map;
+		const story = addStory(map, step.step.id, 'Keyword search');
+		map = story.map;
+		const first = addAcceptanceCriterion(map, story.story.id, 'Matches partial words');
+		map = first.map;
+		const second = addAcceptanceCriterion(map, story.story.id, 'Rejects an empty query');
+		map = editAcceptanceCriterion(second.map, story.story.id, second.criterion.id, {
+			satisfied: true
+		});
+		map = addStory(map, step.step.id, 'No criteria').map;
+
+		const board = buildBoardViewModel(inRankOrder(map));
+
+		expect(storyIn(board, 'Keyword search').criteria).toEqual([
+			{ id: first.criterion.id, text: 'Matches partial words', satisfied: false },
+			{ id: second.criterion.id, text: 'Rejects an empty query', satisfied: true }
+		]);
+		expect(storyIn(board, 'No criteria').criteria).toEqual([]);
 	});
 });

@@ -39,13 +39,8 @@ describe('seeded descriptions through the renderer', () => {
 		]);
 	});
 
-	it('keeps checked and unchecked criteria distinguishable', () => {
-		const story = stories.find((s) => s.title === 'Buy a shipping label')!;
-		const host = document.createElement('div');
-		host.innerHTML = renderMarkdown(storyDescription(story));
-		const text = host.textContent ?? '';
-
-		expect(text).toContain('☑');
-		expect(text).toContain('☐');
-	});
+	// The checked/unchecked case that used to live here is gone with ADR 0024:
+	// criteria are entities now, so no seeded description contains a task list.
+	// `render-markdown.svelte.test.ts` covers ☑/☐ against the renderer directly,
+	// which is where that assertion always belonged.
 });

@@ -13,7 +13,15 @@
  * caller needs.
  */
 
-import type { ActivityId, MapId, SliceId, StepId, StoryId, UserId } from '$lib/domain/ids';
+import type {
+	AcceptanceCriterionId,
+	ActivityId,
+	MapId,
+	SliceId,
+	StepId,
+	StoryId,
+	UserId
+} from '$lib/domain/ids';
 import type {
 	AiAssistant,
 	Caller,
@@ -376,6 +384,91 @@ export async function removeDependency(
 ): Promise<void> {
 	await mutate(repository, caller, mapId, expectedVersion, (map) => ({
 		map: domain.removeDependency(map, blockerId, blockedId),
+		result: undefined
+	}));
+}
+
+// ---------------------------------------------------------------------------
+// Acceptance criteria (ADR 0024)
+// ---------------------------------------------------------------------------
+
+export async function addAcceptanceCriterion(
+	repository: StoryMapRepository,
+	caller: Caller,
+	mapId: MapId,
+	expectedVersion: number,
+	storyId: StoryId,
+	text: string
+): Promise<void> {
+	await mutate(repository, caller, mapId, expectedVersion, (map) => ({
+		map: domain.addAcceptanceCriterion(map, storyId, text).map,
+		result: undefined
+	}));
+}
+
+export async function editAcceptanceCriterion(
+	repository: StoryMapRepository,
+	caller: Caller,
+	mapId: MapId,
+	expectedVersion: number,
+	storyId: StoryId,
+	criterionId: AcceptanceCriterionId,
+	text: string
+): Promise<void> {
+	await mutate(repository, caller, mapId, expectedVersion, (map) => ({
+		map: domain.editAcceptanceCriterion(map, storyId, criterionId, { text }),
+		result: undefined
+	}));
+}
+
+/**
+ * Its own use case rather than a second caller of `editAcceptanceCriterion`,
+ * because the two UI affordances post disjoint fields: a checkbox sends a
+ * boolean and never the text, and an edit form sends text and never the
+ * boolean. One use case taking both would have to decide what an absent field
+ * means, which is the ambiguity `requireBoolean` exists to refuse.
+ */
+export async function setAcceptanceCriterionSatisfied(
+	repository: StoryMapRepository,
+	caller: Caller,
+	mapId: MapId,
+	expectedVersion: number,
+	storyId: StoryId,
+	criterionId: AcceptanceCriterionId,
+	satisfied: boolean
+): Promise<void> {
+	await mutate(repository, caller, mapId, expectedVersion, (map) => ({
+		map: domain.editAcceptanceCriterion(map, storyId, criterionId, { satisfied }),
+		result: undefined
+	}));
+}
+
+export async function removeAcceptanceCriterion(
+	repository: StoryMapRepository,
+	caller: Caller,
+	mapId: MapId,
+	expectedVersion: number,
+	storyId: StoryId,
+	criterionId: AcceptanceCriterionId
+): Promise<void> {
+	await mutate(repository, caller, mapId, expectedVersion, (map) => ({
+		map: domain.removeAcceptanceCriterion(map, storyId, criterionId),
+		result: undefined
+	}));
+}
+
+export async function moveAcceptanceCriterion(
+	repository: StoryMapRepository,
+	caller: Caller,
+	mapId: MapId,
+	expectedVersion: number,
+	storyId: StoryId,
+	criterionId: AcceptanceCriterionId,
+	beforeId: domain.NeighbourId,
+	afterId: domain.NeighbourId
+): Promise<void> {
+	await mutate(repository, caller, mapId, expectedVersion, (map) => ({
+		map: domain.moveAcceptanceCriterion(map, storyId, criterionId, beforeId, afterId),
 		result: undefined
 	}));
 }

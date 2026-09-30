@@ -119,3 +119,41 @@ export async function link(
 	await detail.getByRole('button', { name: 'Add', exact: true }).click();
 	return detail;
 }
+
+/**
+ * Adds an acceptance criterion from `story`'s detail dialog, and leaves it open
+ * (ADR 0024). Like `addStory`, the form clears rather than closing, so a cleared
+ * input is what success looks like here.
+ */
+export async function addCriterion(page: Page, story: string, text: string) {
+	const open = dialog(page);
+	if (!(await open.isVisible())) await openStory(page, story);
+	// The form is collapsed until asked for, so the trigger is only there the
+	// first time; afterwards the input is already on screen.
+	const trigger = open.getByRole('button', { name: 'Add criterion' });
+	if (await trigger.isVisible()) await trigger.click();
+	await open.getByLabel('New acceptance criterion').fill(text);
+	await open.getByRole('button', { name: 'Add', exact: true }).click();
+	// Cleared and refocused is what success looks like, exactly as for `addStory`:
+	// the form stays open so a list of criteria can be entered in a row.
+	await expect(open.getByLabel('New acceptance criterion')).toHaveValue('');
+	await expect(open.locator('p.error')).toHaveCount(0);
+	return open;
+}
+
+/** Ticks or unticks a criterion by its text, from an open detail dialog. */
+export async function toggleCriterion(page: Page, text: string) {
+	const open = dialog(page);
+	// Two exact names rather than one regex over the criterion's text: the text is
+	// free-form, and a `.`, `(` or `?` in it would silently match the wrong button
+	// or none at all.
+	const met = open.getByRole('button', { name: `Mark “${text}” met`, exact: true });
+	const notMet = open.getByRole('button', { name: `Mark “${text}” not met`, exact: true });
+	await met.or(notMet).click();
+	return open;
+}
+
+/** The criteria list's rows, as text, from an open detail dialog. */
+export function criterionTexts(page: Page): Locator {
+	return dialog(page).getByTestId('acceptance-criteria-list').locator('li');
+}

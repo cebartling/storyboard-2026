@@ -24,7 +24,8 @@ is the one that constrains most changes; ADR 0010 (canvas) and ADR 0011 (dialog 
 constrain most board work; ADR 0018 (Markdown descriptions) owns the app's only `{@html}`,
 ADR 0019 (story dependencies) is the one place the board writes from a read-only dialog,
 and ADRs 0020/0022 and 0021 are the same question answered both ways — slice density belongs
-to the viewer, story status belongs to the map.
+to the viewer, story status belongs to the map. ADR 0024 (acceptance criteria) is the second
+thing that dialog writes, and the only thing that constrains a story's status.
 
 ## Commands
 
@@ -47,6 +48,8 @@ versions before 10 reject this directory's `pnpm-workspace.yaml` with
 | **Single story-detail e2e test**  | `corepack pnpm playwright test -g "renders a story description as Markdown"`               |
 | **Single story-status e2e test**  | `corepack pnpm playwright test -g "sets a story status and paints the card"`               |
 | **Single release-view unit test** | `corepack pnpm vitest run src/lib/board/release-view-model.test.ts`                        |
+| **Single criteria unit test**     | `corepack pnpm vitest run src/lib/domain/story-map.test.ts -t "acceptance criteria"`       |
+| **Single criteria e2e test**      | `corepack pnpm playwright test -g "refuses done while a criterion is unmet"`               |
 | Collaboration demo (headed)       | `corepack pnpm demo`                                                                       |
 | Types                             | `corepack pnpm check`                                                                      |
 | Lint / format                     | `corepack pnpm lint` / `corepack pnpm format`                                              |
@@ -139,6 +142,28 @@ the seed, so no test or fixture breaks if you delete it.
   - **The chip stays on the title's row.** A second row makes every card ~25px taller,
     which moves a card's midpoint past `svelte-dnd-action`'s swap boundary and makes the
     drag e2e's reorders silently stop working. The ADR has the measurements.
+- **Acceptance criteria are ranked children of one story** (ADR 0024), nested in
+  `Story.criteria` and edited in the story detail dialog. Four things about them are easy to
+  get wrong:
+  - **They are plain text, not Markdown.** ADR 0018's `{@html}` stays the only one in the
+    app. A criterion is one assertion; nothing the allowlist permits belongs in a checkbox
+    row, and a second sink doubles the audit surface for one line of text. If inline
+    formatting is ever wanted, the route is a `renderInlineMarkdown` with its own block-free
+    allowlist — not `renderMarkdown` in a second place.
+  - **`satisfied` is posted as the intended next value, in a hidden field.** An unchecked
+    checkbox posts nothing at all, so a lenient parser cannot tell "untick this" from "the
+    field never arrived", and the failure is the quiet one: unticking looks like it worked
+    and changes nothing. `requireBoolean` refuses a missing value like `requireStatus`
+    refuses an unknown one.
+  - **The detail dialog has two sections that write now.** After a criterion write, focus
+    must return to the criteria section rather than the dependency one — the control that was
+    clicked is gone from the DOM, and the handler used to target the dependency list
+    unconditionally. The add form is the exception and stays open, cleared, like `addStory`.
+  - **The `done` gate is a write-path invariant, and `toDomain` must not enforce it.** A
+    story cannot be _set_ `done` with an unmet criterion, but a stored document may hold that
+    combination — a criterion added to an already-finished story, or a hand-edited document.
+    Checking it on the read path would make the map impossible to load rather than impossible
+    to save, which is ADR 0021's `STORY_STATUS_PRESENTATION` trap from the other direction.
 - **Story descriptions are Markdown, rendered only in the `viewStory` dialog** (ADR 0018).
   `src/lib/markdown/render-markdown.ts` parses with `marked` and sanitises with DOMPurify
   against an explicit allowlist; it is the app's **only** `{@html}` and there is no CSP

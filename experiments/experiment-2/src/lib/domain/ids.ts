@@ -13,6 +13,7 @@ export type ActivityId = Brand<string, 'ActivityId'>;
 export type StepId = Brand<string, 'StepId'>;
 export type SliceId = Brand<string, 'SliceId'>;
 export type StoryId = Brand<string, 'StoryId'>;
+export type AcceptanceCriterionId = Brand<string, 'AcceptanceCriterionId'>;
 
 /**
  * The person making a request (ADR 0015). Branded like the entity ids, which

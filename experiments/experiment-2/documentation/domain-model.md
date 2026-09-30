@@ -44,7 +44,15 @@ Story {
   sliceId: string | null      // null = unsliced band
   status: StoryStatus         // ADR 0021; 'todo' by default
   rank: string                // fractional rank, scoped to (stepId, sliceId)
+  criteria: AcceptanceCriterion[]  // ADR 0024; empty by default, never absent
 }
+
+AcceptanceCriterion {         // ADR 0024
+  id: string
+  text: string                // plain text, never Markdown
+  satisfied: boolean          // false by default
+  rank: string                // fractional rank, scoped to (storyId)
+}                             // nested in its Story: exactly one parent
 
 StoryStatus =                 // ADR 0021
   'backlog' | 'todo' | 'in-progress' | 'in-review' | 'done'
@@ -61,12 +69,21 @@ Enforced in domain code (`src/lib/domain/`), not left to the database to catch:
 
 - Ranks are unique within their scope: `Activity.rank` unique per `mapId`, `Step.rank`
   unique per `activityId`, `Slice.rank` unique per `mapId`, `Story.rank` unique per
-  `(stepId, sliceId)`.
+  `(stepId, sliceId)`, `AcceptanceCriterion.rank` unique per `storyId`.
 - `Story.sliceId` is either `null` or references a `Slice` belonging to the same
   `StoryMap` as the story's `Step`/`Activity`. Cross-map slice assignment is invalid.
 - `Story.status` is one of the five `StoryStatus` values and is never absent. A new story
   is `todo`, as is one loaded from a document written before the field existed — there are
   no migrations, so the repository defaults it on the way in (ADR 0021).
+- An `AcceptanceCriterion` belongs to exactly one `Story` and is reachable only through it,
+  so a criterion id from another story is rejected rather than found. Its `text` is
+  non-blank and stored trimmed (ADR 0024).
+- A `Story` cannot be set to `done` while any of its criteria is unsatisfied, and a `done`
+  story that gains an unmet criterion — a tick undone, or a criterion added — drops to
+  `in-review`. The reverse does not happen: satisfying the last criterion never promotes a
+  story. A story with no criteria is unaffected. This is a **write-path** invariant: a
+  stored document may hold `done` beside an unmet criterion, and the repository must load it
+  rather than refuse it (ADR 0024).
 - Deleting an `Activity` cascades to its `Step`s and their `Story`s.
 - Deleting a `Slice` does **not** delete its `Story`s — it sets their `sliceId` to `null`
   (un-slicing), matching pulling a strip of tape off a physical wall.
@@ -79,6 +96,10 @@ Enforced in domain code (`src/lib/domain/`), not left to the database to catch:
 - Deleting a `Story` — directly, or through its `Step` or `Activity` — drops every
   `Dependency` naming it, in both directions. Deleting a `Slice` drops none: it un-slices
   stories rather than deleting them, and an edge is invariant under a slice or rank change.
+- Deleting a `Story` — directly, or through its `Step` or `Activity` — takes its
+  `AcceptanceCriterion`s with it, structurally rather than by a filter, because they are
+  nested inside it. Deleting a `Slice` and moving a `Story` both keep them, for the same
+  reason they keep dependencies: neither removes a story.
 
 ## Concurrency
 
@@ -125,6 +146,11 @@ differently:
   activity. Left-to-right sequence of the user's journey.
 - **Priority order (vertical)** — `Story.rank` within a `(stepId, sliceId)` cell.
   Top-to-bottom priority of stories under one step, within one release band.
+
+A third rank scope belongs to neither axis, because it is not on the board at all:
+`AcceptanceCriterion.rank` within one `Story` (ADR 0024), read top-to-bottom inside the
+story detail dialog. It is reordered with buttons rather than a drag, but the mechanism is
+the same one — the client posts neighbour ids and the server derives the rank.
 
 Ranks are lexicographic fractional strings (`fractional-indexing`'s `generateKeyBetween`),
 stored as strings on the map document. Dropping a card between two existing cards computes a new rank strictly

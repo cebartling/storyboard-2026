@@ -10,7 +10,7 @@
  * throw a descriptive `Error` rather than silently producing a bad state.
  */
 
-import type { ActivityId, MapId, SliceId, StepId, StoryId } from './ids';
+import type { AcceptanceCriterionId, ActivityId, MapId, SliceId, StepId, StoryId } from './ids';
 import { newId } from './ids';
 import { rankAtEnd, rankBetween, type Rank } from './rank';
 import { ConflictError, InvariantError } from './errors';
@@ -61,6 +61,22 @@ export function isStoryStatus(value: unknown): value is StoryStatus {
 	return STORY_STATUSES.includes(value as StoryStatus);
 }
 
+/**
+ * One acceptance criterion on one story (ADR 0024).
+ *
+ * Nested inside its `Story` rather than flat on the root beside `dependencies`,
+ * because a criterion has exactly one parent: the parent *is* the rank scope,
+ * and every cascade that removes a story removes its criteria structurally,
+ * with no filter to forget.
+ */
+export interface AcceptanceCriterion {
+	id: AcceptanceCriterionId;
+	text: string;
+	/** Fractional rank, scoped to the one story that owns it (ADR 0005). */
+	rank: Rank;
+	satisfied: boolean;
+}
+
 export interface Story {
 	id: StoryId;
 	stepId: StepId;
@@ -72,6 +88,9 @@ export interface Story {
 	 *  it, because there are no migrations (ADR 0003). */
 	status: StoryStatus;
 	rank: Rank;
+	/** Never absent in the domain, for the same reason and at the same two
+	 *  edges as `status`. Empty is the normal case. */
+	criteria: AcceptanceCriterion[];
 }
 
 /**
@@ -312,7 +331,8 @@ export function addStory(
 		description: options.description ?? null,
 		sliceId,
 		status: options.status ?? DEFAULT_STORY_STATUS,
-		rank: rankAtEnd(storyRanksInScope(map, stepId, sliceId))
+		rank: rankAtEnd(storyRanksInScope(map, stepId, sliceId)),
+		criteria: []
 	};
 	return { map: { ...map, stories: [...map.stories, story] }, story };
 }
@@ -416,8 +436,15 @@ export function editStory(
 	storyId: StoryId,
 	changes: { title?: string; description?: string | null; status?: StoryStatus }
 ): StoryMap {
-	findStory(map, storyId);
+	const story = findStory(map, storyId);
 	const title = changes.title === undefined ? undefined : requireName(changes.title, 'Story title');
+	// Acceptance criteria gate `done`, and nothing else (ADR 0024). Checked here
+	// rather than in the repository: a stored document may legitimately hold
+	// `done` alongside an unmet criterion — a criterion added by a later build to
+	// a story already finished, or a hand-edited document — and refusing that on
+	// the read path would make the map impossible to load rather than impossible
+	// to save.
+	if (changes.status !== undefined) assertStatusAllowed(story, changes.status);
 	return {
 		...map,
 		stories: map.stories.map((s) =>
@@ -486,13 +513,17 @@ export function deleteStep(map: StoryMap, stepId: StepId): StoryMap {
  * Stories are sorted as one list rather than per cell: sorting the whole list
  * fixes the relative order inside every (step, slice) scope, which is where
  * rank is unique and where the board actually reads it.
+ *
+ * A story's acceptance criteria are sorted inside it, the way a step is sorted
+ * inside its activity — the second nesting level, and the only cost of having
+ * put criteria on the story rather than on the root (ADR 0024).
  */
 export function inRankOrder(map: StoryMap): StoryMap {
 	return {
 		...map,
 		activities: byRank(map.activities).map((a) => ({ ...a, steps: byRank(a.steps) })),
 		slices: byRank(map.slices),
-		stories: byRank(map.stories)
+		stories: byRank(map.stories).map((s) => ({ ...s, criteria: byRank(s.criteria) }))
 	};
 }
 
@@ -606,6 +637,182 @@ export function removeDependency(map: StoryMap, blockerId: StoryId, blockedId: S
 		throw new InvariantError(`No dependency from ${blockerId} to ${blockedId}`);
 	}
 	return { ...map, dependencies: remaining };
+}
+
+// ---------------------------------------------------------------------------
+// Acceptance criteria (ADR 0024)
+// ---------------------------------------------------------------------------
+
+function criterionRanks(story: Story): Rank[] {
+	return story.criteria.map((c) => c.rank);
+}
+
+/**
+ * The criterion, or a throw naming the story it was looked for in.
+ *
+ * Scoped to one story rather than searched across the map, which is what makes
+ * the ticket's "must have a user story parent" operational: a criterion id that
+ * belongs to a different story is *rejected* here, not quietly found.
+ */
+function findCriterion(story: Story, criterionId: AcceptanceCriterionId): AcceptanceCriterion {
+	const criterion = story.criteria.find((c) => c.id === criterionId);
+	if (!criterion) {
+		throw new InvariantError(`Acceptance criterion not found on story ${story.id}: ${criterionId}`);
+	}
+	return criterion;
+}
+
+/** The same map with one story replaced. Every criterion operation rebuilds two
+ *  levels, and doing it in one place keeps the spread — which is what carries
+ *  the fields none of these functions touch — out of four call sites. */
+function withStory(map: StoryMap, storyId: StoryId, next: (story: Story) => Story): StoryMap {
+	return { ...map, stories: map.stories.map((s) => (s.id === storyId ? next(s) : s)) };
+}
+
+/**
+ * How far a story's criteria have got, for the `done` gate and its message.
+ *
+ * A story with no criteria reports nothing unmet, which is what makes the gate
+ * invisible to every story that has none.
+ */
+function unmetCriteria(story: Story): AcceptanceCriterion[] {
+	return story.criteria.filter((c) => !c.satisfied);
+}
+
+/**
+ * `done` is the one status acceptance criteria constrain (ADR 0024): a story
+ * whose criteria are not all satisfied cannot be marked finished.
+ *
+ * Only `done`. The other four stay freely settable, so the field keeps one rule
+ * rather than becoming derived for some stories and stored for others.
+ */
+function assertStatusAllowed(story: Story, status: StoryStatus): void {
+	if (status !== 'done') return;
+	const unmet = unmetCriteria(story);
+	if (unmet.length > 0) {
+		throw new InvariantError(
+			`${unmet.length} of ${story.criteria.length} acceptance criteria are unmet on "${story.title}"`
+		);
+	}
+}
+
+/**
+ * A `done` story that acquires an unmet criterion drops back to `in-review`.
+ *
+ * The alternative — refusing the write — would make a `done` story the one
+ * story you cannot add a criterion to, which is backwards: noticing a missing
+ * criterion is exactly what happens while reviewing something called finished.
+ * `in-review` rather than `in-progress` because the work was claimed complete;
+ * what is outstanding is the checking.
+ *
+ * There is no move in the other direction. Satisfying the last criterion does
+ * not promote a story to `done` — a person does that, deliberately, and the
+ * gate above is what stops them doing it early.
+ */
+function demoteIfDone(story: Story): Story {
+	if (story.status !== 'done' || unmetCriteria(story).length === 0) return story;
+	return { ...story, status: 'in-review' };
+}
+
+export function addAcceptanceCriterion(
+	map: StoryMap,
+	storyId: StoryId,
+	text: string
+): { map: StoryMap; criterion: AcceptanceCriterion } {
+	const story = findStory(map, storyId); // throws if not found, and so if not in this map
+	const criterion: AcceptanceCriterion = {
+		id: newId<AcceptanceCriterionId>(),
+		text: requireName(text, 'Acceptance criterion'),
+		rank: rankAtEnd(criterionRanks(story)),
+		satisfied: false
+	};
+	return {
+		map: withStory(map, storyId, (s) =>
+			demoteIfDone({ ...s, criteria: [...s.criteria, criterion] })
+		),
+		criterion
+	};
+}
+
+export function editAcceptanceCriterion(
+	map: StoryMap,
+	storyId: StoryId,
+	criterionId: AcceptanceCriterionId,
+	changes: { text?: string; satisfied?: boolean }
+): StoryMap {
+	const story = findStory(map, storyId);
+	findCriterion(story, criterionId); // throws if it belongs to another story
+	const text =
+		changes.text === undefined ? undefined : requireName(changes.text, 'Acceptance criterion');
+	// Only an undone tick can grow the unmet set, so only an undone tick can
+	// demote. ADR 0024 names exactly two triggers — a tick undone, or a criterion
+	// added — and rewording a criterion is neither: a story that legitimately
+	// holds `done` beside an unmet criterion (which the read path must accept)
+	// would otherwise change status because somebody fixed a typo.
+	const undoingATick = changes.satisfied === false;
+	return withStory(map, storyId, (s) => {
+		const next: Story = {
+			...s,
+			criteria: s.criteria.map((c) =>
+				c.id === criterionId
+					? {
+							...c,
+							// Assigned explicitly rather than spread, as `editStory` does: a
+							// spread copies keys whose value is `undefined`, which would blank
+							// a field the caller did not mention. `!== undefined` rather than
+							// `??` for `satisfied` — `??` happens to be correct for a boolean,
+							// but it stops being correct the moment the field is widened, and
+							// "unticking is a no-op" is a bug that no other test here catches.
+							text: text ?? c.text,
+							satisfied: changes.satisfied !== undefined ? changes.satisfied : c.satisfied
+						}
+					: c
+			)
+		};
+		return undoingATick ? demoteIfDone(next) : next;
+	});
+}
+
+/**
+ * Drops one criterion.
+ *
+ * Throws on a missing one rather than being idempotent, for the reason
+ * `removeDependency` gives: any removal bumps the version, so a stale caller is
+ * refused with a 409 before this runs.
+ *
+ * Removing an unmet criterion never promotes the story, even when it was the
+ * only thing outstanding — see `demoteIfDone`.
+ */
+export function removeAcceptanceCriterion(
+	map: StoryMap,
+	storyId: StoryId,
+	criterionId: AcceptanceCriterionId
+): StoryMap {
+	const story = findStory(map, storyId);
+	findCriterion(story, criterionId);
+	return withStory(map, storyId, (s) => ({
+		...s,
+		criteria: s.criteria.filter((c) => c.id !== criterionId)
+	}));
+}
+
+/** Reorders a criterion within its own story, which is the whole rank scope —
+ *  so like `moveActivity` there is nowhere else to move it to. */
+export function moveAcceptanceCriterion(
+	map: StoryMap,
+	storyId: StoryId,
+	criterionId: AcceptanceCriterionId,
+	beforeId: NeighbourId,
+	afterId: NeighbourId
+): StoryMap {
+	const story = findStory(map, storyId);
+	findCriterion(story, criterionId);
+	const siblings = story.criteria.filter((c) => c.id !== criterionId);
+	const rank = resolveRank(siblings, beforeId, afterId, `criteria of story ${storyId}`);
+	return withStory(map, storyId, (s) => ({
+		...s,
+		criteria: s.criteria.map((c) => (c.id === criterionId ? { ...c, rank } : c))
+	}));
 }
 
 // ---------------------------------------------------------------------------

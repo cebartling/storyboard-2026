@@ -68,8 +68,16 @@
 	import { STORY_STATUS_OPTIONS } from '$lib/board/story-status';
 	import { tooltip } from '$lib/actions/tooltip';
 	import type { BoardViewModel } from '$lib/board/board-view-model';
+
+	/** One row of the criteria list, as the board view model hands it over. */
+	type AcceptanceCriterion = BoardViewModel['cells'][number]['stories'][number]['criteria'][number];
 	import Plus from '@lucide/svelte/icons/plus';
 	import X from '@lucide/svelte/icons/x';
+	import Square from '@lucide/svelte/icons/square';
+	import SquareCheck from '@lucide/svelte/icons/square-check';
+	import ChevronUp from '@lucide/svelte/icons/chevron-up';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import Pencil from '@lucide/svelte/icons/pencil';
 
 	type BoardDependency = BoardViewModel['dependencies'][number];
 	import { enhance } from '$app/forms';
@@ -110,7 +118,13 @@
 		 * follows a collaborator's edit instead of going stale; `null` once the
 		 * story is gone.
 		 */
-		story?: { title: string; description: string | null; status: StoryStatus } | null;
+		story?: {
+			title: string;
+			description: string | null;
+			status: StoryStatus;
+			/** In rank order, as the board built it (ADR 0024). */
+			criteria: AcceptanceCriterion[];
+		} | null;
 		/** Every edge on the board, both endpoints resolved (ADR 0019). */
 		dependencies?: BoardDependency[];
 		/** Stories this one could legally be linked to. */
@@ -154,6 +168,42 @@
 	 */
 	let dependencySection = $state<HTMLElement | null>(null);
 
+	/**
+	 * The criteria section, for the same reason `dependencySection` exists: after a
+	 * tick, an edit or a remove, the control that was clicked is gone from the
+	 * DOM. This is a *second* landing place, and the submit handler has to choose
+	 * between them — sending focus to the dependency list after a criterion write
+	 * would move the reader somewhere they were not working.
+	 */
+	let criteriaSection = $state<HTMLElement | null>(null);
+
+	/** Collapsed until asked for, like the dependency picker below. */
+	let criterionFormOpen = $state(false);
+	/** Which criterion's text is being edited in place, if any. One at a time:
+	 *  every row carrying a live input would take focus off the description. */
+	let editingCriterionId = $state<string | null>(null);
+
+	const criteria = $derived(story?.criteria ?? []);
+	const metCount = $derived(criteria.filter((c) => c.satisfied).length);
+
+	/**
+	 * The neighbour ids that move `index` one place in `direction`.
+	 *
+	 * `beforeId` is the sibling the criterion lands *after* and `afterId` the one
+	 * it lands *before*, which is what `resolveRank` expects. Both may be absent
+	 * at the ends of the list. The client never computes a rank (ADR 0005).
+	 */
+	function neighboursForMove(index: number, direction: 'up' | 'down') {
+		const target = direction === 'up' ? index - 1 : index + 1;
+		const behind = direction === 'up' ? index - 2 : index + 1;
+		const ahead = direction === 'up' ? index - 1 : index + 2;
+		return {
+			valid: target >= 0 && target < criteria.length,
+			beforeId: criteria[behind]?.id ?? '',
+			afterId: criteria[ahead]?.id ?? ''
+		};
+	}
+
 	/** The picker is collapsed until asked for — see the comment at its markup. */
 	let pickerOpen = $state(false);
 	let candidateQuery = $state('');
@@ -181,6 +231,8 @@
 			pickerOpen = false;
 			candidateQuery = '';
 			chosenCandidate = null;
+			criterionFormOpen = false;
+			editingCriterionId = null;
 		});
 	});
 
@@ -251,7 +303,8 @@
 		const submittedFor = dialog;
 		// The form's own action, so this stays true if a delete moves to a
 		// different dialog kind later. Every delete action is named `delete*`.
-		const isDelete = (formElement.getAttribute('action') ?? '').startsWith('?/delete');
+		const submittedAction = formElement.getAttribute('action') ?? '';
+		const isDelete = submittedAction.startsWith('?/delete');
 
 		function report(message: string) {
 			submitting = false;
@@ -312,10 +365,33 @@
 				pickerOpen = false;
 				candidateQuery = '';
 				chosenCandidate = null;
+				// Only the row that was saved closes its own editor. Clearing this
+				// unconditionally discarded text somebody was part-way through typing
+				// in one row because they ticked or removed another.
+				if (submittedAction === '?/editAcceptanceCriterion') editingCriterionId = null;
 				submitting = false;
+				// Entering criteria is the other repetitive loop on this board — a
+				// story's criteria are written as a list, at a sitting — so the add
+				// form does what the add-story dialog does: stays open, clears, and
+				// takes focus back. Its version has just been spent, but the
+				// re-snapshot above has already replaced it.
+				if (submittedAction === '?/addAcceptanceCriterion') {
+					formElement.reset();
+					formElement.querySelector<HTMLInputElement>('input[name="text"]')?.focus();
+					return;
+				}
+				// `criterionFormOpen` is left as it is, for the same reason: a
+				// half-typed new criterion must survive a write somewhere else in the
+				// list. The dialog's close effect is what resets it.
 				// The control that was clicked has just been removed from the DOM,
 				// so focus would fall to <body> inside an inerted page.
-				dependencySection?.focus();
+				//
+				// Which section it lands in is read off the form's own action, the
+				// way `isDelete` is: this dialog has two writing sections now (ADR
+				// 0024), and focusing the dependency list after a criterion write
+				// would move the reader out of the list they were working in.
+				if (submittedAction.includes('AcceptanceCriterion')) criteriaSection?.focus();
+				else dependencySection?.focus();
 				return;
 			}
 
@@ -360,6 +436,150 @@
 			<X class="size-3.5" />
 		</button>
 	</form>
+{/snippet}
+
+{#snippet criterionMoveForm(
+	criterion: AcceptanceCriterion,
+	storyId: string,
+	direction: 'up' | 'down',
+	neighbours: ReturnType<typeof neighboursForMove>
+)}
+	<!-- Buttons rather than drag. `svelte-dnd-action` is pointer-event based and
+	     ADR 0010 keeps every dnd zone outside the modal's subtree, so a draggable
+	     list in here would be new ground for no gain on a list this short.
+
+	     One snippet for both directions: they differ only in the icon, the label
+	     and which neighbours they carry, and two copies is two places to fix. -->
+	<form method="POST" action="?/moveAcceptanceCriterion" use:enhance={submit} class="shrink-0">
+		<input type="hidden" name="version" value={openedAtVersion} />
+		<input type="hidden" name="storyId" value={storyId} />
+		<input type="hidden" name="criterionId" value={criterion.id} />
+		<input type="hidden" name="beforeId" value={neighbours.beforeId} />
+		<input type="hidden" name="afterId" value={neighbours.afterId} />
+		<button
+			type="submit"
+			class="btn btn-icon btn-quiet rounded"
+			aria-label="Move “{criterion.text}” {direction}"
+			use:tooltip={direction === 'up' ? 'Move up' : 'Move down'}
+			disabled={submitting || subjectDeleted || !neighbours.valid}
+		>
+			{#if direction === 'up'}
+				<ChevronUp class="size-3.5" />
+			{:else}
+				<ChevronDown class="size-3.5" />
+			{/if}
+		</button>
+	</form>
+{/snippet}
+
+{#snippet criterionRow(criterion: AcceptanceCriterion, index: number, storyId: string)}
+	<li class="flex items-start gap-1.5 text-sm">
+		<!-- The tick is a submit button, not a bound checkbox: the board writes
+		     through form actions only, and an unchecked checkbox posts nothing at
+		     all, so the intended next value travels in a hidden field instead.
+
+		     Satisfied is never signalled by colour alone (WCAG 1.4.1, the lesson
+		     ADR 0021 records for the status chip): the box's outline changes shape,
+		     the text is struck through, `aria-pressed` carries it to assistive
+		     tech, and the tally above counts it. -->
+		<form method="POST" action="?/setAcceptanceCriterionSatisfied" use:enhance={submit}>
+			<input type="hidden" name="version" value={openedAtVersion} />
+			<input type="hidden" name="storyId" value={storyId} />
+			<input type="hidden" name="criterionId" value={criterion.id} />
+			<input type="hidden" name="satisfied" value={!criterion.satisfied} />
+			<button
+				type="submit"
+				class="btn btn-icon btn-quiet rounded"
+				aria-pressed={criterion.satisfied}
+				aria-label={criterion.satisfied
+					? `Mark “${criterion.text}” not met`
+					: `Mark “${criterion.text}” met`}
+				use:tooltip={criterion.satisfied ? 'Mark not met' : 'Mark met'}
+				disabled={submitting || subjectDeleted}
+			>
+				{#if criterion.satisfied}
+					<SquareCheck class="size-4" />
+				{:else}
+					<Square class="size-4" />
+				{/if}
+			</button>
+		</form>
+
+		{#if editingCriterionId === criterion.id}
+			<form
+				method="POST"
+				action="?/editAcceptanceCriterion"
+				use:enhance={submit}
+				class="flex grow items-start gap-1.5"
+			>
+				<input type="hidden" name="version" value={openedAtVersion} />
+				<input type="hidden" name="storyId" value={storyId} />
+				<input type="hidden" name="criterionId" value={criterion.id} />
+				<!-- svelte-ignore a11y_autofocus -->
+				<input
+					name="text"
+					class="input grow"
+					value={criterion.text}
+					aria-label="Acceptance criterion"
+					autofocus
+					required
+				/>
+				<button type="submit" class="btn btn-primary" disabled={submitting || subjectDeleted}>
+					Save
+				</button>
+				<button
+					type="button"
+					class="btn btn-quiet"
+					disabled={submitting}
+					onclick={() => (editingCriterionId = null)}
+				>
+					Cancel
+				</button>
+			</form>
+		{:else}
+			<span
+				class="grow break-words py-1 {criterion.satisfied ? 'text-ink-muted line-through' : ''}"
+			>
+				{criterion.text}
+			</span>
+
+			{@const up = neighboursForMove(index, 'up')}
+			{@const down = neighboursForMove(index, 'down')}
+			{@render criterionMoveForm(criterion, storyId, 'up', up)}
+			{@render criterionMoveForm(criterion, storyId, 'down', down)}
+
+			<button
+				type="button"
+				class="btn btn-icon btn-quiet shrink-0 rounded"
+				aria-label="Edit “{criterion.text}”"
+				use:tooltip={'Edit criterion'}
+				disabled={submitting || subjectDeleted}
+				onclick={() => (editingCriterionId = criterion.id)}
+			>
+				<Pencil class="size-3.5" />
+			</button>
+
+			<form
+				method="POST"
+				action="?/removeAcceptanceCriterion"
+				use:enhance={submit}
+				class="shrink-0"
+			>
+				<input type="hidden" name="version" value={openedAtVersion} />
+				<input type="hidden" name="storyId" value={storyId} />
+				<input type="hidden" name="criterionId" value={criterion.id} />
+				<button
+					type="submit"
+					class="btn btn-icon btn-danger-quiet rounded"
+					aria-label="Remove “{criterion.text}”"
+					use:tooltip={'Remove criterion'}
+					disabled={submitting || subjectDeleted}
+				>
+					<X class="size-3.5" />
+				</button>
+			</form>
+		{/if}
+	</li>
 {/snippet}
 
 <Modal
@@ -699,6 +919,82 @@
 					{@html storyMarkdown}
 				</div>
 			{/if}
+			<!-- Acceptance criteria (ADR 0024), above dependencies deliberately:
+			     criteria are about this story, dependencies are about other ones.
+			     Plain text, not Markdown — `{@html}` stays a single audited sink,
+			     and nothing the allowlist permits belongs in one assertion. -->
+			<div
+				class="border-line mt-5 border-t pt-4 focus:outline-none"
+				bind:this={criteriaSection}
+				tabindex="-1"
+			>
+				<div class="flex items-baseline justify-between gap-2">
+					<p class="field-label">Acceptance criteria</p>
+					{#if criteria.length > 0}
+						<!-- The same list a refused `done` complains about (ADR 0024),
+						     counted the other way round: this says how many criteria are
+						     met, the server's refusal names how many are not. -->
+						<p class="text-ink-muted text-xs" data-testid="criteria-tally">
+							{metCount} of {criteria.length} met
+						</p>
+					{/if}
+				</div>
+
+				{#if criteria.length === 0}
+					<p class="text-ink-muted mt-1.5 text-sm italic">No acceptance criteria.</p>
+				{:else}
+					<ul class="mt-1.5 flex flex-col gap-0.5" data-testid="acceptance-criteria-list">
+						{#each criteria as criterion, index (criterion.id)}
+							{@render criterionRow(criterion, index, dialog.storyId)}
+						{/each}
+					</ul>
+				{/if}
+
+				<!-- Collapsed until asked for, for the reason the dependency picker
+				     below is: `Modal` focuses the first non-hidden input on open. -->
+				{#if criterionFormOpen}
+					<form
+						method="POST"
+						action="?/addAcceptanceCriterion"
+						use:enhance={submit}
+						class="border-line mt-3 flex items-start gap-2 border-t pt-3"
+					>
+						<input type="hidden" name="version" value={openedAtVersion} />
+						<input type="hidden" name="storyId" value={dialog.storyId} />
+						<!-- svelte-ignore a11y_autofocus -->
+						<input
+							name="text"
+							class="input grow"
+							placeholder="The search rejects an empty query"
+							aria-label="New acceptance criterion"
+							autofocus
+							required
+						/>
+						<button type="submit" class="btn btn-primary" disabled={submitting || subjectDeleted}>
+							Add
+						</button>
+						<button
+							type="button"
+							class="btn btn-quiet"
+							disabled={submitting}
+							onclick={() => (criterionFormOpen = false)}
+						>
+							Cancel
+						</button>
+					</form>
+				{:else}
+					<button
+						type="button"
+						class="btn btn-quiet mt-3"
+						disabled={submitting || subjectDeleted}
+						onclick={() => (criterionFormOpen = true)}
+					>
+						<Plus class="size-3.5" />
+						Add criterion
+					</button>
+				{/if}
+			</div>
+
 			<!-- Dependencies (ADR 0019). This is what stopped `viewStory` being
 			     form-free: it now writes, so its forms carry the version and the
 			     client id like every other editor, and the submit handler keeps it
