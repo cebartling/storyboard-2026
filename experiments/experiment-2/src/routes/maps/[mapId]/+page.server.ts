@@ -5,6 +5,7 @@ import {
 	addAcceptanceCriterion,
 	addActivity,
 	addDependency,
+	addGlossaryEntry,
 	addStep,
 	addStory,
 	createSlice,
@@ -28,6 +29,7 @@ import {
 import type {
 	AcceptanceCriterionId,
 	ActivityId,
+	GlossaryEntryId,
 	MapId,
 	SliceId,
 	StepId,
@@ -498,6 +500,40 @@ export const actions: Actions = {
 			);
 			return expectedVersion;
 		});
+	},
+
+	/**
+	 * Adds a glossary entry from the story editor (ADR 0025) and returns its id,
+	 * so the editor can link the selected phrase to it without a second request.
+	 * The glossary page has its own copy of this action; this one exists because
+	 * the board's editor posts to the board's route, and its response has to
+	 * carry the new id back.
+	 */
+	addGlossaryEntry: async ({ request, params, locals }) => {
+		const caller = requireCaller(locals);
+		const form = await request.formData();
+		let entryId: GlossaryEntryId | null = null;
+		const failure = await runAndPublish(
+			'addGlossaryEntry',
+			params.mapId as MapId,
+			form,
+			async () => {
+				const expectedVersion = requireVersion(form.get('version'));
+				const term = requireString(form.get('term'), 'Term');
+				const definition = requireString(form.get('definition'), 'Definition');
+				const entry = await addGlossaryEntry(
+					deps.storyMapRepository,
+					caller,
+					params.mapId as MapId,
+					expectedVersion,
+					term,
+					definition
+				);
+				entryId = entry.id;
+				return expectedVersion;
+			}
+		);
+		return failure ?? { entryId };
 	},
 
 	/**

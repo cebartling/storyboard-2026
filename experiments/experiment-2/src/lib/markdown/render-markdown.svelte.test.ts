@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newId, type GlossaryEntryId } from '$lib/domain/ids';
+import { glossaryLinkMarkdown } from '$lib/glossary/glossary-link';
 import { renderMarkdown } from './render-markdown';
 
 // Lives in the *browser* Vitest project, despite the source being plain `.ts`:
@@ -178,6 +179,14 @@ describe('renderMarkdown', () => {
 			expect(
 				term(renderMarkdown(`[**SKU**](glossary:${id})`))?.querySelector('strong')
 			).not.toBeNull();
+		});
+
+		// What the editor writes for a selection containing brackets (ADR 0025).
+		it('renders escaped brackets inside a term as the words that were selected', () => {
+			const button = term(renderMarkdown(glossaryLinkMarkdown('size [EU]', id)));
+
+			expect(button?.textContent).toBe('size [EU]');
+			expect(button?.getAttribute('data-glossary-id')).toBe(id);
 		});
 
 		it('renders a malformed glossary link as its words alone', () => {

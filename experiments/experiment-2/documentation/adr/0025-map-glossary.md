@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, 2026-10-01. Being built in stages (PIN-327). Built so far:
+Accepted, 2026-10-01. Built in four stages (PIN-327):
 
 - the domain, persistence and use cases;
 - the glossary page (`src/routes/maps/[mapId]/glossary/`), which lists, filters, adds, edits
@@ -10,7 +10,11 @@ Accepted, 2026-10-01. Being built in stages (PIN-327). Built so far:
 - rendering links as terms with a hover-and-focus popup. The renderer emits the term button
   and `src/lib/actions/glossary-terms.ts` resolves it in the story dialog.
 
-Still to come: creating or linking entries from a selected phrase.
+- creating or linking entries from a selected phrase in the story editor. Select words in the
+  description, then **Add to glossary** (create an entry, prefilled with the words, and link
+  to it) or **Link to glossary** (pick an existing entry). Creating an entry spends the
+  editor's version, so the editor's snapshot moves to exactly the version that write produced
+  and the story's own Save still goes through.
 
 ## Context
 

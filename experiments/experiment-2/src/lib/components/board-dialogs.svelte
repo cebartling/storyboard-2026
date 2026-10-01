@@ -81,7 +81,14 @@
 	import Pencil from '@lucide/svelte/icons/pencil';
 
 	type BoardDependency = BoardViewModel['dependencies'][number];
-	import { enhance } from '$app/forms';
+	import { deserialize, enhance } from '$app/forms';
+	import type { GlossaryEntryId } from '$lib/domain/ids';
+	import { filterEntries, sortByTerm } from '$lib/glossary/glossary-list';
+	import {
+		glossaryLinkMarkdown,
+		linkableSelection,
+		type LinkableSelection
+	} from '$lib/glossary/glossary-link';
 	import { invalidateAll } from '$app/navigation';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import Modal from './modal.svelte';
@@ -241,6 +248,187 @@
 			editingCriterionId = null;
 		});
 	});
+
+	// ---------------------------------------------------------------------
+	// Glossary links from a selection (ADR 0025)
+	// ---------------------------------------------------------------------
+
+	/** The description textarea. Uncontrolled, like the other editor fields, so
+	 *  a link is spliced into its DOM value and posted with the form as usual. */
+	let descriptionField = $state<HTMLTextAreaElement | null>(null);
+	/** What of the description's current selection could become a link. */
+	let descriptionSelection = $state<LinkableSelection | null>(null);
+	/**
+	 * The open panel and the selection it was opened for. The range is held
+	 * here rather than re-read on submit: focus moves into the panel, and the
+	 * textarea's own selection is not something to rely on once it has.
+	 */
+	let glossaryPanel = $state<{ mode: 'link' | 'add'; target: LinkableSelection } | null>(null);
+	let linkQuery = $state('');
+	let newTerm = $state('');
+	let newDefinition = $state('');
+	let glossaryError = $state<string | null>(null);
+	let glossaryBusy = $state(false);
+	const linkChoices = $derived(sortByTerm(filterEntries(glossary, linkQuery)));
+
+	// A different dialog, or "Use their version", starts with no panel open.
+	$effect(() => {
+		void dialog;
+		untrack(() => {
+			glossaryPanel = null;
+			descriptionSelection = null;
+			glossaryError = null;
+		});
+	});
+
+	function readDescriptionSelection() {
+		const field = descriptionField;
+		if (!field || glossaryPanel) return;
+		descriptionSelection = linkableSelection(field.value, field.selectionStart, field.selectionEnd);
+	}
+
+	async function openGlossaryPanel(mode: 'link' | 'add') {
+		// Re-read rather than trust the last event: nothing tracks the selection
+		// while a panel is open, and a click inside a selection collapses it only
+		// after `pointerup` has run.
+		readDescriptionSelection();
+		const target = descriptionSelection;
+		if (!target) return;
+		glossaryError = null;
+		linkQuery = mode === 'link' ? target.text : '';
+		newTerm = mode === 'add' ? target.text : '';
+		newDefinition = '';
+		glossaryPanel = { mode, target };
+		await tick();
+		document
+			.getElementById(
+				mode === 'link' ? 'dialog-glossary-link-filter' : 'dialog-glossary-definition'
+			)
+			?.focus();
+	}
+
+	function closeGlossaryPanel() {
+		glossaryPanel = null;
+		glossaryError = null;
+		descriptionField?.focus();
+	}
+
+	const SELECTION_MOVED = 'The description changed since you selected that text. Select it again.';
+
+	/**
+	 * Whether the held range still holds the words it was opened for. Splicing
+	 * by offset into text that has moved would wrap the wrong words, or cut one
+	 * in half, without anyone noticing until the description is read.
+	 */
+	function holdsTarget(target: LinkableSelection): boolean {
+		return descriptionField?.value.slice(target.start, target.end) === target.text;
+	}
+
+	/**
+	 * Replaces the selected words with a link to `entryId`, or refuses when the
+	 * held range no longer holds them.
+	 */
+	function insertGlossaryLink(entryId: GlossaryEntryId): boolean {
+		const field = descriptionField;
+		const target = glossaryPanel?.target;
+		if (!field || !target) return false;
+		if (!holdsTarget(target)) {
+			glossaryError = SELECTION_MOVED;
+			return false;
+		}
+		field.setRangeText(glossaryLinkMarkdown(target.text, entryId), target.start, target.end, 'end');
+		glossaryPanel = null;
+		descriptionSelection = null;
+		glossaryError = null;
+		field.focus();
+		return true;
+	}
+
+	/**
+	 * Creates the entry, then links the selection to it.
+	 *
+	 * A fetch rather than a form: this panel sits inside the story's own form,
+	 * which a nested form cannot, and what comes back has to be the new id. It
+	 * spends the editor's snapshotted version like any other write from this
+	 * dialog, so a stale editor is refused here too (ADR 0014 §3). On success the
+	 * snapshot moves to exactly the version this write produced — not to the
+	 * board's live version, which may include someone else's change to the story
+	 * that this editor has not shown its user — so the story's own Save still
+	 * goes through, and still refuses a real conflict. A 409 re-snapshots the way
+	 * the story form's own 409 does, or every retry would be refused too.
+	 *
+	 * The range is checked before the write, not only after: an entry created for
+	 * words that can no longer be linked is left behind, and its term is then
+	 * taken, so trying again is refused as a duplicate.
+	 */
+	async function addGlossaryEntryAndLink() {
+		const panel = glossaryPanel;
+		if (panel?.mode !== 'add' || glossaryBusy || submitting) return;
+		if (!holdsTarget(panel.target)) {
+			glossaryError = SELECTION_MOVED;
+			return;
+		}
+		// Held so the success path advances the snapshot only from the version it
+		// spent: one that moved while the request was out (a re-snapshot, or
+		// another dialog's) is already at least as fresh, and adding to it overshoots.
+		const version = openedAtVersion;
+		glossaryBusy = true;
+		glossaryError = null;
+		const body = new FormData();
+		body.set('version', String(version));
+		body.set('clientId', clientId);
+		body.set('term', newTerm);
+		body.set('definition', newDefinition);
+		try {
+			const response = await fetch('?/addGlossaryEntry', { method: 'POST', body });
+			const result = deserialize(await response.text());
+			const entryId =
+				result.type === 'success' && typeof result.data?.entryId === 'string'
+					? (result.data.entryId as GlossaryEntryId)
+					: null;
+			if (entryId) {
+				if (openedAtVersion === version) openedAtVersion = version + 1;
+				// Only into the panel that asked: one cancelled and reopened while
+				// this was out holds different words, which this entry is not for.
+				if (glossaryPanel === panel) insertGlossaryLink(entryId);
+				await invalidateAll();
+			} else if (result.type === 'failure') {
+				// Only while the panel that shows this message is still open: a
+				// re-snapshot nobody was told about would make the next Save a
+				// silent overwrite.
+				if (result.status === 409 && glossaryPanel === panel) {
+					await invalidateAll();
+					await tick();
+					openedAtVersion = boardVersion;
+				}
+				glossaryError = actionError(result.data) ?? 'Could not add the term. Please try again.';
+			} else {
+				glossaryError = 'Something went wrong. Please try again.';
+			}
+		} catch {
+			glossaryError = 'Unable to add the term. Check your connection and try again.';
+		} finally {
+			glossaryBusy = false;
+		}
+	}
+
+	// Escape leaves the panel, not the dialog; Enter in a one-line field would
+	// otherwise submit the story form the panel sits inside.
+	function onGlossaryPanelKeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			event.stopPropagation();
+			closeGlossaryPanel();
+		} else if (
+			event.key === 'Enter' &&
+			// An Enter that commits an IME composition is not a submit.
+			!event.isComposing &&
+			event.target instanceof HTMLInputElement
+		) {
+			event.preventDefault();
+			if (glossaryPanel?.mode === 'add') void addGlossaryEntryAndLink();
+		}
+	}
 
 	const subjectDeleted = $derived(subject?.status === 'deleted');
 	const subjectChanged = $derived(subject?.status === 'changed');
@@ -877,12 +1065,113 @@
 					rows="4"
 					class="input resize-y"
 					placeholder="Optional detail, acceptance notes, open questions…"
-					value={dialog.description ?? ''}></textarea>
+					value={dialog.description ?? ''}
+					bind:this={descriptionField}
+					onselect={readDescriptionSelection}
+					onkeyup={readDescriptionSelection}
+					onpointerup={readDescriptionSelection}
+					oninput={readDescriptionSelection}></textarea>
+				<!-- Glossary links from a selection (ADR 0025). The panels sit inside
+				     this form, so every control is `type="button"` and every field is
+				     unnamed: nothing here is posted with the story. -->
+				{#if glossaryPanel === null}
+					{#if descriptionSelection}
+						<div class="flex flex-wrap items-center gap-2" data-testid="glossary-selection-actions">
+							<button
+								type="button"
+								class="btn btn-quiet"
+								disabled={glossary.length === 0}
+								onclick={() => openGlossaryPanel('link')}>Link to glossary</button
+							>
+							<button type="button" class="btn btn-quiet" onclick={() => openGlossaryPanel('add')}
+								>Add to glossary</button
+							>
+						</div>
+					{:else}
+						<p class="text-ink-muted text-xs">
+							Select words in the description to add them to the glossary or link them to a term.
+						</p>
+					{/if}
+				{:else}
+					<!-- The keydown is delegated from the panel's own fields and buttons,
+					     so Escape leaves the panel from any of them; the group itself is
+					     not a control. -->
+					<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+					<div
+						class="border-line flex flex-col gap-2 rounded-md border p-3"
+						role="group"
+						aria-label={glossaryPanel.mode === 'link' ? 'Link to glossary' : 'Add to glossary'}
+						data-testid="glossary-panel"
+						onkeydown={onGlossaryPanelKeydown}
+					>
+						{#if glossaryPanel.mode === 'link'}
+							<label for="dialog-glossary-link-filter" class="field-label"
+								>Link “{glossaryPanel.target.text}” to</label
+							>
+							<input
+								id="dialog-glossary-link-filter"
+								type="search"
+								class="input"
+								placeholder="Search terms"
+								bind:value={linkQuery}
+							/>
+							{#if linkChoices.length === 0}
+								<p class="text-ink-muted text-sm">No matching terms.</p>
+							{:else}
+								<ul class="flex max-h-40 flex-col overflow-y-auto">
+									{#each linkChoices as entry (entry.id)}
+										<li>
+											<button
+												type="button"
+												class="hover:bg-accent-soft w-full rounded px-2 py-1 text-left text-sm"
+												onclick={() => insertGlossaryLink(entry.id)}
+												><span class="font-medium">{entry.term}</span>
+												<span class="text-ink-muted">— {entry.definition}</span></button
+											>
+										</li>
+									{/each}
+								</ul>
+							{/if}
+						{:else}
+							<!-- Focus has left the textarea, so its highlight is gone; this is
+							     what still says which words are about to be linked. -->
+							<p class="text-ink text-sm">
+								Add “{glossaryPanel.target.text}” to the glossary and link it.
+							</p>
+							<label for="dialog-glossary-term" class="field-label">Term</label>
+							<input id="dialog-glossary-term" type="text" class="input" bind:value={newTerm} />
+							<label for="dialog-glossary-definition" class="field-label">Definition</label>
+							<textarea
+								id="dialog-glossary-definition"
+								rows="2"
+								class="input"
+								bind:value={newDefinition}></textarea>
+						{/if}
+						{#if glossaryError}
+							<p class="error" role="alert">{glossaryError}</p>
+						{/if}
+						<div class="flex gap-2">
+							{#if glossaryPanel.mode === 'add'}
+								<button
+									type="button"
+									class="btn btn-primary"
+									disabled={glossaryBusy || submitting}
+									onclick={addGlossaryEntryAndLink}>Add and link</button
+								>
+							{/if}
+							<button type="button" class="btn btn-quiet" onclick={closeGlossaryPanel}
+								>Cancel</button
+							>
+						</div>
+					</div>
+				{/if}
 			</div>
+			<!-- `glossaryBusy` too: a glossary add in flight spends the same
+			     version, so a Save sent alongside it is refused by its own editor. -->
 			<button
 				type="submit"
 				class="btn btn-primary self-start"
-				disabled={submitting || subjectDeleted}
+				disabled={submitting || subjectDeleted || glossaryBusy}
 				>{subjectChanged ? 'Save mine anyway' : 'Save'}</button
 			>
 		</form>
