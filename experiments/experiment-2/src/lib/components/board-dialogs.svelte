@@ -288,6 +288,10 @@
 	}
 
 	async function openGlossaryPanel(mode: 'link' | 'add') {
+		// Re-read rather than trust the last event: nothing tracks the selection
+		// while a panel is open, and a click inside a selection collapses it only
+		// after `pointerup` has run.
+		readDescriptionSelection();
 		const target = descriptionSelection;
 		if (!target) return;
 		glossaryError = null;
@@ -309,19 +313,27 @@
 		descriptionField?.focus();
 	}
 
+	const SELECTION_MOVED = 'The description changed since you selected that text. Select it again.';
+
 	/**
-	 * Replaces the selected words with a link to `entryId`.
-	 *
-	 * Refused when the text at the held range is no longer what was selected:
-	 * splicing by offset into text that has moved would wrap the wrong words, or
-	 * cut one in half, without anyone noticing until the description is read.
+	 * Whether the held range still holds the words it was opened for. Splicing
+	 * by offset into text that has moved would wrap the wrong words, or cut one
+	 * in half, without anyone noticing until the description is read.
+	 */
+	function holdsTarget(target: LinkableSelection): boolean {
+		return descriptionField?.value.slice(target.start, target.end) === target.text;
+	}
+
+	/**
+	 * Replaces the selected words with a link to `entryId`, or refuses when the
+	 * held range no longer holds them.
 	 */
 	function insertGlossaryLink(entryId: GlossaryEntryId): boolean {
 		const field = descriptionField;
 		const target = glossaryPanel?.target;
 		if (!field || !target) return false;
-		if (field.value.slice(target.start, target.end) !== target.text) {
-			glossaryError = 'The description changed since you selected that text. Select it again.';
+		if (!holdsTarget(target)) {
+			glossaryError = SELECTION_MOVED;
 			return false;
 		}
 		field.setRangeText(glossaryLinkMarkdown(target.text, entryId), target.start, target.end, 'end');
@@ -342,14 +354,28 @@
 	 * snapshot moves to exactly the version this write produced — not to the
 	 * board's live version, which may include someone else's change to the story
 	 * that this editor has not shown its user — so the story's own Save still
-	 * goes through, and still refuses a real conflict.
+	 * goes through, and still refuses a real conflict. A 409 re-snapshots the way
+	 * the story form's own 409 does, or every retry would be refused too.
+	 *
+	 * The range is checked before the write, not only after: an entry created for
+	 * words that can no longer be linked is left behind, and its term is then
+	 * taken, so trying again is refused as a duplicate.
 	 */
 	async function addGlossaryEntryAndLink() {
-		if (glossaryPanel?.mode !== 'add' || glossaryBusy) return;
+		const panel = glossaryPanel;
+		if (panel?.mode !== 'add' || glossaryBusy || submitting) return;
+		if (!holdsTarget(panel.target)) {
+			glossaryError = SELECTION_MOVED;
+			return;
+		}
+		// Held so the success path advances the snapshot only from the version it
+		// spent: one that moved while the request was out (a re-snapshot, or
+		// another dialog's) is already at least as fresh, and adding to it overshoots.
+		const version = openedAtVersion;
 		glossaryBusy = true;
 		glossaryError = null;
 		const body = new FormData();
-		body.set('version', String(openedAtVersion));
+		body.set('version', String(version));
 		body.set('clientId', clientId);
 		body.set('term', newTerm);
 		body.set('definition', newDefinition);
@@ -361,10 +387,20 @@
 					? (result.data.entryId as GlossaryEntryId)
 					: null;
 			if (entryId) {
-				openedAtVersion += 1;
+				if (openedAtVersion === version) openedAtVersion = version + 1;
+				// Only into the panel that asked: one cancelled and reopened while
+				// this was out holds different words, which this entry is not for.
+				if (glossaryPanel === panel) insertGlossaryLink(entryId);
 				await invalidateAll();
-				insertGlossaryLink(entryId);
 			} else if (result.type === 'failure') {
+				// Only while the panel that shows this message is still open: a
+				// re-snapshot nobody was told about would make the next Save a
+				// silent overwrite.
+				if (result.status === 409 && glossaryPanel === panel) {
+					await invalidateAll();
+					await tick();
+					openedAtVersion = boardVersion;
+				}
 				glossaryError = actionError(result.data) ?? 'Could not add the term. Please try again.';
 			} else {
 				glossaryError = 'Something went wrong. Please try again.';
@@ -385,13 +421,12 @@
 			closeGlossaryPanel();
 		} else if (
 			event.key === 'Enter' &&
-			event.target instanceof HTMLInputElement &&
-			glossaryPanel?.mode === 'add'
+			// An Enter that commits an IME composition is not a submit.
+			!event.isComposing &&
+			event.target instanceof HTMLInputElement
 		) {
 			event.preventDefault();
-			void addGlossaryEntryAndLink();
-		} else if (event.key === 'Enter' && event.target instanceof HTMLInputElement) {
-			event.preventDefault();
+			if (glossaryPanel?.mode === 'add') void addGlossaryEntryAndLink();
 		}
 	}
 
@@ -1131,10 +1166,12 @@
 					</div>
 				{/if}
 			</div>
+			<!-- `glossaryBusy` too: a glossary add in flight spends the same
+			     version, so a Save sent alongside it is refused by its own editor. -->
 			<button
 				type="submit"
 				class="btn btn-primary self-start"
-				disabled={submitting || subjectDeleted}
+				disabled={submitting || subjectDeleted || glossaryBusy}
 				>{subjectChanged ? 'Save mine anyway' : 'Save'}</button
 			>
 		</form>

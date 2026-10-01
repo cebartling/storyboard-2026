@@ -1,6 +1,14 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../../../e2e/auth-fixture';
-import { addActivity, addStep, addStory, createMap, dialog, firstStepId } from './board-helpers';
+import {
+	addActivity,
+	addGlossaryTerm,
+	addStep,
+	addStory,
+	createMap,
+	dialog,
+	firstStepId
+} from './board-helpers';
 
 /**
  * Creating and linking glossary entries from a selection in the story editor
@@ -36,16 +44,6 @@ async function select(field: Locator, words: string) {
 	}, words);
 }
 
-async function addTermOnGlossaryPage(page: Page, term: string, definition: string) {
-	const boardUrl = page.url();
-	await page.getByTestId('open-glossary').click();
-	await page.getByLabel('New term').fill(term);
-	await page.getByLabel('Definition', { exact: true }).first().fill(definition);
-	await page.getByRole('button', { name: 'Add term' }).click();
-	await expect(page.getByTestId('glossary-term').filter({ hasText: term })).toBeVisible();
-	await page.goto(boardUrl);
-}
-
 async function saveAndHover(page: Page) {
 	const editor = dialog(page);
 	await editor.getByRole('button', { name: 'Save' }).click();
@@ -79,7 +77,7 @@ test('adds a term from a selection and links the selection to it', async ({ page
 
 test('links a selection to an existing term', async ({ page }) => {
 	await boardWithStory(page);
-	await addTermOnGlossaryPage(page, 'SKU', 'Stock keeping unit');
+	await addGlossaryTerm(page, 'SKU', 'Stock keeping unit');
 	const field = await editDescription(page);
 	await select(field, 'stock unit');
 
@@ -109,7 +107,7 @@ test('Escape closes the glossary panel without closing the editor', async ({ pag
 	await expect(dialog(page)).toBeVisible();
 });
 
-test('a stale editor is refused when adding a term, and keeps its text', async ({
+test('a stale editor is refused when adding a term, keeps its text, and can retry', async ({
 	page,
 	newUser,
 	browser
@@ -125,7 +123,7 @@ test('a stale editor is refused when adding a term, and keeps its text', async (
 	const field = await editDescription(page);
 	// Someone else writes to the map after this editor opened.
 	await other.goto(boardUrl);
-	await addTermOnGlossaryPage(other, 'Basket', 'Items chosen but not yet bought');
+	await addGlossaryTerm(other, 'Basket', 'Items chosen but not yet bought');
 
 	await select(field, 'stock unit');
 	await dialog(page).getByRole('button', { name: 'Add to glossary' }).click();
@@ -135,4 +133,31 @@ test('a stale editor is refused when adding a term, and keeps its text', async (
 
 	await expect(panel.getByRole('alert')).toContainText('Someone else changed this map');
 	await expect(field).toHaveValue(DESCRIPTION);
+
+	// The refusal re-snapshots the editor, so trying again goes through.
+	await panel.getByRole('button', { name: 'Add and link' }).click();
+	await expect(field).toHaveValue(/\[stock unit\]\(glossary:[0-9a-f-]+\)/);
+});
+
+test('adds nothing when the selected words have moved', async ({ page }) => {
+	await boardWithStory(page);
+	const field = await editDescription(page);
+	await select(field, 'stock unit');
+	await dialog(page).getByRole('button', { name: 'Add to glossary' }).click();
+	const panel = dialog(page).getByTestId('glossary-panel');
+	await panel.getByLabel('Definition').fill('Stock keeping unit');
+	// The description is edited while the panel is open, moving the held range.
+	await field.evaluate((el) => {
+		const area = el as HTMLTextAreaElement;
+		area.value = `Now: ${area.value}`;
+	});
+
+	await panel.getByRole('button', { name: 'Add and link' }).click();
+
+	await expect(panel.getByRole('alert')).toContainText('The description changed');
+	// Refused before the write: the glossary is still empty, so there is
+	// nothing to link to, and the entry's term is still free.
+	await panel.getByRole('button', { name: 'Cancel' }).click();
+	await select(field, 'stock unit');
+	await expect(dialog(page).getByRole('button', { name: 'Link to glossary' })).toBeDisabled();
 });

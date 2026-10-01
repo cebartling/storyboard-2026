@@ -153,6 +153,27 @@ export async function toggleCriterion(page: Page, text: string) {
 	return open;
 }
 
+/**
+ * Adds a term on the map's glossary page (ADR 0025), returns to the board, and
+ * returns the new entry's id, read off its row.
+ */
+export async function addGlossaryTerm(
+	page: Page,
+	term: string,
+	definition: string
+): Promise<string> {
+	const boardUrl = page.url();
+	await page.getByTestId('open-glossary').click();
+	await page.getByLabel('New term').fill(term);
+	await page.getByLabel('Definition', { exact: true }).first().fill(definition);
+	await page.getByRole('button', { name: 'Add term' }).click();
+	const row = page.locator('[data-testid^="glossary-entry-"]').filter({ hasText: term });
+	await expect(row).toBeVisible();
+	const testid = await row.getAttribute('data-testid');
+	await page.goto(boardUrl);
+	return testid!.replace('glossary-entry-', '');
+}
+
 /** The criteria list's rows, as text, from an open detail dialog. */
 export function criterionTexts(page: Page): Locator {
 	return dialog(page).getByTestId('acceptance-criteria-list').locator('li');

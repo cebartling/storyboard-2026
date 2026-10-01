@@ -1,28 +1,23 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../../../e2e/auth-fixture';
-import { addActivity, addStep, addStory, createMap, dialog, firstStepId } from './board-helpers';
+import {
+	addActivity,
+	addGlossaryTerm,
+	addStep,
+	addStory,
+	createMap,
+	dialog,
+	firstStepId
+} from './board-helpers';
 
 /**
  * Glossary links in a story description (ADR 0025): `[words](glossary:<id>)`
  * renders as a term a reader can hover or focus to see the entry.
  *
- * Links are written by hand in the description here. Creating one from a
- * selected phrase is a later stage, and this is what it will produce.
+ * Links are written by hand in the description here, so rendering is tested
+ * apart from the editor that writes them from a selected phrase
+ * (`glossary-authoring.svelte.e2e.ts`).
  */
-
-/** Adds a term on the glossary page and returns its id, read off its row. */
-async function addTermAndGetId(page: Page, term: string, definition: string): Promise<string> {
-	const boardUrl = page.url();
-	await page.getByTestId('open-glossary').click();
-	await page.getByLabel('New term').fill(term);
-	await page.getByLabel('Definition', { exact: true }).first().fill(definition);
-	await page.getByRole('button', { name: 'Add term' }).click();
-	const row = page.locator('[data-testid^="glossary-entry-"]').filter({ hasText: term });
-	await expect(row).toBeVisible();
-	const testid = await row.getAttribute('data-testid');
-	await page.goto(boardUrl);
-	return testid!.replace('glossary-entry-', '');
-}
 
 async function describeStory(page: Page, title: string, description: string) {
 	await page.getByRole('button', { name: `Edit story ${title}` }).click();
@@ -49,7 +44,7 @@ async function storyLinkingSku(page: Page) {
 	await addActivity(page, 'Browse');
 	await addStep(page, 'Search products');
 	await addStory(page, await firstStepId(page), 'unsliced', 'Search by SKU');
-	const id = await addTermAndGetId(page, 'SKU', 'Stock keeping unit');
+	const id = await addGlossaryTerm(page, 'SKU', 'Stock keeping unit');
 	await describeStory(page, 'Search by SKU', `Find a product by its [stock unit](glossary:${id}).`);
 	return id;
 }
