@@ -6,6 +6,7 @@ import {
 	addAcceptanceCriterion,
 	addActivity,
 	addDependency,
+	addGlossaryEntry,
 	addStep,
 	addStory,
 	createStoryMap,
@@ -142,6 +143,21 @@ export function describeStoryMapRepositoryContract(
 			expect(access!.map.dependencies).toEqual([
 				{ blockerId: blocker.story.id, blockedId: blocked.story.id }
 			]);
+		});
+
+		it('round-trips the glossary', async () => {
+			// Same reasoning as the dependencies case above: the in-memory double
+			// clones the aggregate and cannot lose a new root array, so this is the
+			// only thing that catches an adapter that stops writing it.
+			const harness = await createHarness();
+			const owner = await harness.createUser();
+			const sku = addGlossaryEntry(createStoryMap('Retail'), 'SKU', 'Stock keeping unit');
+			const basket = addGlossaryEntry(sku.map, 'Basket', 'Items chosen but not yet bought');
+
+			const saved = await harness.repository.save(owner, basket.map);
+
+			const access = await harness.repository.load(owner, saved.id);
+			expect(access!.map.glossary).toEqual([sku.entry, basket.entry]);
 		});
 
 		it('round-trips story status', async () => {

@@ -16,6 +16,7 @@
 import type {
 	AcceptanceCriterionId,
 	ActivityId,
+	GlossaryEntryId,
 	MapId,
 	SliceId,
 	StepId,
@@ -37,6 +38,7 @@ import * as domain from '$lib/domain/story-map';
 import {
 	createStoryMap,
 	type Activity,
+	type GlossaryEntry,
 	type Slice,
 	type Step,
 	type Story,
@@ -469,6 +471,53 @@ export async function moveAcceptanceCriterion(
 ): Promise<void> {
 	await mutate(repository, caller, mapId, expectedVersion, (map) => ({
 		map: domain.moveAcceptanceCriterion(map, storyId, criterionId, beforeId, afterId),
+		result: undefined
+	}));
+}
+
+// ---------------------------------------------------------------------------
+// Glossary (ADR 0025)
+// ---------------------------------------------------------------------------
+
+/** Returns the new entry, because the editor that creates one from a selected
+ *  phrase links that phrase to it by id straight away. */
+export async function addGlossaryEntry(
+	repository: StoryMapRepository,
+	caller: Caller,
+	mapId: MapId,
+	expectedVersion: number,
+	term: string,
+	definition: string
+): Promise<GlossaryEntry> {
+	return mutate(repository, caller, mapId, expectedVersion, (map) => {
+		const { map: updated, entry } = domain.addGlossaryEntry(map, term, definition);
+		return { map: updated, result: entry };
+	});
+}
+
+export async function editGlossaryEntry(
+	repository: StoryMapRepository,
+	caller: Caller,
+	mapId: MapId,
+	expectedVersion: number,
+	entryId: GlossaryEntryId,
+	changes: { term?: string; definition?: string }
+): Promise<void> {
+	await mutate(repository, caller, mapId, expectedVersion, (map) => ({
+		map: domain.editGlossaryEntry(map, entryId, changes),
+		result: undefined
+	}));
+}
+
+export async function deleteGlossaryEntry(
+	repository: StoryMapRepository,
+	caller: Caller,
+	mapId: MapId,
+	expectedVersion: number,
+	entryId: GlossaryEntryId
+): Promise<void> {
+	await mutate(repository, caller, mapId, expectedVersion, (map) => ({
+		map: domain.deleteGlossaryEntry(map, entryId),
 		result: undefined
 	}));
 }

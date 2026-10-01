@@ -159,6 +159,17 @@ describe('MongoStoryMapRepository (storage-specific)', () => {
 		expect(access!.map.dependencies).toEqual([]);
 	});
 
+	it('defaults the glossary to [] for a document written before the field existed', async () => {
+		// The glossary counterpart of the dependencies case above (ADR 0025).
+		const { map } = addActivity(createStoryMap('Legacy'), 'Browse');
+		const saved = await repository.save(caller, map);
+		await collections(db).maps.updateOne({ _id: saved.id }, { $unset: { glossary: '' } });
+
+		const access = await repository.load(caller, saved.id);
+
+		expect(access!.map.glossary).toEqual([]);
+	});
+
 	it('defaults a story’s status for a document written before the field existed', async () => {
 		// The `status` counterpart of the case above, and the quieter of the two:
 		// a story that came back with `status` undefined would render an untinted

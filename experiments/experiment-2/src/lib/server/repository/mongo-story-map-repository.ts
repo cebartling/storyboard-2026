@@ -254,7 +254,10 @@ function toDomain(doc: MapDoc): StoryMap {
 		// the domain `undefined`. The first `map.dependencies.filter(...)` is
 		// inside `deleteStory`, so the symptom would be a 500 deleting a story
 		// from any map that predates this field.
-		dependencies: (doc.dependencies ?? []) as StoryMap['dependencies']
+		dependencies: (doc.dependencies ?? []) as StoryMap['dependencies'],
+		// `?? []` for the same reason as `dependencies`: the field postdates the
+		// documents already in the collection.
+		glossary: (doc.glossary ?? []) as StoryMap['glossary']
 	});
 }
 
@@ -280,6 +283,7 @@ function toDocument(map: StoryMap, version: number): MapDoc {
 			criteria: s.criteria
 		})),
 		// No defaulting on the way out: `createStoryMap` guarantees the array.
-		dependencies: map.dependencies
+		dependencies: map.dependencies,
+		glossary: map.glossary
 	};
 }

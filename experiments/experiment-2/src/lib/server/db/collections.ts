@@ -80,6 +80,11 @@ export interface MapDoc {
 	 * on that document's next update.
 	 */
 	dependencies?: { blockerId: string; blockedId: string }[];
+	/**
+	 * The map's glossary (ADR 0025), in no guaranteed order — it carries no rank.
+	 * Optional for the same no-migrations reason as `dependencies`.
+	 */
+	glossary?: { id: string; term: string; definition: string }[];
 }
 
 export interface UserDoc {
