@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { newId, type GlossaryEntryId } from '$lib/domain/ids';
 import { renderMarkdown } from './render-markdown';
 
 // Lives in the *browser* Vitest project, despite the source being plain `.ts`:
@@ -148,6 +149,83 @@ describe('renderMarkdown', () => {
 
 			expect(anchor?.getAttribute('target')).toBe('_blank');
 			expect(anchor?.getAttribute('rel')).toBe('noopener noreferrer');
+		});
+	});
+
+	// ADR 0025. A glossary link is a button carrying an id and nothing else; the
+	// definition is looked up by the board and never passes through this sink.
+	describe('glossary links', () => {
+		const id = newId<GlossaryEntryId>();
+
+		function term(html: string) {
+			return parse(html).querySelector('button');
+		}
+
+		it('renders a glossary link as a term button carrying the id', () => {
+			const button = term(renderMarkdown(`Look up a [stock unit](glossary:${id}) first`));
+
+			expect(button?.textContent).toBe('stock unit');
+			expect(button?.getAttribute('data-glossary-id')).toBe(id);
+			expect(button?.getAttribute('class')).toBe('glossary-term');
+			expect(button?.getAttribute('type')).toBe('button');
+		});
+
+		it('emits no anchor for a glossary link', () => {
+			expect(parse(renderMarkdown(`[SKU](glossary:${id})`)).querySelector('a')).toBeNull();
+		});
+
+		it('keeps inline formatting inside the term', () => {
+			expect(
+				term(renderMarkdown(`[**SKU**](glossary:${id})`))?.querySelector('strong')
+			).not.toBeNull();
+		});
+
+		it('renders a malformed glossary link as its words alone', () => {
+			const host = parse(renderMarkdown('Look up a [SKU](glossary:not-an-id) first'));
+
+			expect(host.querySelector('button, a')).toBeNull();
+			expect(host.textContent?.trim()).toBe('Look up a SKU first');
+		});
+
+		it('leaves ordinary links alone', () => {
+			expect(
+				parse(renderMarkdown('[docs](https://example.com)')).querySelector('a')
+			).not.toBeNull();
+		});
+
+		// Raw HTML reaches the sanitiser exactly as the renderer's output does, so
+		// a hand-written button has to come out no more capable than a link would.
+		it('keeps a hand-written term button that is well formed', () => {
+			const button = term(
+				renderMarkdown(`<button class="glossary-term" data-glossary-id="${id}">SKU</button>`)
+			);
+
+			expect(button?.getAttribute('data-glossary-id')).toBe(id);
+		});
+
+		it.each([
+			['an author class', '<button class="fixed inset-0 z-50">x</button>'],
+			['a malformed id', '<button data-glossary-id="x&quot; onclick=&quot;1">x</button>'],
+			['a submit type', '<button type="submit">x</button>'],
+			['an inline handler', '<button onclick="globalThis.pwned = true">x</button>']
+		])('reduces a hand-written button with %s to an inert one', (_label, payload) => {
+			const button = term(renderMarkdown(payload));
+
+			expect(button?.getAttribute('type')).toBe('button');
+			expect(button?.hasAttribute('class')).toBe(false);
+			expect(button?.hasAttribute('data-glossary-id')).toBe(false);
+			expect(button?.hasAttribute('onclick')).toBe(false);
+		});
+
+		it.each([
+			['a class', '<p class="fixed inset-0 z-50">x</p>'],
+			['a glossary id', `<span data-glossary-id="${id}">x</span>`],
+			['any other data attribute', '<p data-testid="story-description">x</p>'],
+			['a type', '<ol type="i"><li>x</li></ol>']
+		])('strips %s from anything that is not a term button', (_label, payload) => {
+			const host = parse(renderMarkdown(payload));
+
+			expect(host.querySelector('[class], [data-glossary-id], [data-testid], [type]')).toBeNull();
 		});
 	});
 

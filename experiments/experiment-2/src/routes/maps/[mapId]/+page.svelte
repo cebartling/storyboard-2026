@@ -671,6 +671,7 @@
 	story={viewedStory}
 	dependencies={data.board.dependencies}
 	candidates={dependencyCandidates}
+	glossary={data.board.glossary}
 	onReplaceSubject={(replacement) => (dialog = replacement)}
 	onOpenDialog={(next) => (dialog = next)}
 	onClose={async (outcome) => {

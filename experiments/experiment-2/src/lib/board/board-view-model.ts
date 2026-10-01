@@ -6,7 +6,7 @@ import type {
 	StepId,
 	StoryId
 } from '$lib/domain/ids';
-import type { StoryMap, StoryStatus } from '$lib/domain/story-map';
+import type { GlossaryEntry, StoryMap, StoryStatus } from '$lib/domain/story-map';
 
 // ---------------------------------------------------------------------------
 // Board view model: a CSS-grid-friendly flattening of the aggregate.
@@ -101,6 +101,12 @@ export interface BoardViewModel {
 		blockedId: StoryId;
 		blockedTitle: string;
 	}[];
+	/**
+	 * The map's glossary (ADR 0025), so the story dialog can resolve a
+	 * description's `glossary:<id>` links to a definition. Unordered; nothing on
+	 * the board lists it.
+	 */
+	glossary: GlossaryEntry[];
 	totalColumns: number;
 }
 
@@ -211,6 +217,7 @@ export function buildBoardViewModel(map: StoryMap): BoardViewModel {
 		rows,
 		cells,
 		dependencies,
+		glossary: map.glossary,
 		totalColumns
 	};
 }

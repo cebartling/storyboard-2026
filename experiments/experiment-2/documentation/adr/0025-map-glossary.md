@@ -2,11 +2,15 @@
 
 ## Status
 
-Accepted, 2026-10-01. Being built in stages (PIN-327). Built so far: the domain,
-persistence and use cases, then the glossary page (`src/routes/maps/[mapId]/glossary/`),
-which lists, filters, adds, edits and deletes entries. Still to come, each in its own
-change: rendering links with their hover popup, and creating or linking entries from a
-selected phrase.
+Accepted, 2026-10-01. Being built in stages (PIN-327). Built so far:
+
+- the domain, persistence and use cases;
+- the glossary page (`src/routes/maps/[mapId]/glossary/`), which lists, filters, adds, edits
+  and deletes entries;
+- rendering links as terms with a hover-and-focus popup. The renderer emits the term button
+  and `src/lib/actions/glossary-terms.ts` resolves it in the story dialog.
+
+Still to come: creating or linking entries from a selected phrase.
 
 ## Context
 
