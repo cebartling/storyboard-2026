@@ -44,9 +44,10 @@ links to an entry with a Markdown link whose target is `glossary:<entryId>`.
   to one entry, and deleting a story must not take its terms along.
 - **Unranked.** The glossary is read in alphabetical order, so a person never chooses an
   order. `inRankOrder` leaves the array alone, as it does `dependencies`.
-- **Terms are unique per map**, compared after trimming and ignoring case. Two entries for
-  "SKU" would leave a reader unsure which one a link means. Both fields are required and
-  stored trimmed, enforced by `requireName` like every other name in the aggregate.
+- **Terms are unique per map**, compared after trimming and ignoring case, runs of
+  whitespace and Unicode encoding (NFC). Two entries for "SKU" would leave a reader unsure
+  which one a link means. Both fields are required and stored trimmed, enforced by
+  `requireName` like every other name in the aggregate.
 
 ### Links are explicit, by id
 

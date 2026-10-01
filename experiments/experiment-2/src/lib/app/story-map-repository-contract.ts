@@ -157,7 +157,11 @@ export function describeStoryMapRepositoryContract(
 			const saved = await harness.repository.save(owner, basket.map);
 
 			const access = await harness.repository.load(owner, saved.id);
-			expect(access!.map.glossary).toEqual([sku.entry, basket.entry]);
+			// Compared without order: the glossary carries no rank, so the port
+			// promises none, and an adapter that hands it back sorted by term is
+			// still correct.
+			expect(access!.map.glossary).toHaveLength(2);
+			expect(access!.map.glossary).toEqual(expect.arrayContaining([sku.entry, basket.entry]));
 		});
 
 		it('round-trips story status', async () => {

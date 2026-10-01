@@ -20,7 +20,7 @@ Then the decision record:
   reading even if you skip the others. 0003 and 0016–0025 are this experiment's own —
   MongoDB and the document model, the compare-and-set, why everything runs on Node, Markdown
   story descriptions, story dependencies, per-viewer slice collapse, story status, the
-  three-value slice density that extends 0020, a slice's read-only release view, and
+  three-value slice density that extends 0020, a slice's read-only release view,
   acceptance criteria as ranked children of one story, and the map's glossary.
   0020/0022 and 0021 are worth reading as a pair: they are the same question — is this a fact
   about the map, or about whoever is looking at it? — answered in opposite directions.

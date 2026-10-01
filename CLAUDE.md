@@ -30,11 +30,11 @@ from the repo root.
 The two were deliberately near-identical above the storage layer **at the port commit**
 (`fc07a08`), which is what made the comparison mean anything: 69 of 80 files were then
 byte-identical. **They have since diverged, and the divergence is now the normal case.**
-Every feature after the port landed in `experiment-2` alone (its ADRs 0018–0024: Markdown
+Every feature after the port landed in `experiment-2` alone (its ADRs 0018–0025: Markdown
 descriptions, story dependencies, story status, slice density, the slice release view,
-acceptance criteria), so across the shared directories 32 of its 102 files are still
-byte-identical, 48 differ, and 22 have no counterpart in `experiment-1` at all. Nothing has
-landed in `experiment-1` since its own commit #19.
+acceptance criteria, the map glossary), so across the shared directories 32 of its 102
+files are still byte-identical, 48 differ, and 22 have no counterpart in `experiment-1` at
+all. Nothing has landed in `experiment-1` since its own commit #19.
 
 **Do not treat the two as interchangeable, and do not copy between them on the assumption
 that a file is shared.** Where they differ outside storage, **experiment-2 is the

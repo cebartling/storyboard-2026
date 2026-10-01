@@ -855,16 +855,26 @@ export function moveAcceptanceCriterion(
 // ---------------------------------------------------------------------------
 
 /**
- * Terms are unique per map, compared the way a reader compares them: "SKU" and
- * " sku " are one term. Two entries for one term would leave a reader unsure
- * which definition a link means, and the glossary page with two rows that
- * look identical.
+ * The form two terms are compared in, which is the way a reader compares them:
+ * case is ignored, and so are the differences nobody can see. A run of spaces
+ * renders as one, and "é" stored as one code point or as "e" plus a combining
+ * accent is the same letter. `toLowerCase` rather than `toLocaleLowerCase`, as
+ * `normaliseEmail` does, so the answer never depends on the host's locale.
+ */
+function termKey(term: string): string {
+	return term.normalize('NFC').replace(/\s+/g, ' ').toLowerCase();
+}
+
+/**
+ * Terms are unique per map, compared by `termKey`: "SKU" and " sku " are one
+ * term. Two entries for one term would leave a reader unsure which definition a
+ * link means, and the glossary page with two rows that look identical.
  *
  * `exceptId` lets an entry keep its own term while its definition is edited.
  */
 function assertTermIsFree(map: StoryMap, term: string, exceptId?: GlossaryEntryId): void {
-	const key = term.toLocaleLowerCase();
-	const clash = map.glossary.find((e) => e.id !== exceptId && e.term.toLocaleLowerCase() === key);
+	const key = termKey(term);
+	const clash = map.glossary.find((e) => e.id !== exceptId && termKey(e.term) === key);
 	if (clash) {
 		throw new InvariantError(`"${clash.term}" is already in the glossary`);
 	}

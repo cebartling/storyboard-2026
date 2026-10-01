@@ -1347,6 +1347,21 @@ describe('glossary', () => {
 				/"SKU" is already in the glossary/
 			);
 		});
+
+		it('refuses a term that only reads differently in spacing or encoding', () => {
+			// Both pairs render identically on a page, which is the duplicate the
+			// rule exists to prevent: HTML collapses a run of spaces, and a
+			// precomposed "é" looks exactly like "e" plus a combining accent.
+			const spaced = addGlossaryEntry(createStoryMap('Retail'), 'Stock unit', 'A product');
+			const accented = addGlossaryEntry(createStoryMap('Retail'), 'Café', 'A shop');
+
+			expect(() => addGlossaryEntry(spaced.map, 'stock   unit', 'Something else')).toThrow(
+				/"Stock unit" is already in the glossary/
+			);
+			expect(() => addGlossaryEntry(accented.map, 'Café', 'Something else')).toThrow(
+				InvariantError
+			);
+		});
 	});
 
 	describe('editGlossaryEntry', () => {
@@ -1423,13 +1438,19 @@ describe('glossary', () => {
 		});
 	});
 
-	it('survives the deletes that cascade through stories', () => {
+	it('survives every delete that removes or un-slices stories', () => {
 		const base = mapWithOneStep();
 		const added = addGlossaryEntry(base.map, 'SKU', 'Stock keeping unit');
-		const story = addStory(added.map, base.stepId, 'Search by SKU');
+		const slice = addSlice(added.map, 'Release 1');
+		const story = addStory(slice.map, base.stepId, 'Search by SKU', { sliceId: slice.slice.id });
 
-		const deleted = deleteActivity(story.map, base.activityId);
-
-		expect(deleted.glossary).toEqual([added.entry]);
+		for (const deleted of [
+			deleteActivity(story.map, base.activityId),
+			deleteStep(story.map, base.stepId),
+			deleteStory(story.map, story.story.id),
+			deleteSlice(story.map, slice.slice.id)
+		]) {
+			expect(deleted.glossary).toEqual([added.entry]);
+		}
 	});
 });
