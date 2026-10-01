@@ -51,6 +51,7 @@ versions before 10 reject this directory's `pnpm-workspace.yaml` with
 | **Single criteria unit test**     | `corepack pnpm vitest run src/lib/domain/story-map.test.ts -t "acceptance criteria"`       |
 | **Single criteria e2e test**      | `corepack pnpm playwright test -g "refuses done while a criterion is unmet"`               |
 | **Single glossary unit test**     | `corepack pnpm vitest run src/lib/domain/story-map.test.ts -t "glossary"`                  |
+| **Single glossary e2e test**      | `corepack pnpm playwright test -g "adds, filters, edits and deletes glossary terms"`       |
 | Collaboration demo (headed)       | `corepack pnpm demo`                                                                       |
 | Types                             | `corepack pnpm check`                                                                      |
 | Lint / format                     | `corepack pnpm lint` / `corepack pnpm format`                                              |
@@ -123,6 +124,13 @@ the seed, so no test or fixture breaks if you delete it.
     two-story cycles and rejects a redundant transitive edge.
   - **The detail dialog stays open across its writes** and re-snapshots the version. Every other
     editor closes; this one would close the view the reader is standing in.
+- **The map glossary is a page that writes, and it is live** (ADR 0025),
+  `src/routes/maps/[mapId]/glossary/`. Entries are a flat, unranked `StoryMap.glossary`, sorted
+  and filtered by the pure `src/lib/glossary/glossary-list.ts`. Its actions go through
+  `run-and-publish.ts`, shared with the board, so a glossary write notifies board viewers too —
+  do not give it a publish path of its own. Its edit form snapshots the version when it opens
+  and binds its fields to local state rather than `value=`, so a live refetch neither turns a
+  stale Save into a silent overwrite nor puts stored text back over what someone is typing.
 - **A slice's release view is a read-only page** (ADR 0023),
   `src/routes/maps/[mapId]/slices/[sliceId]/`, over the pure `src/lib/board/release-view-model.ts`.
   Its order is a topological sort whose constraints are **transitive through the whole map**: a
