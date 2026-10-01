@@ -20,12 +20,16 @@ function termButton(id: string, words: string) {
 	return `<button type="button" class="glossary-term" data-glossary-id="${id}">${words}</button>`;
 }
 
+/** Every mounted action, destroyed after each test so none leaves a listener on `document`. */
+const mounted: { destroy?: () => void }[] = [];
+
 function mount(html: string, entries: GlossaryEntry[] = [sku]) {
 	const host = document.createElement('div');
 	host.innerHTML = html;
 	document.body.append(host);
-	const handle = glossaryTerms(host, entries);
-	return { host, handle: handle!, term: host.querySelector<HTMLElement>('button')! };
+	const handle = glossaryTerms(host, entries)!;
+	mounted.push(handle);
+	return { host, handle, term: host.querySelector<HTMLElement>('button')! };
 }
 
 function popup(): HTMLElement | null {
@@ -46,6 +50,7 @@ describe('glossaryTerms action', () => {
 	beforeEach(() => vi.useFakeTimers());
 
 	afterEach(() => {
+		for (const handle of mounted.splice(0)) handle.destroy?.();
 		vi.useRealTimers();
 		document.body.replaceChildren();
 	});
@@ -102,6 +107,17 @@ describe('glossaryTerms action', () => {
 		expect(isOpen()).toBe(false);
 	});
 
+	// A finger lifting off the popover is not the pointer leaving it.
+	it('stays open when a tap on the popover ends', () => {
+		const { term } = mount(termButton(sku.id, 'stock unit'));
+		term.click();
+
+		popup()!.dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'touch' }));
+		vi.advanceTimersByTime(HIDE);
+
+		expect(isOpen()).toBe(true);
+	});
+
 	it('shows immediately on keyboard focus and hides on blur', () => {
 		const { term } = mount(termButton(sku.id, 'stock unit'));
 
@@ -126,6 +142,34 @@ describe('glossaryTerms action', () => {
 		expect(isOpen()).toBe(false);
 		expect(escape.defaultPrevented).toBe(true);
 		expect(reachedParent).not.toHaveBeenCalled();
+	});
+
+	// Hover leaves focus where it was, which on a freshly opened dialog is its
+	// Close button: outside the description.
+	it('dismisses a hovered popover on Escape while focus is elsewhere', () => {
+		const { term } = mount(termButton(sku.id, 'stock unit'));
+		const elsewhere = document.createElement('button');
+		document.body.append(elsewhere);
+		elsewhere.focus();
+		pointer('pointerover', term);
+		vi.advanceTimersByTime(SHOW);
+		const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+
+		elsewhere.dispatchEvent(escape);
+
+		expect(isOpen()).toBe(false);
+		expect(escape.defaultPrevented).toBe(true);
+	});
+
+	it('leaves Escape alone once the popover is closed', () => {
+		const { term } = mount(termButton(sku.id, 'stock unit'));
+		term.focus();
+		term.blur();
+		const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+
+		term.dispatchEvent(escape);
+
+		expect(escape.defaultPrevented).toBe(false);
 	});
 
 	it('closes when the entry it shows is deleted underneath it', () => {

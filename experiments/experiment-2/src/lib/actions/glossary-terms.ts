@@ -1,5 +1,6 @@
 import type { Action } from 'svelte/action';
 import type { GlossaryEntry } from '$lib/domain/story-map';
+import { GLOSSARY_TERM_CLASS } from '$lib/markdown/render-markdown';
 
 // Turns the glossary buttons in a rendered description into terms a reader can
 // look up (ADR 0025). Put on the element that holds ADR 0018's `{@html}`: the
@@ -19,7 +20,7 @@ const HIDE_DELAY_MS = 150;
 const OFFSET_PX = 6;
 const MARGIN_PX = 4;
 
-const TERM_SELECTOR = 'button.glossary-term';
+const TERM_SELECTOR = `button.${GLOSSARY_TERM_CLASS}`;
 
 export const glossaryTerms: Action<HTMLElement, readonly GlossaryEntry[]> = (node, entries) => {
 	let byId = index(entries);
@@ -75,9 +76,9 @@ export const glossaryTerms: Action<HTMLElement, readonly GlossaryEntry[]> = (nod
 		popup.popover = 'manual';
 		popup.setAttribute('aria-hidden', 'true');
 		popup.className =
-			'border-line bg-surface text-ink fixed m-0 w-max max-w-72 rounded-lg border px-3 py-2 text-sm shadow-lg';
+			'border-line bg-surface text-ink fixed m-0 w-max max-w-72 rounded-lg border px-3 py-2 text-sm break-words shadow-lg';
 		popup.addEventListener('pointerenter', cancelHide);
-		popup.addEventListener('pointerleave', scheduleHide);
+		popup.addEventListener('pointerleave', onPopupLeave);
 		(node.closest('dialog') ?? document.body).append(popup);
 		return popup;
 	}
@@ -118,6 +119,8 @@ export const glossaryTerms: Action<HTMLElement, readonly GlossaryEntry[]> = (nod
 		// After showing: a closed popover has no size to measure.
 		position(el, button);
 		document.addEventListener('pointerdown', onOutsidePointer, true);
+		document.addEventListener('keydown', onKeyDown, true);
+		document.addEventListener('scroll', reposition, true);
 	}
 
 	function hide() {
@@ -126,6 +129,14 @@ export const glossaryTerms: Action<HTMLElement, readonly GlossaryEntry[]> = (nod
 		if (popup?.matches(':popover-open')) popup.hidePopover();
 		openFor = undefined;
 		document.removeEventListener('pointerdown', onOutsidePointer, true);
+		document.removeEventListener('keydown', onKeyDown, true);
+		document.removeEventListener('scroll', reposition, true);
+	}
+
+	// The popover is `fixed` in the top layer, so it does not move with the
+	// term when the dialog it sits in scrolls.
+	function reposition() {
+		if (popup && openFor) position(popup, openFor);
 	}
 
 	function scheduleHide() {
@@ -155,7 +166,14 @@ export const glossaryTerms: Action<HTMLElement, readonly GlossaryEntry[]> = (nod
 		showTimer = setTimeout(() => show(button), SHOW_DELAY_MS);
 	}
 
+	// Touch lifts fire `pointerout`/`pointerleave` too, and a popover opened by a
+	// tap is closed only by a touch elsewhere (above), not by the finger lifting.
+	function onPopupLeave(event: PointerEvent) {
+		if (event.pointerType !== 'touch') scheduleHide();
+	}
+
 	function onPointerOut(event: PointerEvent) {
+		if (event.pointerType === 'touch') return;
 		const button = termAt(event.target);
 		if (!button || button.contains(event.relatedTarget as Node | null)) return;
 		clearTimeout(showTimer);
@@ -179,7 +197,10 @@ export const glossaryTerms: Action<HTMLElement, readonly GlossaryEntry[]> = (nod
 	}
 
 	// Dismissable without moving (WCAG 1.4.13). Stopped here so the same Escape
-	// does not also close the dialog the reader is standing in.
+	// does not also close the dialog the reader is standing in. Listened for on
+	// the document while open, not on the description: a popover opened by hover
+	// leaves focus wherever it was — the dialog's Close button, on open — and
+	// Escape has to dismiss it from there too.
 	function onKeyDown(event: KeyboardEvent) {
 		if (event.key !== 'Escape' || !openFor) return;
 		event.preventDefault();
@@ -199,14 +220,17 @@ export const glossaryTerms: Action<HTMLElement, readonly GlossaryEntry[]> = (nod
 	node.addEventListener('focusin', onFocusIn);
 	node.addEventListener('focusout', onFocusOut);
 	node.addEventListener('click', onClick);
-	node.addEventListener('keydown', onKeyDown);
 
 	return {
 		update(next) {
 			byId = index(next);
 			annotate();
 			const entry = openFor && entryFor(openFor);
-			if (entry && popup) fill(popup, entry);
+			if (entry && popup && openFor) {
+				fill(popup, entry);
+				// An edited definition changes the popover's size.
+				position(popup, openFor);
+			}
 		},
 		destroy() {
 			hide();
@@ -216,7 +240,6 @@ export const glossaryTerms: Action<HTMLElement, readonly GlossaryEntry[]> = (nod
 			node.removeEventListener('focusin', onFocusIn);
 			node.removeEventListener('focusout', onFocusOut);
 			node.removeEventListener('click', onClick);
-			node.removeEventListener('keydown', onKeyDown);
 			popup?.remove();
 		}
 	};

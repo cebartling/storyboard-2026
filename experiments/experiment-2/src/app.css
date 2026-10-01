@@ -203,7 +203,6 @@
 	   reads as plain text. */
 	.prose-note :where(.glossary-term) {
 		@apply decoration-brand cursor-help underline decoration-dotted underline-offset-2;
-		font: inherit;
 	}
 	.prose-note :where(.glossary-term:focus-visible) {
 		@apply outline-brand rounded-sm outline-2 outline-offset-1;
