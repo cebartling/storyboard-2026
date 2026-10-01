@@ -59,9 +59,11 @@ const ALLOWED_TAGS = [
 	'tr',
 	'th',
 	'td',
-	// A glossary term (ADR 0025). Emitted only by the `link` renderer below, and
-	// the hook pins every attribute it can carry, so an author who writes one by
-	// hand gets exactly what the renderer would have produced or an inert button.
+	// A glossary term (ADR 0025). Emitted only by the `link` renderer below; the
+	// hook pins every attribute it can carry, and `unwrapStrayButtons` turns any
+	// button that did not come out as a valid term back into its text. So an
+	// author who writes one by hand gets exactly what the renderer would have
+	// produced, or their words.
 	'button'
 ];
 
@@ -176,6 +178,25 @@ function pinGlossaryAttributes(node: Element): void {
 }
 
 /**
+ * Replaces every button that is not a glossary term with its own content.
+ *
+ * An inert button is not harmless in someone else's prose. It is still a tab
+ * stop and still announced as a control, and a description is written by one
+ * account and read by another (ADR 0015), so "Approve, button" that does
+ * nothing is a lie told to the reader. Unwrapping keeps the author's words,
+ * which is what DOMPurify does for every other tag it refuses.
+ *
+ * Done after sanitising rather than in a hook: DOMPurify walks the tree with a
+ * live iterator, and restructuring nodes from inside a hook is not something
+ * it promises to survive.
+ */
+function unwrapStrayButtons(root: DocumentFragment): void {
+	for (const button of root.querySelectorAll(`button:not(.${GLOSSARY_TERM_CLASS})`)) {
+		button.replaceWith(...button.childNodes);
+	}
+}
+
+/**
  * Our own parser, not the shared `marked` singleton.
  *
  * `marked.use()` mutates the one global instance, so overriding the renderer
@@ -237,9 +258,22 @@ export function renderMarkdown(source: string | null): string {
 	// `string | Promise<string>` and would infect every caller.
 	const html = markdown.parse(source, { async: false });
 
-	// `ALLOW_DATA_ATTR: false` because DOMPurify otherwise admits every `data-*`
-	// attribute regardless of `ALLOWED_ATTR`. `data-glossary-id` is now one the
-	// board acts on, so the rest are closed off rather than left to whatever
-	// a future handler might read.
-	return purifier().sanitize(html, { ALLOWED_TAGS, ALLOWED_ATTR, ALLOW_DATA_ATTR: false });
+	// `ALLOW_DATA_ATTR` and `ALLOW_ARIA_ATTR` off because DOMPurify otherwise
+	// admits every `data-*` and `aria-*` attribute regardless of `ALLOWED_ATTR`.
+	// `data-glossary-id` is now one the board acts on, so the rest are closed off
+	// rather than left to whatever a future handler might read. And Markdown
+	// never emits `aria-*`, so the only source is an author giving a reader's
+	// screen reader a different name for something than the one on screen —
+	// "Delete story" on a glossary term, say.
+	const fragment = purifier().sanitize(html, {
+		ALLOWED_TAGS,
+		ALLOWED_ATTR,
+		ALLOW_DATA_ATTR: false,
+		ALLOW_ARIA_ATTR: false,
+		RETURN_DOM_FRAGMENT: true
+	});
+	unwrapStrayButtons(fragment);
+	const host = document.createElement('div');
+	host.append(fragment);
+	return host.innerHTML;
 }

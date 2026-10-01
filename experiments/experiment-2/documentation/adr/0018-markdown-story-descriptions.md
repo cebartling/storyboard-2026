@@ -13,8 +13,12 @@ the part of this decision that stands.
 a glossary term. Those three attributes are allowlisted only to let that button survive. A
 hook strips them from every other element and rewrites them on the button: `type="button"`
 always, and `class="glossary-term"` plus the id only when the id is a well-formed UUIDv7.
-`ALLOW_DATA_ATTR` is now `false`, closing DOMPurify's default of admitting every `data-*`
-attribute. The sink is still the app's only `{@html}`, and a definition never passes
+Any button that does not come out as a valid term is replaced by its content, as a refused
+tag would be: an inert button is still a tab stop and is announced as a control in prose
+someone else wrote. `ALLOW_DATA_ATTR` and `ALLOW_ARIA_ATTR` are now `false`. That closes
+DOMPurify's defaults of admitting every `data-*` and `aria-*` attribute; Markdown emits
+neither, and an author's `aria-label` can give a reader's screen reader a different name
+from the one on screen. The sink is still the app's only `{@html}`, and a definition never passes
 through it: the board writes it with `textContent`.
 
 ## Context

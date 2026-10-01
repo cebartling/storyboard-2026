@@ -203,18 +203,41 @@ describe('renderMarkdown', () => {
 			expect(button?.getAttribute('data-glossary-id')).toBe(id);
 		});
 
+		// An inert button is still a tab stop announced as a control, in prose
+		// someone else wrote — so anything that is not a valid term is unwrapped
+		// to its words, as DOMPurify does for every other tag it refuses.
 		it.each([
-			['an author class', '<button class="fixed inset-0 z-50">x</button>'],
-			['a malformed id', '<button data-glossary-id="x&quot; onclick=&quot;1">x</button>'],
-			['a submit type', '<button type="submit">x</button>'],
-			['an inline handler', '<button onclick="globalThis.pwned = true">x</button>']
-		])('reduces a hand-written button with %s to an inert one', (_label, payload) => {
-			const button = term(renderMarkdown(payload));
+			['no attributes', '<button>Approve</button>'],
+			['an author class', '<button class="fixed inset-0 z-50">Approve</button>'],
+			['a malformed id', '<button data-glossary-id="x&quot; onclick=&quot;1">Approve</button>'],
+			['a submit type', '<button type="submit">Approve</button>'],
+			['an inline handler', '<button onclick="globalThis.pwned = true">Approve</button>']
+		])('unwraps a hand-written button with %s to its words', (_label, payload) => {
+			const host = parse(renderMarkdown(payload));
 
-			expect(button?.getAttribute('type')).toBe('button');
-			expect(button?.hasAttribute('class')).toBe(false);
-			expect(button?.hasAttribute('data-glossary-id')).toBe(false);
-			expect(button?.hasAttribute('onclick')).toBe(false);
+			expect(host.querySelector('button')).toBeNull();
+			expect(host.textContent).toContain('Approve');
+			expect(host.innerHTML).not.toMatch(/onclick/i);
+		});
+
+		it('keeps formatting inside an unwrapped button', () => {
+			expect(
+				parse(renderMarkdown('<button><strong>Approve</strong></button>')).querySelector('strong')
+					?.textContent
+			).toBe('Approve');
+		});
+
+		// Markdown never emits ARIA, so an `aria-*` attribute can only be an author
+		// renaming something for the reader's screen reader.
+		it('strips ARIA attributes, including from a valid term', () => {
+			const host = parse(
+				renderMarkdown(
+					`<button class="glossary-term" data-glossary-id="${id}" aria-label="Delete story">SKU</button> <p aria-hidden="true">x</p>`
+				)
+			);
+
+			expect(host.querySelector('button')?.getAttribute('data-glossary-id')).toBe(id);
+			expect(host.querySelector('[aria-label], [aria-hidden]')).toBeNull();
 		});
 
 		it.each([

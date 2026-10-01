@@ -189,7 +189,9 @@ the seed, so no test or fixture breaks if you delete it.
     `[words](glossary:<id>)` renders as `<button class="glossary-term" data-glossary-id>`.
     `type`, `class` and `data-glossary-id` are allowlisted only for that button:
     `pinGlossaryAttributes` strips them everywhere else, because a general `class` would let
-    an author lay a `fixed inset-0` overlay over the reader's page. `ALLOW_DATA_ATTR` is off.
+    an author lay a `fixed inset-0` overlay over the reader's page. Any other button is
+    unwrapped to its words by `unwrapStrayButtons`, since an inert control is still a tab stop
+    in someone else's prose. `ALLOW_DATA_ATTR` and `ALLOW_ARIA_ATTR` are both off.
     The definition is resolved on the board by `src/lib/actions/glossary-terms.ts` and written
     with `textContent`. Never route it through `renderMarkdown`.
 - Styling is **Tailwind CSS v4** (ADR 0009). The palette and the repeated control classes
