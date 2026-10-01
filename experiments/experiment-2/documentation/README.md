@@ -15,13 +15,13 @@ Start here:
 
 Then the decision record:
 
-- **[adr/](./adr/)** — the numbered ADRs (0001–0024) behind the choices above. 0006 is the
+- **[adr/](./adr/)** — the numbered ADRs (0001–0025) behind the choices above. 0006 is the
   direct written answer to "would hexagonal architecture be helpful here?" and is worth
-  reading even if you skip the others. 0003 and 0016–0024 are this experiment's own —
+  reading even if you skip the others. 0003 and 0016–0025 are this experiment's own —
   MongoDB and the document model, the compare-and-set, why everything runs on Node, Markdown
   story descriptions, story dependencies, per-viewer slice collapse, story status, the
-  three-value slice density that extends 0020, a slice's read-only release view, and
-  acceptance criteria as ranked children of one story.
+  three-value slice density that extends 0020, a slice's read-only release view,
+  acceptance criteria as ranked children of one story, and the map's glossary.
   0020/0022 and 0021 are worth reading as a pair: they are the same question — is this a fact
   about the map, or about whoever is looking at it? — answered in opposite directions.
 

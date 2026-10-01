@@ -10,7 +10,15 @@
  * throw a descriptive `Error` rather than silently producing a bad state.
  */
 
-import type { AcceptanceCriterionId, ActivityId, MapId, SliceId, StepId, StoryId } from './ids';
+import type {
+	AcceptanceCriterionId,
+	ActivityId,
+	GlossaryEntryId,
+	MapId,
+	SliceId,
+	StepId,
+	StoryId
+} from './ids';
 import { newId } from './ids';
 import { rankAtEnd, rankBetween, type Rank } from './rank';
 import { ConflictError, InvariantError } from './errors';
@@ -109,6 +117,23 @@ export interface Dependency {
 	blockedId: StoryId;
 }
 
+/**
+ * One term in the map's glossary (ADR 0025).
+ *
+ * Flat on the root, because a term belongs to the map rather than to any one
+ * story: many stories link to it, and deleting a story must not take it along.
+ * No `rank` — the glossary is shown sorted by term, so there is no order a
+ * person chooses, and `inRankOrder` leaves it alone as it does `dependencies`.
+ *
+ * Both fields are plain text. A story description links here by id
+ * (`[words](glossary:<id>)`), so renaming a term never breaks a link.
+ */
+export interface GlossaryEntry {
+	id: GlossaryEntryId;
+	term: string;
+	definition: string;
+}
+
 export interface StoryMap {
 	id: MapId;
 	name: string;
@@ -121,6 +146,9 @@ export interface StoryMap {
 	 *  endpoint: nesting it under the blocker would make "what blocks me" a scan
 	 *  of every story, and make the two prune directions structurally different. */
 	dependencies: Dependency[];
+	/** Never absent in the domain; the repository's `toDomain` defaults it for
+	 *  documents written before it existed. Empty is the normal case. */
+	glossary: GlossaryEntry[];
 }
 
 /** A neighbour reference for a move/insert operation: the id of an existing
@@ -141,7 +169,8 @@ export function createStoryMap(name: string, createdAt: Date = new Date()): Stor
 		activities: [],
 		slices: [],
 		stories: [],
-		dependencies: []
+		dependencies: [],
+		glossary: []
 	};
 }
 
@@ -174,6 +203,12 @@ export function findStory(map: StoryMap, storyId: StoryId): Story {
 	const story = map.stories.find((s) => s.id === storyId);
 	if (!story) throw new InvariantError(`Story not found: ${storyId}`);
 	return story;
+}
+
+export function findGlossaryEntry(map: StoryMap, entryId: GlossaryEntryId): GlossaryEntry {
+	const entry = map.glossary.find((e) => e.id === entryId);
+	if (!entry) throw new InvariantError(`Glossary entry not found: ${entryId}`);
+	return entry;
 }
 
 // ---------------------------------------------------------------------------
@@ -813,6 +848,87 @@ export function moveAcceptanceCriterion(
 		...s,
 		criteria: s.criteria.map((c) => (c.id === criterionId ? { ...c, rank } : c))
 	}));
+}
+
+// ---------------------------------------------------------------------------
+// Glossary (ADR 0025)
+// ---------------------------------------------------------------------------
+
+/**
+ * The form two terms are compared in, which is the way a reader compares them:
+ * case is ignored, and so are the differences nobody can see. A run of spaces
+ * renders as one, and "é" stored as one code point or as "e" plus a combining
+ * accent is the same letter. `toLowerCase` rather than `toLocaleLowerCase`, as
+ * `normaliseEmail` does, so the answer never depends on the host's locale.
+ */
+function termKey(term: string): string {
+	return term.normalize('NFC').replace(/\s+/g, ' ').toLowerCase();
+}
+
+/**
+ * Terms are unique per map, compared by `termKey`: "SKU" and " sku " are one
+ * term. Two entries for one term would leave a reader unsure which definition a
+ * link means, and the glossary page with two rows that look identical.
+ *
+ * `exceptId` lets an entry keep its own term while its definition is edited.
+ */
+function assertTermIsFree(map: StoryMap, term: string, exceptId?: GlossaryEntryId): void {
+	const key = termKey(term);
+	const clash = map.glossary.find((e) => e.id !== exceptId && termKey(e.term) === key);
+	if (clash) {
+		throw new InvariantError(`"${clash.term}" is already in the glossary`);
+	}
+}
+
+export function addGlossaryEntry(
+	map: StoryMap,
+	term: string,
+	definition: string
+): { map: StoryMap; entry: GlossaryEntry } {
+	const entry: GlossaryEntry = {
+		id: newId<GlossaryEntryId>(),
+		term: requireName(term, 'Glossary term'),
+		definition: requireName(definition, 'Glossary definition')
+	};
+	assertTermIsFree(map, entry.term);
+	return { map: { ...map, glossary: [...map.glossary, entry] }, entry };
+}
+
+export function editGlossaryEntry(
+	map: StoryMap,
+	entryId: GlossaryEntryId,
+	changes: { term?: string; definition?: string }
+): StoryMap {
+	findGlossaryEntry(map, entryId);
+	const term = changes.term === undefined ? undefined : requireName(changes.term, 'Glossary term');
+	const definition =
+		changes.definition === undefined
+			? undefined
+			: requireName(changes.definition, 'Glossary definition');
+	if (term !== undefined) assertTermIsFree(map, term, entryId);
+	return {
+		...map,
+		glossary: map.glossary.map((e) =>
+			e.id === entryId
+				? // Assigned explicitly rather than spread, as `editStory` does: a
+					// spread copies keys whose value is `undefined`.
+					{ ...e, term: term ?? e.term, definition: definition ?? e.definition }
+				: e
+		)
+	};
+}
+
+/**
+ * Drops one entry, and deliberately leaves every description alone.
+ *
+ * A link to a deleted entry renders as its plain words (ADR 0025), so nothing
+ * breaks; rewriting other people's prose as a side effect of a glossary edit
+ * would be a far larger write than the one asked for. Throws on a missing
+ * entry for the reason `removeDependency` gives.
+ */
+export function deleteGlossaryEntry(map: StoryMap, entryId: GlossaryEntryId): StoryMap {
+	findGlossaryEntry(map, entryId);
+	return { ...map, glossary: map.glossary.filter((e) => e.id !== entryId) };
 }
 
 // ---------------------------------------------------------------------------

@@ -5,15 +5,18 @@ import {
 	addAcceptanceCriterion,
 	addActivity,
 	addDependency,
+	addGlossaryEntry,
 	addSlice,
 	addStep,
 	addStory,
 	createStoryMap,
 	deleteActivity,
+	deleteGlossaryEntry,
 	deleteSlice,
 	deleteStep,
 	deleteStory,
 	editAcceptanceCriterion,
+	editGlossaryEntry,
 	editStory,
 	findActivity,
 	findStory,
@@ -55,6 +58,7 @@ describe('createStoryMap', () => {
 		expect(map.slices).toEqual([]);
 		expect(map.stories).toEqual([]);
 		expect(map.dependencies).toEqual([]);
+		expect(map.glossary).toEqual([]);
 	});
 });
 
@@ -1313,5 +1317,140 @@ describe('acceptance criteria', () => {
 
 			expect(criteriaOf(sorted, storyId).map((c) => c.text)).toEqual(['Three', 'One', 'Two']);
 		});
+	});
+});
+
+describe('glossary', () => {
+	describe('addGlossaryEntry', () => {
+		it('adds a trimmed entry to the map', () => {
+			const { map, entry } = addGlossaryEntry(
+				createStoryMap('Retail'),
+				'  SKU ',
+				' Stock keeping unit '
+			);
+
+			expect(map.glossary).toEqual([entry]);
+			expect(entry).toMatchObject({ term: 'SKU', definition: 'Stock keeping unit' });
+		});
+
+		it('refuses a blank term or definition', () => {
+			const map = createStoryMap('Retail');
+
+			expect(() => addGlossaryEntry(map, '  ', 'Something')).toThrow(InvariantError);
+			expect(() => addGlossaryEntry(map, 'SKU', '  ')).toThrow(InvariantError);
+		});
+
+		it('refuses a term already in the glossary, ignoring case and spacing', () => {
+			const { map } = addGlossaryEntry(createStoryMap('Retail'), 'SKU', 'Stock keeping unit');
+
+			expect(() => addGlossaryEntry(map, ' sku ', 'Something else')).toThrow(
+				/"SKU" is already in the glossary/
+			);
+		});
+
+		it('refuses a term that only reads differently in spacing or encoding', () => {
+			// Both pairs render identically on a page, which is the duplicate the
+			// rule exists to prevent: HTML collapses a run of spaces, and a
+			// precomposed "é" looks exactly like "e" plus a combining accent.
+			const spaced = addGlossaryEntry(createStoryMap('Retail'), 'Stock unit', 'A product');
+			const accented = addGlossaryEntry(createStoryMap('Retail'), 'Café', 'A shop');
+
+			expect(() => addGlossaryEntry(spaced.map, 'stock   unit', 'Something else')).toThrow(
+				/"Stock unit" is already in the glossary/
+			);
+			expect(() => addGlossaryEntry(accented.map, 'Café', 'Something else')).toThrow(
+				InvariantError
+			);
+		});
+	});
+
+	describe('editGlossaryEntry', () => {
+		it('changes only the fields given', () => {
+			const added = addGlossaryEntry(createStoryMap('Retail'), 'SKU', 'Stock keeping unit');
+
+			const renamed = editGlossaryEntry(added.map, added.entry.id, { term: 'Stock unit' });
+			const redefined = editGlossaryEntry(renamed, added.entry.id, { definition: 'A product' });
+
+			expect(redefined.glossary).toEqual([
+				{ id: added.entry.id, term: 'Stock unit', definition: 'A product' }
+			]);
+		});
+
+		it('lets an entry keep its own term, in a different case', () => {
+			const added = addGlossaryEntry(createStoryMap('Retail'), 'sku', 'Stock keeping unit');
+
+			const edited = editGlossaryEntry(added.map, added.entry.id, { term: 'SKU' });
+
+			expect(edited.glossary[0].term).toBe('SKU');
+		});
+
+		it('refuses a term that another entry holds', () => {
+			const first = addGlossaryEntry(createStoryMap('Retail'), 'SKU', 'Stock keeping unit');
+			const second = addGlossaryEntry(first.map, 'Basket', 'Items chosen but not bought');
+
+			expect(() => editGlossaryEntry(second.map, second.entry.id, { term: 'sku' })).toThrow(
+				/"SKU" is already in the glossary/
+			);
+		});
+
+		it('refuses a blank term or definition', () => {
+			const added = addGlossaryEntry(createStoryMap('Retail'), 'SKU', 'Stock keeping unit');
+
+			expect(() => editGlossaryEntry(added.map, added.entry.id, { term: ' ' })).toThrow(
+				InvariantError
+			);
+			expect(() => editGlossaryEntry(added.map, added.entry.id, { definition: '' })).toThrow(
+				InvariantError
+			);
+		});
+
+		it('refuses an unknown entry', () => {
+			const added = addGlossaryEntry(createStoryMap('Retail'), 'SKU', 'Stock keeping unit');
+			const other = addGlossaryEntry(createStoryMap('Other'), 'SKU', 'Stock keeping unit');
+
+			expect(() => editGlossaryEntry(added.map, other.entry.id, { term: 'X' })).toThrow(
+				/Glossary entry not found/
+			);
+		});
+	});
+
+	describe('deleteGlossaryEntry', () => {
+		it('removes the entry and leaves descriptions that link to it alone', () => {
+			const base = mapWithOneStep();
+			const added = addGlossaryEntry(base.map, 'SKU', 'Stock keeping unit');
+			const description = `Look up a [SKU](glossary:${added.entry.id})`;
+			const story = addStory(added.map, base.stepId, 'Search by SKU');
+			const described = editStory(story.map, story.story.id, { description });
+
+			const deleted = deleteGlossaryEntry(described, added.entry.id);
+
+			expect(deleted.glossary).toEqual([]);
+			expect(findStory(deleted, story.story.id).description).toBe(description);
+		});
+
+		it('refuses an unknown entry', () => {
+			const added = addGlossaryEntry(createStoryMap('Retail'), 'SKU', 'Stock keeping unit');
+			const deleted = deleteGlossaryEntry(added.map, added.entry.id);
+
+			expect(() => deleteGlossaryEntry(deleted, added.entry.id)).toThrow(
+				/Glossary entry not found/
+			);
+		});
+	});
+
+	it('survives every delete that removes or un-slices stories', () => {
+		const base = mapWithOneStep();
+		const added = addGlossaryEntry(base.map, 'SKU', 'Stock keeping unit');
+		const slice = addSlice(added.map, 'Release 1');
+		const story = addStory(slice.map, base.stepId, 'Search by SKU', { sliceId: slice.slice.id });
+
+		for (const deleted of [
+			deleteActivity(story.map, base.activityId),
+			deleteStep(story.map, base.stepId),
+			deleteStory(story.map, story.story.id),
+			deleteSlice(story.map, slice.slice.id)
+		]) {
+			expect(deleted.glossary).toEqual([added.entry]);
+		}
 	});
 });

@@ -24,6 +24,7 @@ import {
 	addAcceptanceCriterion,
 	addActivity,
 	addDependency,
+	addGlossaryEntry,
 	addSlice,
 	addStep,
 	addStory,
@@ -160,6 +161,9 @@ describe('mutating use cases', () => {
 		// to edit, tick and remove without each having to create its own.
 		const criterion = addAcceptanceCriterion(map, story.story.id, 'Matches partial words');
 		map = criterion.map;
+		// One glossary entry, so the glossary cases have one to edit and delete.
+		const entry = addGlossaryEntry(map, 'SKU', 'Stock keeping unit');
+		map = entry.map;
 
 		const repository = new InMemoryStoryMapRepository([{ map: map, owner: caller.userId }]);
 		// Read back rather than taken from the map as built: a stored map has been
@@ -175,6 +179,7 @@ describe('mutating use cases', () => {
 			otherStoryId: other.story.id as StoryId,
 			thirdStoryId: third.story.id as StoryId,
 			criterionId: criterion.criterion.id,
+			entryId: entry.entry.id,
 			version: stored.version
 		};
 	}
@@ -317,6 +322,29 @@ describe('mutating use cases', () => {
 					null,
 					null
 				)
+		},
+		{
+			name: 'addGlossaryEntry',
+			run: (c) =>
+				useCases.addGlossaryEntry(
+					c.repository,
+					caller,
+					c.mapId,
+					c.version,
+					'Basket',
+					'Items chosen but not yet bought'
+				)
+		},
+		{
+			name: 'editGlossaryEntry',
+			run: (c) =>
+				useCases.editGlossaryEntry(c.repository, caller, c.mapId, c.version, c.entryId, {
+					definition: 'The code a product is stocked under'
+				})
+		},
+		{
+			name: 'deleteGlossaryEntry',
+			run: (c) => useCases.deleteGlossaryEntry(c.repository, caller, c.mapId, c.version, c.entryId)
 		},
 		{
 			name: 'moveStory',

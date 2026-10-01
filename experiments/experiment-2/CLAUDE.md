@@ -50,6 +50,7 @@ versions before 10 reject this directory's `pnpm-workspace.yaml` with
 | **Single release-view unit test** | `corepack pnpm vitest run src/lib/board/release-view-model.test.ts`                        |
 | **Single criteria unit test**     | `corepack pnpm vitest run src/lib/domain/story-map.test.ts -t "acceptance criteria"`       |
 | **Single criteria e2e test**      | `corepack pnpm playwright test -g "refuses done while a criterion is unmet"`               |
+| **Single glossary unit test**     | `corepack pnpm vitest run src/lib/domain/story-map.test.ts -t "glossary"`                  |
 | Collaboration demo (headed)       | `corepack pnpm demo`                                                                       |
 | Types                             | `corepack pnpm check`                                                                      |
 | Lint / format                     | `corepack pnpm lint` / `corepack pnpm format`                                              |

@@ -61,6 +61,12 @@ Dependency {                  // ADR 0019
   blockerId: string           // the Story that must come first
   blockedId: string           // the Story that waits on it
 }                             // no id (the pair is the identity), no rank
+
+GlossaryEntry {               // ADR 0025
+  id: string
+  term: string                // plain text, unique per map ignoring case and spacing
+  definition: string          // plain text, never Markdown
+}                             // flat on StoryMap, no rank: read sorted by term
 ```
 
 ## Invariants
@@ -100,6 +106,11 @@ Enforced in domain code (`src/lib/domain/`), not left to the database to catch:
   `AcceptanceCriterion`s with it, structurally rather than by a filter, because they are
   nested inside it. Deleting a `Slice` and moving a `Story` both keep them, for the same
   reason they keep dependencies: neither removes a story.
+- A `GlossaryEntry`'s `term` and `definition` are non-blank and stored trimmed, and no two
+  entries in one `StoryMap` share a term once case, runs of whitespace and Unicode encoding
+  are ignored. Deleting an entry rewrites no description: a `glossary:<id>` link that no
+  longer resolves renders as its plain words, and deleting stories, steps, activities or
+  slices never touches the glossary (ADR 0025).
 
 ## Concurrency
 
