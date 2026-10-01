@@ -67,6 +67,7 @@
 	import { filterCandidates, type Candidate } from '$lib/board/dependency-candidates';
 	import { STORY_STATUS_OPTIONS } from '$lib/board/story-status';
 	import { tooltip } from '$lib/actions/tooltip';
+	import { glossaryTerms } from '$lib/actions/glossary-terms';
 	import type { BoardViewModel } from '$lib/board/board-view-model';
 
 	/** One row of the criteria list, as the board view model hands it over. */
@@ -93,6 +94,7 @@
 		story = null,
 		dependencies = [],
 		candidates = [],
+		glossary = [],
 		onClose,
 		onLateFailure,
 		onReplaceSubject,
@@ -129,6 +131,10 @@
 		dependencies?: BoardDependency[];
 		/** Stories this one could legally be linked to. */
 		candidates?: Candidate[];
+		/** The map's glossary, which a description's `glossary:<id>` links
+		 *  resolve against (ADR 0025). Live, like `story`, so an edited or
+		 *  deleted entry is reflected in an open dialog. */
+		glossary?: BoardViewModel['glossary'];
 		/** `deleted` when the submission removed the thing the dialog was
 		 *  editing, so the caller can put focus somewhere that still exists —
 		 *  the trigger that opened the dialog is gone by then. */
@@ -914,7 +920,10 @@
 					No description yet. Use Edit to add one — Markdown is rendered here.
 				</p>
 			{:else}
-				<div class="prose-note mt-3" data-testid="story-description">
+				<!-- `glossaryTerms` resolves the renderer's glossary buttons against
+				     the map (ADR 0025). It writes definitions with `textContent` only;
+				     nothing it adds goes through `{@html}`. -->
+				<div class="prose-note mt-3" data-testid="story-description" use:glossaryTerms={glossary}>
 					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 					{@html storyMarkdown}
 				</div>

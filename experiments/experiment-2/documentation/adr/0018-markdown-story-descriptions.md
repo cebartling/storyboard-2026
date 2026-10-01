@@ -8,6 +8,19 @@ version and a client id like every other editor, and it stays open across its ow
 story's own fields — title and description — are still read here and edited elsewhere, which is
 the part of this decision that stands.
 
+**Amended by ADR 0025, 2026-10-01**: the allowlist admits one more element, `button`, with
+`type`, `class` and `data-glossary-id`, so that a `[words](glossary:<id>)` link can render as
+a glossary term. Those three attributes are allowlisted only to let that button survive. A
+hook strips them from every other element and rewrites them on the button: `type="button"`
+always, and `class="glossary-term"` plus the id only when the id is a well-formed UUIDv7.
+Any button that does not come out as a valid term is replaced by its content, as a refused
+tag would be: an inert button is still a tab stop and is announced as a control in prose
+someone else wrote. `ALLOW_DATA_ATTR` and `ALLOW_ARIA_ATTR` are now `false`. That closes
+DOMPurify's defaults of admitting every `data-*` and `aria-*` attribute; Markdown emits
+neither, and an author's `aria-label` can give a reader's screen reader a different name
+from the one on screen. The sink is still the app's only `{@html}`, and a definition never passes
+through it: the board writes it with `textContent`.
+
 ## Context
 
 `Story.description` has existed since the first vertical slice. It is in the aggregate

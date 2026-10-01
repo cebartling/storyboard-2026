@@ -196,6 +196,20 @@
 	.prose-note :where(blockquote) {
 		@apply border-line-strong text-ink-muted border-l-2 pl-3 italic;
 	}
+	/* A glossary term (ADR 0025): a button the reader can hover, focus or tap,
+	   styled as the words it is rather than as a control. The dotted underline
+	   is the conventional "this has a definition" cue, and it is not carried by
+	   colour alone (WCAG 1.4.1). An unresolved term — its entry was deleted —
+	   reads as plain text. */
+	.prose-note :where(.glossary-term) {
+		@apply decoration-brand cursor-help underline decoration-dotted underline-offset-2;
+	}
+	.prose-note :where(.glossary-term:focus-visible) {
+		@apply outline-brand rounded-sm outline-2 outline-offset-1;
+	}
+	.prose-note :where(.glossary-term[data-unresolved]) {
+		@apply cursor-text no-underline;
+	}
 	.prose-note :where(hr) {
 		@apply border-line my-3;
 	}

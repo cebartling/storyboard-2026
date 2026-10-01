@@ -21,6 +21,7 @@
 
 import DOMPurify from 'dompurify';
 import { Marked } from 'marked';
+import { isGlossaryEntryId, parseGlossaryHref } from '$lib/glossary/glossary-link';
 
 /**
  * What a description is allowed to become. An explicit allowlist rather than
@@ -57,7 +58,13 @@ const ALLOWED_TAGS = [
 	'tbody',
 	'tr',
 	'th',
-	'td'
+	'td',
+	// A glossary term (ADR 0025). Emitted only by the `link` renderer below; the
+	// hook pins every attribute it can carry, and `unwrapStrayButtons` turns any
+	// button that did not come out as a valid term back into its text. So an
+	// author who writes one by hand gets exactly what the renderer would have
+	// produced, or their words.
+	'button'
 ];
 
 /**
@@ -70,7 +77,21 @@ const ALLOWED_TAGS = [
  * only meant an anchor whose `href` was stripped could keep whatever `target`
  * the description asked for.
  */
-const ALLOWED_ATTR = ['href', 'title'];
+const ALLOWED_ATTR = ['href', 'title', 'type', 'class', 'data-glossary-id'];
+
+/**
+ * The three attributes a glossary term needs, and that nothing else may keep.
+ * They are on the allowlist only so the glossary button survives; the hook
+ * strips them from every other element, and rewrites them on the button.
+ *
+ * `class` is the one that matters most. Allowed generally, it would let an
+ * author put any Tailwind utility on their prose — `fixed inset-0 z-50` is a
+ * full-screen overlay a reader cannot dismiss, written by someone else.
+ */
+const GLOSSARY_ATTRS = ['type', 'class', 'data-glossary-id'] as const;
+
+/** The class the board's delegated handlers and `app.css` both look for. */
+export const GLOSSARY_TERM_CLASS = 'glossary-term';
 
 /**
  * Task-list boxes as text, so no `<input>` is ever emitted for the sanitiser to
@@ -127,10 +148,52 @@ function purifier(): ReturnType<typeof DOMPurify> {
 			node.setAttribute('target', '_blank');
 			node.setAttribute('rel', 'noopener noreferrer');
 		}
+		pinGlossaryAttributes(node);
 	});
 
 	instance = created;
 	return created;
+}
+
+/**
+ * A glossary button keeps a well-formed id and nothing of its own choosing;
+ * every other element keeps none of the glossary attributes at all.
+ *
+ * Run on what the renderer emitted *and* on raw HTML an author typed, which
+ * reach this hook identically. The renderer already validated its own ids;
+ * checking again here is what covers the hand-written ones.
+ */
+function pinGlossaryAttributes(node: Element): void {
+	const id = node.tagName === 'BUTTON' ? node.getAttribute('data-glossary-id') : null;
+	for (const name of GLOSSARY_ATTRS) node.removeAttribute(name);
+	if (node.tagName !== 'BUTTON') return;
+	// A button is never a submit control here. There is no form for it to
+	// submit (forms are stripped), but `button` is the default type, and the
+	// description renders inside a dialog that does contain forms.
+	node.setAttribute('type', 'button');
+	if (id !== null && isGlossaryEntryId(id)) {
+		node.setAttribute('class', GLOSSARY_TERM_CLASS);
+		node.setAttribute('data-glossary-id', id);
+	}
+}
+
+/**
+ * Replaces every button that is not a glossary term with its own content.
+ *
+ * An inert button is not harmless in someone else's prose. It is still a tab
+ * stop and still announced as a control, and a description is written by one
+ * account and read by another (ADR 0015), so "Approve, button" that does
+ * nothing is a lie told to the reader. Unwrapping keeps the author's words,
+ * which is what DOMPurify does for every other tag it refuses.
+ *
+ * Done after sanitising rather than in a hook: DOMPurify walks the tree with a
+ * live iterator, and restructuring nodes from inside a hook is not something
+ * it promises to survive.
+ */
+function unwrapStrayButtons(root: DocumentFragment): void {
+	for (const button of root.querySelectorAll(`button:not(.${GLOSSARY_TERM_CLASS})`)) {
+		button.replaceWith(...button.childNodes);
+	}
 }
 
 /**
@@ -156,7 +219,19 @@ const markdown = new Marked({
 		// aim at the map's owner (ADR 0015). Rendering the alt text keeps the
 		// author's words rather than dropping them silently, which is what the
 		// sanitiser alone would do.
-		image: ({ text }) => (text ? escapeHtml(text) : '')
+		image: ({ text }) => (text ? escapeHtml(text) : ''),
+		// `[words](glossary:<id>)` is a glossary link (ADR 0025), not a URL: it
+		// becomes a button the board resolves to a definition, never an anchor.
+		// A malformed id renders as its words alone rather than falling through to
+		// the URI policy, which would leave a dead anchor in the reader's prose.
+		// Every other link returns `false`, which is marked's "use the default".
+		link(token) {
+			const glossary = parseGlossaryHref(token.href);
+			if (glossary === null) return false;
+			const words = this.parser.parseInline(token.tokens);
+			if (glossary === 'invalid') return words;
+			return `<button type="button" class="${GLOSSARY_TERM_CLASS}" data-glossary-id="${glossary}">${words}</button>`;
+		}
 	}
 });
 
@@ -183,5 +258,22 @@ export function renderMarkdown(source: string | null): string {
 	// `string | Promise<string>` and would infect every caller.
 	const html = markdown.parse(source, { async: false });
 
-	return purifier().sanitize(html, { ALLOWED_TAGS, ALLOWED_ATTR });
+	// `ALLOW_DATA_ATTR` and `ALLOW_ARIA_ATTR` off because DOMPurify otherwise
+	// admits every `data-*` and `aria-*` attribute regardless of `ALLOWED_ATTR`.
+	// `data-glossary-id` is now one the board acts on, so the rest are closed off
+	// rather than left to whatever a future handler might read. And Markdown
+	// never emits `aria-*`, so the only source is an author giving a reader's
+	// screen reader a different name for something than the one on screen —
+	// "Delete story" on a glossary term, say.
+	const fragment = purifier().sanitize(html, {
+		ALLOWED_TAGS,
+		ALLOWED_ATTR,
+		ALLOW_DATA_ATTR: false,
+		ALLOW_ARIA_ATTR: false,
+		RETURN_DOM_FRAGMENT: true
+	});
+	unwrapStrayButtons(fragment);
+	const host = document.createElement('div');
+	host.append(fragment);
+	return host.innerHTML;
 }

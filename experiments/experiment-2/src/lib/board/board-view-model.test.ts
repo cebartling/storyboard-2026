@@ -4,6 +4,7 @@ import {
 	addAcceptanceCriterion,
 	addActivity,
 	addDependency,
+	addGlossaryEntry,
 	addSlice,
 	addStep,
 	addStory,
@@ -105,6 +106,15 @@ describe('buildBoardViewModel', () => {
 		const unsliced = board.cells.find((c) => c.stepId === stepId && c.sliceId === null);
 		expect(sliced?.stories.map((s) => s.title)).toEqual(['Keyword search']);
 		expect(unsliced?.stories.map((s) => s.title)).toEqual(['Aisle filters']);
+	});
+});
+
+describe('glossary', () => {
+	// The story dialog resolves `glossary:<id>` links against this (ADR 0025).
+	it('carries the map glossary through', () => {
+		const { map, entry } = addGlossaryEntry(createStoryMap('Retail'), 'SKU', 'Stock keeping unit');
+
+		expect(buildBoardViewModel(map).glossary).toEqual([entry]);
 	});
 });
 

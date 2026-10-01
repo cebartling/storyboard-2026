@@ -52,6 +52,7 @@ versions before 10 reject this directory's `pnpm-workspace.yaml` with
 | **Single criteria e2e test**      | `corepack pnpm playwright test -g "refuses done while a criterion is unmet"`               |
 | **Single glossary unit test**     | `corepack pnpm vitest run src/lib/domain/story-map.test.ts -t "glossary"`                  |
 | **Single glossary e2e test**      | `corepack pnpm playwright test -g "adds, filters, edits and deletes glossary terms"`       |
+| **Single glossary-link e2e test** | `corepack pnpm playwright test -g "shows a glossary entry when hovering a linked term"`    |
 | Collaboration demo (headed)       | `corepack pnpm demo`                                                                       |
 | Types                             | `corepack pnpm check`                                                                      |
 | Lint / format                     | `corepack pnpm lint` / `corepack pnpm format`                                              |
@@ -184,6 +185,15 @@ the seed, so no test or fixture breaks if you delete it.
   - Its test is `render-markdown.svelte.test.ts` despite the source being plain `.ts`: the
     `.svelte.` infix routes a file to the browser Vitest project, and the node project has
     no jsdom for DOMPurify to use.
+  - **Glossary links widen the allowlist by exactly one element** (ADR 0025).
+    `[words](glossary:<id>)` renders as `<button class="glossary-term" data-glossary-id>`.
+    `type`, `class` and `data-glossary-id` are allowlisted only for that button:
+    `pinGlossaryAttributes` strips them everywhere else, because a general `class` would let
+    an author lay a `fixed inset-0` overlay over the reader's page. Any other button is
+    unwrapped to its words by `unwrapStrayButtons`, since an inert control is still a tab stop
+    in someone else's prose. `ALLOW_DATA_ATTR` and `ALLOW_ARIA_ATTR` are both off.
+    The definition is resolved on the board by `src/lib/actions/glossary-terms.ts` and written
+    with `textContent`. Never route it through `renderMarkdown`.
 - Styling is **Tailwind CSS v4** (ADR 0009). The palette and the repeated control classes
   (`.panel`, `.input`, `.btn` + `.btn-primary`/`.btn-quiet`/`.btn-icon`/`.btn-danger`/`.btn-danger-quiet`,
   `.field-label`, `.error`) live in `src/app.css`; everything else is utilities in the

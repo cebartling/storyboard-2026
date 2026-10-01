@@ -2,11 +2,15 @@
 
 ## Status
 
-Accepted, 2026-10-01. Being built in stages (PIN-327). Built so far: the domain,
-persistence and use cases, then the glossary page (`src/routes/maps/[mapId]/glossary/`),
-which lists, filters, adds, edits and deletes entries. Still to come, each in its own
-change: rendering links with their hover popup, and creating or linking entries from a
-selected phrase.
+Accepted, 2026-10-01. Being built in stages (PIN-327). Built so far:
+
+- the domain, persistence and use cases;
+- the glossary page (`src/routes/maps/[mapId]/glossary/`), which lists, filters, adds, edits
+  and deletes entries;
+- rendering links as terms with a hover-and-focus popup. The renderer emits the term button
+  and `src/lib/actions/glossary-terms.ts` resolves it in the story dialog.
+
+Still to come: creating or linking entries from a selected phrase.
 
 ## Context
 
@@ -71,7 +75,8 @@ Only `Story.description` carries links. It is the only Markdown in the app (ADR 
 Titles and acceptance criteria stay plain text (ADR 0024), and the board grid stays
 read-only (ADR 0011).
 
-A definition is plain text, rendered by Svelte rather than through `{@html}`. ADR 0018's
+A definition is plain text, rendered as text rather than through `{@html}`: by Svelte on the
+glossary page, and with `textContent` in the story dialog's popup. ADR 0018's
 renderer stays the app's only HTML sink. The renderer emits a fixed element that carries
 nothing but a validated entry id; the board looks up the definition by that id and shows it
 as text. The definition never passes through the sanitiser.
