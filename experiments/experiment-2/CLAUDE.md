@@ -53,6 +53,7 @@ versions before 10 reject this directory's `pnpm-workspace.yaml` with
 | **Single glossary unit test**     | `corepack pnpm vitest run src/lib/domain/story-map.test.ts -t "glossary"`                  |
 | **Single glossary e2e test**      | `corepack pnpm playwright test -g "adds, filters, edits and deletes glossary terms"`       |
 | **Single glossary-link e2e test** | `corepack pnpm playwright test -g "shows a glossary entry when hovering a linked term"`    |
+| **Single glossary-authoring e2e** | `corepack pnpm playwright test -g "adds a term from a selection and links the selection"`  |
 | Collaboration demo (headed)       | `corepack pnpm demo`                                                                       |
 | Types                             | `corepack pnpm check`                                                                      |
 | Lint / format                     | `corepack pnpm lint` / `corepack pnpm format`                                              |
@@ -132,6 +133,15 @@ the seed, so no test or fixture breaks if you delete it.
   do not give it a publish path of its own. Its edit form snapshots the version when it opens
   and binds its fields to local state rather than `value=`, so a live refetch neither turns a
   stale Save into a silent overwrite nor puts stored text back over what someone is typing.
+- **The story editor writes glossary entries mid-edit** (ADR 0025). Selecting words in the
+  description offers _Add to glossary_ or _Link to glossary_. The link is spliced into the
+  uncontrolled textarea with `setRangeText`, from `glossaryLinkMarkdown`, and only if the held
+  range still holds the selected text. Adding an entry is a fetch to the board's
+  `?/addGlossaryEntry`, which returns the new id, and it spends `openedAtVersion`. On success
+  the snapshot moves to **exactly `openedAtVersion + 1`**, never to the live `boardVersion`:
+  the latter would make the story's Save a silent overwrite of a concurrent edit, and leaving
+  it alone makes that Save a false 409. The panel's controls are all `type="button"` and its
+  fields are unnamed, because it sits inside the story's form.
 - **A slice's release view is a read-only page** (ADR 0023),
   `src/routes/maps/[mapId]/slices/[sliceId]/`, over the pure `src/lib/board/release-view-model.ts`.
   Its order is a topological sort whose constraints are **transitive through the whole map**: a

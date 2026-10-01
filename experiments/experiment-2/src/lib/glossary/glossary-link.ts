@@ -31,3 +31,43 @@ export function parseGlossaryHref(href: string): GlossaryEntryId | 'invalid' | n
 	const id = href.slice(SCHEME.length);
 	return isGlossaryEntryId(id) ? id : 'invalid';
 }
+
+/** A stretch of a description chosen to become a glossary link. */
+export interface LinkableSelection {
+	start: number;
+	end: number;
+	text: string;
+}
+
+/**
+ * What of a textarea selection can be linked, or `null` when nothing can.
+ *
+ * Surrounding whitespace is trimmed off the range rather than kept inside the
+ * link: double-clicking a word selects its trailing space in some browsers,
+ * and `[SKU ](glossary:…)` underlines a space. A selection that crosses a line
+ * break is refused, because Markdown link text cannot span one reliably — a
+ * blank line ends it outright, and the result would not be a link at all.
+ */
+export function linkableSelection(
+	value: string,
+	start: number,
+	end: number
+): LinkableSelection | null {
+	const raw = value.slice(start, end);
+	const leading = raw.length - raw.trimStart().length;
+	const text = raw.trim();
+	if (text === '' || text.includes('\n')) return null;
+	return { start: start + leading, end: start + leading + text.length, text };
+}
+
+/**
+ * The Markdown for `words` linked to an entry (ADR 0025).
+ *
+ * Brackets and backslashes are escaped, so selected text that happens to look
+ * like Markdown link syntax stays the reader's words instead of closing the
+ * link early or opening a second one inside it.
+ */
+export function glossaryLinkMarkdown(words: string, id: GlossaryEntryId): string {
+	const escaped = words.replace(/[\\[\]]/g, (c) => `\\${c}`);
+	return `[${escaped}](${SCHEME}${id})`;
+}
