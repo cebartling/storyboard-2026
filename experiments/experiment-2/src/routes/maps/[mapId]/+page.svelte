@@ -400,6 +400,15 @@
 			<button type="button" class="btn btn-quiet" onclick={() => (dialog = { kind: 'addSlice' })}>
 				Add slice
 			</button>
+			<!-- A page of its own rather than a dialog (ADR 0025): the glossary is
+			     read and filtered as a list, not edited one cell at a time. -->
+			<a
+				href={resolve('/maps/[mapId]/glossary', { mapId: data.board.id })}
+				class="btn btn-quiet"
+				data-testid="open-glossary"
+			>
+				Glossary
+			</a>
 			{#if data.role === 'owner'}
 				<!-- Owner-only, and absent rather than disabled for an editor: the
 				     server refuses it either way (ADR 0015). -->

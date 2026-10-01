@@ -2,10 +2,11 @@
 
 ## Status
 
-Accepted, 2026-10-01. Being built in stages (PIN-327). The first change ships the domain,
-persistence and use cases. The glossary page, the rendering of links with their hover
-popup, and creating or linking entries from a selected phrase follow, each in its own
-change.
+Accepted, 2026-10-01. Being built in stages (PIN-327). Built so far: the domain,
+persistence and use cases, then the glossary page (`src/routes/maps/[mapId]/glossary/`),
+which lists, filters, adds, edits and deletes entries. Still to come, each in its own
+change: rendering links with their hover popup, and creating or linking entries from a
+selected phrase.
 
 ## Context
 

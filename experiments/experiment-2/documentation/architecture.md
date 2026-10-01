@@ -182,6 +182,14 @@ linked from the slice's row label (ADR 0023). It is read-only and not live. It r
 `src/lib/board/release-view-model.ts`, a pure builder like `board-view-model.ts`, which lists
 the slice's stories in dependency order and flags blockers planned after the release.
 
+The map's **glossary** is its own page too, `src/routes/maps/[mapId]/glossary/`, linked from
+the board header (ADR 0025). Unlike the release view it writes and it is live: it adds, edits
+and deletes entries through the same use cases, publishes through the same
+`run-and-publish.ts` the board's actions use, and follows the map's event stream with
+`useMapSync`, so a glossary write reaches viewers of the board and of the glossary alike.
+Its sort and filter are the pure `src/lib/glossary/glossary-list.ts`. Being a page, not a
+board cell, it edits inline: ADR 0011's read-only rule is about the grid.
+
 ## Board canvas: pan, zoom, and the minimap
 
 `src/routes/maps/[mapId]/+page.svelte` used to wrap the board grid directly in
