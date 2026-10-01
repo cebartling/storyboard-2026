@@ -32,11 +32,10 @@ export async function runAndPublish(
 	});
 	if (!failure && expectedVersion !== null) {
 		// The submitting tab identifies itself so the hub can skip it: it has
-		// already refetched as part of this submission. Optional, and untrusted —
-		// the worst a forged value does is deny that tab one notification.
-		// Untrusted, and cast rather than validated on purpose: the worst a forged
-		// value does is deny that tab one notification it was going to refetch for
-		// anyway. It never reaches a use case or the repository.
+		// already refetched as part of this submission. Optional, untrusted, and
+		// cast rather than validated on purpose: the worst a forged value does is
+		// deny that tab one notification it was going to refetch for anyway. It
+		// never reaches a use case or the repository.
 		const origin = form.get('clientId');
 		// `watching`, not `hubFor`: nobody may be on this board, and creating a hub
 		// to broadcast into an empty room leaves it behind for the process lifetime.

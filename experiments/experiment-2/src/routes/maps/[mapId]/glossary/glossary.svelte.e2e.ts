@@ -15,7 +15,8 @@ async function openGlossary(page: Page) {
 /** Adds a term and waits for its row, which only appears on success. */
 async function addTerm(page: Page, term: string, definition: string) {
 	await page.getByLabel('New term').fill(term);
-	await page.getByLabel('Definition', { exact: true }).fill(definition);
+	// `first()`: an open editor has a "Definition" field too, below this one.
+	await page.getByLabel('Definition', { exact: true }).first().fill(definition);
 	await page.getByRole('button', { name: 'Add term' }).click();
 	await expect(page.getByTestId('glossary-term').filter({ hasText: term })).toBeVisible();
 	await expect(page.getByLabel('New term')).toHaveValue('');
@@ -45,7 +46,10 @@ test('adds, filters, edits and deletes glossary terms', async ({ page }) => {
 	await filter.fill('');
 	await expect(terms(page)).toHaveCount(2);
 
+	// The clicked control leaves the DOM each time, so focus is placed rather
+	// than left to fall to <body>.
 	await page.getByRole('button', { name: 'Edit SKU' }).click();
+	await expect(page.getByLabel('Term', { exact: true })).toBeFocused();
 	await page
 		.getByLabel('Definition', { exact: true })
 		.last()
@@ -53,9 +57,11 @@ test('adds, filters, edits and deletes glossary terms', async ({ page }) => {
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByText('The code a product is stocked under')).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Save' })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Edit SKU' })).toBeFocused();
 
 	await page.getByRole('button', { name: 'Delete Basket' }).click();
 	await expect(terms(page)).toHaveText(['SKU']);
+	await expect(page.getByTestId('glossary-filter')).toBeFocused();
 
 	// The edit survived a reload, so it was written, not just rendered.
 	await page.reload();
@@ -114,6 +120,27 @@ test('a stale edit is refused, keeps the typed text, and saves on retry', async 
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByRole('button', { name: 'Save' })).toHaveCount(0);
 	await expect(other.getByText('Mine')).toBeVisible();
+});
+
+test("this page's own writes do not make its open editor stale", async ({ page }) => {
+	await createMap(page, `E2E glossary own writes ${Date.now()}`);
+	await openGlossary(page);
+	await addTerm(page, 'SKU', 'Stock keeping unit');
+
+	// An editor stays open while the same person adds and deletes other terms.
+	await page.getByRole('button', { name: 'Edit SKU' }).click();
+	await page
+		.getByLabel('Definition', { exact: true })
+		.last()
+		.fill('The code a product is stocked under');
+	await addTerm(page, 'Basket', 'Items a shopper has chosen but not bought');
+	await page.getByRole('button', { name: 'Delete Basket' }).click();
+	await expect(page.getByRole('button', { name: 'Delete Basket' })).toHaveCount(0);
+
+	// Nobody else touched the map, so this Save is not stale.
+	await page.getByRole('button', { name: 'Save' }).click();
+	await expect(page.getByRole('button', { name: 'Save' })).toHaveCount(0);
+	await expect(page.getByText('The code a product is stocked under')).toBeVisible();
 });
 
 test("a non-member gets a 404 for another person's glossary", async ({

@@ -42,7 +42,7 @@ export async function runAction(
 		if (e instanceof ConflictError) {
 			return fail(409, {
 				error:
-					'Someone else changed this map while you were editing. The board has been refreshed — check your change against it, then save again.'
+					'Someone else changed this map while you were editing. The page has been refreshed — check your change against it, then save again.'
 			});
 		}
 		console.error(`action ${label} failed`, e);

@@ -55,11 +55,14 @@
 	 * The one entry being edited, with the version its form was opened at.
 	 * Snapshotted at open, like a board dialog (ADR 0014 §3), so a concurrent
 	 * change to the map turns this Save into a 409 rather than a silent overwrite.
+	 * `openedTerm` names the entry if it is deleted mid-edit: `term` is bound to
+	 * the field, so by then it holds whatever was typed.
 	 */
 	let editing = $state<{
 		id: GlossaryEntryId;
 		term: string;
 		definition: string;
+		openedTerm: string;
 		openedAtVersion: number;
 	} | null>(null);
 	let editError = $state<string | null>(null);
@@ -71,9 +74,26 @@
 	let deleteError = $state<string | null>(null);
 	let submitting = $state(false);
 
+	/**
+	 * Focuses `id` once the DOM has caught up. The control that was clicked has
+	 * just left the DOM, so focus would otherwise fall to <body>; the filter is
+	 * the fallback for a target that has gone too (deleted, or filtered out).
+	 */
+	async function focusAfterRender(id: string) {
+		await tick();
+		(document.getElementById(id) ?? document.getElementById('glossary-filter'))?.focus();
+	}
+
 	function startEditing(entry: { id: GlossaryEntryId; term: string; definition: string }) {
-		editing = { ...entry, openedAtVersion: data.version };
+		editing = { ...entry, openedTerm: entry.term, openedAtVersion: data.version };
 		editError = null;
+		void focusAfterRender('glossary-edit-term');
+	}
+
+	function stopEditing() {
+		const id = editing?.id;
+		editing = null;
+		if (id) void focusAfterRender(`glossary-edit-${id}`);
 	}
 
 	/**
@@ -90,6 +110,7 @@
 		return ({ formData }) => {
 			submitting = true;
 			formData.set('clientId', clientId);
+			const submittedVersion = Number(formData.get('version'));
 			return async ({ result }) => {
 				if (result.type === 'failure') {
 					if (result.status === 409) {
@@ -109,6 +130,13 @@
 					return;
 				}
 				await invalidateAll();
+				// This tab's own write is not someone else's change. An editor opened
+				// at the version this write was made against has seen everything but
+				// the write itself, which produced exactly the next version (see
+				// `run-and-publish.ts`), so it moves with it instead of 409ing on Save.
+				if (editing?.openedAtVersion === submittedVersion) {
+					editing.openedAtVersion = submittedVersion + 1;
+				}
 				submitting = false;
 				handlers.onSuccess();
 			};
@@ -126,7 +154,7 @@
 
 	const submitEdit = submitWith({
 		onSuccess: () => {
-			editing = null;
+			stopEditing();
 			editError = null;
 		},
 		onFailure: (message) => (editError = message),
@@ -136,7 +164,10 @@
 	});
 
 	const submitDelete = submitWith({
-		onSuccess: () => (deleteError = null),
+		onSuccess: () => {
+			deleteError = null;
+			void focusAfterRender('glossary-filter');
+		},
 		onFailure: (message) => (deleteError = message)
 	});
 </script>
@@ -266,9 +297,7 @@
 							{/if}
 							<div class="flex gap-2">
 								<button type="submit" class="btn btn-primary" disabled={submitting}>Save</button>
-								<button type="button" class="btn btn-quiet" onclick={() => (editing = null)}>
-									Cancel
-								</button>
+								<button type="button" class="btn btn-quiet" onclick={stopEditing}> Cancel </button>
 							</div>
 						</form>
 					{:else}
@@ -285,11 +314,16 @@
 								</dd>
 							</dl>
 							<div class="flex shrink-0 gap-1">
+								<!-- Disabled mid-submit, like Save and Delete: a Save still in
+								     flight would otherwise land on whichever editor this opened,
+								     closing it or re-snapshotting its version. -->
 								<button
 									type="button"
+									id="glossary-edit-{entry.id}"
 									class="btn btn-icon btn-quiet rounded"
 									aria-label="Edit {entry.term}"
 									use:tooltip={'Edit'}
+									disabled={submitting}
 									onclick={() => startEditing(entry)}
 								>
 									<Pencil class="size-4" />
@@ -317,8 +351,8 @@
 
 	{#if editing && editingGone}
 		<p class="error" role="alert">
-			“{editing.term}” was deleted by someone else while you were editing it.
-			<button type="button" class="underline" onclick={() => (editing = null)}>Dismiss</button>
+			“{editing.openedTerm}” was deleted by someone else while you were editing it.
+			<button type="button" class="underline" onclick={stopEditing}>Dismiss</button>
 		</p>
 	{/if}
 </div>
